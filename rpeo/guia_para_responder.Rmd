@@ -1,0 +1,185 @@
+---
+title: "guia_para_responder"
+author: "Byron Caices"
+date: "2024-11-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Guía para Seleccionar la Prueba Estadística Adecuada**
+
+---
+
+### **1. ¿Cuál es el tipo de datos que tienes?**
+
+- **A. Datos Numéricos (continuos o discretos)**
+- **B. Datos Categóricos (nominales u ordinales)**
+
+### **2. ¿Cuál es el objetivo de tu análisis?**
+
+- **A. Comparar medias o medianas entre grupos**
+- **B. Evaluar la asociación o independencia entre variables categóricas**
+- **C. Evaluar si las frecuencias observadas difieren de las esperadas**
+
+### **3. ¿Cuántos grupos o muestras estás comparando?**
+
+- **A. Una muestra**
+- **B. Dos muestras**
+  - **i. Independientes**
+  - **ii. Dependientes (pareadas o relacionadas)**
+- **C. Más de dos muestras**
+  - **i. Independientes**
+  - **ii. Dependientes**
+
+### **4. Para datos numéricos: ¿Los datos siguen una distribución normal?**
+
+- **A. Sí (pruebas paramétricas)**
+- **B. No (pruebas no paramétricas)**
+
+### **5. Para datos categóricos: ¿Cuáles son las frecuencias esperadas en las celdas de la tabla de contingencia?**
+
+- **A. Todas las frecuencias esperadas ≥ 5**
+- **B. Algunas frecuencias esperadas < 5**
+
+---
+
+## **Selección de la Prueba Estadística**
+
+### **A. Datos Numéricos**
+
+#### **1. Una muestra**
+
+- **Distribución normal conocida, varianza conocida:**
+  - **Prueba Z para una muestra**
+- **Distribución normal, varianza desconocida:**
+  - **Prueba t para una muestra**
+- **Distribución no normal o muestra pequeña:**
+  - **Prueba de rangos con signo de Wilcoxon para una muestra**
+
+#### **2. Dos muestras independientes**
+
+- **Datos normales, varianzas iguales:**
+  - **Prueba t para muestras independientes**
+- **Datos normales, varianzas desiguales:**
+  - **Prueba t de Welch**
+- **Datos no normales o ordinales:**
+  - **Prueba de suma de rangos de Wilcoxon (Mann-Whitney U)**
+
+#### **3. Dos muestras dependientes (pareadas)**
+
+- **Diferencias con distribución normal:**
+  - **Prueba t para muestras pareadas**
+- **Diferencias no normales o datos ordinales:**
+  - **Prueba de rangos con signo de Wilcoxon**
+
+#### **4. Más de dos muestras independientes**
+
+- **Datos normales, varianzas iguales:**
+  - **ANOVA de una vía**
+- **Datos no normales o ordinales:**
+  - **Prueba de Kruskal-Wallis**
+
+#### **5. Más de dos muestras dependientes**
+
+- **Datos normales:**
+  - **ANOVA de medidas repetidas**
+- **Datos no normales o ordinales:**
+  - **Prueba de Friedman**
+
+### **B. Datos Categóricos**
+
+#### **1. Asociación o independencia entre dos variables**
+
+- **Frecuencias esperadas ≥ 5 en todas las celdas:**
+  - **Prueba chi-cuadrado de independencia**
+- **Frecuencias esperadas < 5:**
+  - **Prueba exacta de Fisher**
+
+#### **2. Comparación de proporciones en muestras pareadas**
+
+- **Variables dicotómicas (sí/no):**
+  - **Prueba de McNemar**
+
+#### **3. Comparación de proporciones en más de dos muestras pareadas**
+
+- **Variables dicotómicas:**
+  - **Prueba Q de Cochran**
+
+#### **4. Comparar frecuencias observadas con esperadas**
+
+- **Adecuación a una distribución teórica:**
+  - **Prueba chi-cuadrado de bondad de ajuste**
+
+#### **5. Homogeneidad de distribuciones entre poblaciones**
+
+- **Comparar distribuciones categóricas entre grupos:**
+  - **Prueba chi-cuadrado de homogeneidad**
+
+---
+
+## **Modelo Estandarizado de Preguntas para Seleccionar la Prueba**
+
+1. **¿Tus datos son numéricos o categóricos?**
+
+   - **Numéricos:** Ve al paso 2.
+   - **Categóricos:** Ve al paso 5.
+
+2. **¿Cuántos grupos o muestras estás comparando?**
+
+   - **Una muestra:** Considera pruebas para una muestra.
+   - **Dos muestras independientes:** Ve al paso 3.
+   - **Dos muestras pareadas:** Ve al paso 4.
+   - **Más de dos muestras:** Considera ANOVA o pruebas no paramétricas equivalentes.
+
+3. **Para dos muestras independientes:**
+
+   - **¿Los datos son normales y las varianzas son iguales?**
+     - **Sí:** Prueba t para muestras independientes.
+     - **No:** Prueba t de Welch o prueba de Mann-Whitney U.
+
+4. **Para muestras pareadas:**
+
+   - **¿Las diferencias siguen una distribución normal?**
+     - **Sí:** Prueba t para muestras pareadas.
+     - **No:** Prueba de rangos con signo de Wilcoxon.
+
+5. **Para datos categóricos:**
+
+   - **¿Estás evaluando la independencia entre dos variables?**
+     - **Sí:** Prueba chi-cuadrado de independencia o prueba exacta de Fisher.
+   - **¿Estás comparando proporciones en muestras pareadas?**
+     - **Sí:** Prueba de McNemar.
+   - **¿Estás comparando proporciones en más de dos muestras pareadas?**
+     - **Sí:** Prueba Q de Cochran.
+   - **¿Estás evaluando si las frecuencias observadas difieren de las esperadas?**
+     - **Sí:** Prueba chi-cuadrado de bondad de ajuste.
+
+---
+
+## **Notas Adicionales**
+
+- **Prueba Z vs. Prueba t:** Utiliza la prueba Z cuando la desviación estándar poblacional es conocida y el tamaño de la muestra es grande (n > 30). Usa la prueba t cuando la desviación estándar poblacional es desconocida y/o el tamaño de la muestra es pequeño (n < 30).
+
+- **Pruebas Paramétricas vs. No Paramétricas:** Las pruebas paramétricas requieren que los datos sigan una distribución normal y que las varianzas sean homogéneas. Si estas condiciones no se cumplen, las pruebas no paramétricas son más adecuadas.
+
+- **ANOVA vs. Pruebas No Paramétricas:** Si no se cumplen las condiciones para ANOVA, considera usar la prueba de Kruskal-Wallis (muestras independientes) o la prueba de Friedman (muestras pareadas).
+
+---
+
+## **Ejemplo Práctico**
+
+**Situación:** Deseas comparar las medianas de tres grupos independientes con datos ordinales.
+
+**Proceso de Selección:**
+
+1. **Tipo de datos:** Datos numéricos ordinales.
+2. **Objetivo:** Comparar medianas entre grupos.
+3. **Número de grupos:** Más de dos muestras independientes.
+4. **Distribución de datos:** No normal (datos ordinales).
+5. **Prueba adecuada:** **Prueba de Kruskal-Wallis.**
+
+---
+

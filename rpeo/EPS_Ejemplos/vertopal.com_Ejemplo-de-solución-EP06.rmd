@@ -1,0 +1,243 @@
+---
+generator: pandoc
+title: ANOVA para muestras correlacionadas
+viewport: width=device-width, initial-scale=1
+---
+
+::: {.container-fluid .main-container}
+::: {#header}
+# ANOVA para muestras correlacionadas {#anova-para-muestras-correlacionadas .title .toc-ignore}
+
+### Ejemplo de solución ejercicio prático N°6 {#ejemplo-de-solución-ejercicio-prático-n6 .subtitle}
+:::
+
+::: {#enunciado .section .level2}
+## Enunciado
+
+::: enunciado
+Un equipo de investigación del área de interacción humano-información
+está estudiando si el área temática y el nivel de dificultad del
+problema de información influyen en el tiempo (en segundos) que le toma
+a una persona en formular una consulta de búsqueda para resolver dicho
+problema.
+
+Para ello, han reclutado a un grupo voluntario de participantes,
+asignados aleatoriamente a distintos grupos. Cada participante debe
+resolver tres problemas de información con diferentes niveles de
+dificultad: baja, media y alta. A su vez, cada grupo debe resolver
+problemas relacionados a una temática diferente. Los datos recolectados
+contemplan las siguientes variables:
+
+  Variable     Descripción
+  ------------ -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  id           Identificador único de cada participante.
+  area         Área temática de los problemas que cada participante debe responder. Variable categórica con los niveles Arquitectura, Biología, Computación, Economía, Física, Leyes, Literatura, Matemáticas, Música, Pedagogía, Psicología, Química.
+  dificultad   Nivel de dificultad del problema resuelto. Variable categórica con los niveles Baja, Media y Alta.
+  tiempo       Tiempo, en segundos, que toma a cada participante formular la consulta
+
+  : Descripción de los datos
+
+En este momento, el equipo de investigación busca determinar si existen
+diferencias en el tiempo que tardan las personas en formular consultas
+para problemas con diferentes niveles de dificultad en el área de
+matemáticas.
+:::
+
+En esta pregunta se pide inferir acerca de medias de una variable
+numérica (tiempo) medida en condiciones distintas (niveles de
+dificultad) para un conjunto de las mismas personas, lo que correlaciona
+las mediciones. Luego se requiere usar un **procedimiento ANOVA para
+muestras correlacionadas**. Las hipótesis serían:
+
+::: hip
+H[\\(\_0\\)]{.math .inline}: no hay diferencia en los tiempos requeridos
+por las mismas personas para formular consultas asociadas a un problema
+de información en el área de las matemáticas al considerar niveles de
+dificultad bajo [\\((\\small B)\\)]{.math .inline}, medio [\\((\\small
+M)\\)]{.math .inline} y alto [\\((\\small A)\\)]{.math .inline}; es
+decir: [\\(\\small \\mu\_{(B-M)}=\\mu\_{(B-A)}=\\mu\_{(M-A)}=0\\)]{.math
+.inline}.
+
+H[\\(\_A\\)]{.math .inline}: hay diferencia en los tiempos requeridos
+por las mismas personas para formular consultas asociadas a problemas de
+información en el área de las matemáticas con diferentes niveles de
+dificultad, es decir [\\(\\small \\exists\\, i, j \\in \\{B, M, A\\}:
+\\mu\_{(i-j)}\\neq0\\)]{.math .inline}.
+:::
+
+Comencemos cargando los paquetes que vamos a utilizar.
+
+```{r}
+library(dplyr)
+library(emmeans)
+library(ez)
+library(ggpubr)
+library(nlme)
+```
+
+Luego, obtengamos la muestra de datos (desde el archivo disponible para
+el ejercicio práctico anterior) que debemos utilizar.
+
+```{r}
+#src_dir <- "~/Downloads"
+src_basename <- "EP06 Datos.csv"
+#src_file <- file.path(src_dir, src_basename)
+datos <- read.csv(file = src_basename, stringsAsFactors = TRUE)
+```
+
+Y seleccionemos datos de interés, aprovechando de especificar el orden
+deseado de los niveles del factor (que por defecto, R ordena
+alfabéticamente).
+
+```{r}
+# Los datos ya vienen en formato largo
+datos_largos <- datos |>
+  filter(area == "Matemáticas") |>
+  select(id, dificultad, tiempo) |>
+  droplevels()
+datos_largos[["id"]] <- factor(datos_largos[["id"]])
+datos_largos[["dificultad"]] <- factor(datos_largos[["dificultad"]],
+                                       levels = c("Baja", "Media", "Alta"))
+
+# Mostramos las primeras filas para comprobar que todo va bien
+head(datos_largos)
+```
+
+
+Procedemos a verificar las condiciones para asegurar que podemos aplicar
+el procedimiento para muestras correlacionadas con validez.
+
+La variable dependiente corresponde a tiempo que, como vimos, se mide en
+una escala continua de intervalos iguales.
+
+Por otro lado, los tríos de observaciones son independientes entre sí,
+pues provienen de personas diferentes que fueron elegidos de manera
+aleatoria.
+
+Revisemos ahora la condición de normalidad por medio de un gráfico Q-Q.
+
+```{r}
+g <- ggqqplot(datos_largos, x = "tiempo", y = "dificultad",
+              color = "dificultad")
+
+g <- g + facet_wrap(~ dificultad)
+g <- g + rremove("x.ticks") + rremove("x.text")
+g <- g + rremove("y.ticks") + rremove("y.text")
+g <- g + rremove("axis.title")
+print(g)
+```
+
+
+
+El gráfico sugiere que los datos siguen una distribución cercana a la
+normal, puesto que se encuentran dentro de la región aceptable del
+gráfico Q-Q y no se observan patrones no aleatorios, aunque se observa
+cierta desviación en el extremo superior de las preguntas con dificultad
+alta. Conviene entonces que usemos pruebas de normalidad para confirmar.
+
+```{r}
+# Realizar el test de Shapiro-test para cada país
+tests_normalidad <- by(datos_largos[["tiempo"]],
+                       datos_largos[["dificultad"]],
+                       shapiro.test)
+print(tests_normalidad)
+```
+
+
+Vemos que estas pruebas de Shapiro-Wilk descartan que debamos temer que
+alguna de estas muestras no provenga de una población con una
+distribución normal.
+
+En cuanto a la condición de esfericidad, se posterga su discusión hasta
+ver el resultado de la prueba de Mauchly efectuada por `ezAnova()`.
+
+Así, vamos a proceder con el procedimiento ANOVA para muestras
+correlacionadas considerando un nivel de significación de 0,05.
+
+```{r}
+alfa <- 0.05
+
+omnibus <- ezANOVA(
+  data = datos_largos,
+  dv = tiempo, within = dificultad, wid = id,
+  return_aov = TRUE
+)
+```
+
+Veamos el resultado del procedimiento por pantalla.
+
+```{r}
+cat("Resultado de la prueba de Mauchly:\n\n")
+print(omnibus[2])
+cat("Resultado de la prueba ANOVA:\n\n")
+print(omnibus[1])
+cat("Tabla ANOVA tradicional:\n")
+print(summary(omnibus[["aov"]]))
+```
+
+
+
+Podemos ver que la prueba de esfericidad de Mauchly resulta no
+significativa con 97,5% de confianza ([\\(\\small W=0{,}985;\\,
+p=0{,}222\\)]{.math .inline}), por lo que se falla en rechazar la
+hipótesis nula de esta prueba. Así, debemos concluir que **no hay
+suficiente evidencia estadística para descartar** que se cumple la
+condición de esfericidad en estos datos.
+
+Interpretemos este resultado ómnibus.
+
+El procedimiento ANOVA correlacionado resultó significativo ([\\(\\small
+F(2,398)=114{,}848;\\, p\<0{,}001\\)]{.math .inline}). En consecuencia,
+con 95% de confianza, rechazamos la hipótesis nula en favor de la
+hipótesis alternativa y concluimos que hay diferencias en el tiempo
+requerido por las mismas personas para formular consultas asociadas a un
+problema de información de en el área de las matemáticas con diferentes
+niveles de dificultad (baja, media y alta).
+
+Puesto que el procedimiento ómnibus encuentra diferencias
+estadísticamente significativas, es necesario realizar un procedimiento
+post-hoc. Puesto que no requerimos hacer contrastes adicionales,
+usaremos la prueba HSD de Tukey (haciendo uso de un modelo mixto y de la
+estimación de medias marginales, implementadas en `R` en los paquetes
+`nlme` y `emmeans` respectivamente).
+
+```{r}
+mixto <- lme(tiempo ~ dificultad , data = datos, random = ~1 | id)
+medias <- emmeans (mixto , "dificultad")
+post_hoc <- pairs(medias , adjust = "tukey")
+conf_int <- confint(post_hoc, level = 1 - alfa)
+
+print(post_hoc)
+print(conf_int)
+```
+
+
+
+Veamos si estos resultados coincide con el efecto (que tiene la variable
+independiente `dificultad` en la variable dependiente `tiempo`)
+encontrado en el procedimiento ANOVA para muestras correlacionadas.
+
+```{r}
+g_efecto <- ezPlot(data = datos_largos, x = dificultad,
+                   dv = tiempo, within = dificultad, wid = id,
+                   y_lab = " Tiempo requerido para formular consultas [s]"
+)
+print(g_efecto)
+```
+
+
+
+Vemos que el gráfico del efecto coincide bien con los resultados de la
+prueba post-hoc. Redactemos la conclusión.
+
+El análisis post-hoc usando el método de la diferencia honestamente
+significativa de Tukey indica que, en el área de las matemáticas, el
+tiempo requerido por una persona para formular consultas aumenta con el
+nivel de dificultad del problema de información (Alta-Baja: 95% CI:
+\[5,69; 6,80\], [\\(\\small t(4.398)=26{,}232, p\<0{,}001\\)]{.math
+.inline}; Alta-Media: 95% CI: \[4,78; 5,90\], [\\(\\small
+t(4.398)=22.428, p\<0{,}001\\)]{.math .inline}; Media-Baja: 95% CI:
+\[0,35; 1,46\], [\\(\\small t(4.398)=3.804, p\<0{,}001\\)]{.math
+.inline}).
+:::
+:::

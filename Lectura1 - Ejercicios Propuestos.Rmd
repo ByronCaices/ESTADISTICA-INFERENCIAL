@@ -1,0 +1,47 @@
+---
+title: "Ejercicio 5 - Estadística Inferencial"
+author: "Byron Caices Lima"
+date: "2024-09-24"
+output:
+    html_document:
+    highlight: tango
+    word_document: default
+    pdf_document: default
+---
+
+<style>
+body {
+  font-family: 'Calibri', sans-serif;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+
+# **Ejercicios Propuestos de Lectura 1**
+
+
+```{r}
+datos <- read.csv2("EP01 Datos Casen 2017.csv")
+
+# 1. Ingreso promedio de las mujeres por comuna donde cada ingreso esta dado por ytot 
+
+ingreso_promedio_mujeres <- aggregate(ytot ~ comuna, data = datos, FUN = mean)
+
+# visualizar en grafico ingreso promedio de mujeres por comuna
+
+library(ggplot2)
+
+ggplot(ingreso_promedio_mujeres, aes(x = reorder(comuna,ytot), y = ytot)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+
+# graficar
+
+```

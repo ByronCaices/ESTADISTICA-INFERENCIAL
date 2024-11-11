@@ -1,0 +1,78 @@
+---
+title: "Lectura 10"
+author: "Byron Caices"
+date: "2024-11-02"
+output:
+    html_document:
+    highlight: tango
+    word_document: default
+    pdf_document: default
+---
+
+<style>
+body {
+  font-family: 'Calibri', sans-serif;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 11.3 Pruebas no paramétricas con más de dos muestras numéricas
+
+### 11.3.1 Prueba de Kruskal-Wallis
+
+Anova es robusto cuando las muestras son de igual tamaño pero no ocurre lo mismo cuando los tamaños de las muestras difieren. En este caso, una alternativa es emplear la prueba de Kruskal-Wallis.
+
+**Condiciones**
+
+1. La variable independiente debe tener a lo menos dos niveles. (Aunque para dos niveles se suele usar la prueba de Wilcoxon-Mann-Whitney). Los niveles son los grupos o categorías de la variable independiente.
+
+2. La escalas de la variable dependiente debe ser a lo menos, ordinal. Por ejemplo, la escala de Likert.
+
+3. Las observaciones son independientes entre sí.
+
+Fijémonos en que, al igual que ANOVA, la prueba de Kruskal-Wallis es de tipo ómnibus, por lo que no entrega información en relación a cuáles grupos presentan diferencias. En consecuencia, una vez más es necesario efectuar un análisis post-hoc cuando se detectan diferencias significativas. De manera similar a la estudiada en el capítulo 9, podemos hacer comparaciones entre pares de grupos con la prueba de Wilcoxon-Mann-Whitney (equivalentes a las realizadas con la prueba t de Student para ANOVA de una vía para muestras independientes), usando alguno de los factores de corrección que ya conocimos en el capítulo 8, como los métodos de Holm o de Benjamini y Hochberg (Amat Rodrigo, 2016b).
+
+En R, podemos ejecutar la prueba de Kruskal-Wallis mediante la función `kruskal.test(formula, data)`, donde:
+
+- `formula`: tiene la forma `<variable dependiente> ~ <variable independiente (factor)>`.
+- `data`: matriz de datos en formato largo.
+
+La función `pairwise.wilcox.test(x, g, p.adjust.method, paired = FALSE)`, permite realizar los procedimientos post-hoc, cuando corresponda, donde:
+
+- `x`: vector con la variable dependiente.
+- `g`: factor o agrupamiento.
+- `p.adjust.method`: puede ser `"holm"` o `"BH"`, entre otras alternativas.
+- `paired`: valor booleano que indica si la prueba es pareada (verdadero) o no. Para la prueba de Kruskal-Wallis debe ser `FALSE`.
+
+Notemos que `pairwise.wilcox.test()` solo reporta los p valores ajustados. Si queremos conocer el tamaño del efecto de las diferencias detectadas, como se recomienda reportar, debemos realizar las correspondientes pruebas de Wilcoxon-Mann-Whitney para todos los pares de grupos que presenten diferencias significativas.
+
+
+### 11.3.2 Prueba de Friedman
+
+Alternativa a Anova de una vía para muestras correlacionadas. No considera diferencias relativas entre casos (como lo hace anova y la prueba de rangos con signos de wilcoxon) en consecuencia su poder estadístico es bastante menor.
+
+**Condiciones**
+
+1. La variable independiente debe ser categórica y debe tener a lo menos tres niveles.
+
+2. La escala de la variable dependiente debe ser, a lo menos, ordinal
+
+3. Las observaciones son una muestra aleatoria e independiente de la población
+
+Si se tienen k observaciones pareadas, se asignan rangos con valores 1 a k. En caso de empate se asigna el promedio de los rangos correspondientes.
+
+
+## **Resumen de las Diferencias Clave**
+
+| **Característica**                      | **Kruskal-Wallis**                                         | **Friedman**                                              |
+|-----------------------------------------|------------------------------------------------------------|-----------------------------------------------------------|
+| **Tipo de diseño**                      | Muestras **independientes**                                | **Muestras relacionadas** (medidas repetidas)            |
+| **Número de grupos o condiciones**      | Tres o más grupos independientes                           | Tres o más condiciones o momentos para las mismas personas|
+| **Ejemplo típico**                      | Comparar métodos de estudio entre diferentes grupos        | Comparar niveles de estrés en diferentes períodos académicos|
+| **Análogo paramétrico**                 | ANOVA de un factor                                         | ANOVA de medidas repetidas                                 |
+
+---
+

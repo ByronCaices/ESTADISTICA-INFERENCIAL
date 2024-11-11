@@ -1,0 +1,196 @@
+---
+title: "EP06"
+author: "Equipo 3"
+date: "2024-10-24"
+output:
+    html_document:
+    highlight: tango
+    word_document: default
+    pdf_document: default
+---
+
+```{=html}
+<style>
+body {
+  font-family: 'Calibri', sans-serif;
+}
+</style>
+```
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## **Enunciado**
+
+Un equipo de investigadores del área de interacción humano-información está estudiando si el área temática y el nivel de dificultad del problema de información influyen en el tiempo (en segundos) que toma un usuario en formular una consulta de búsqueda para resolver dicho problema. Para ello, han reclutado a un grupo de participantes voluntarios, asignados aleatoriamente a distintos grupos. Cada participante debe resolver tres problemas de información con diferentes niveles de dificultad: baja, media y alta. A su vez, cada grupo debe resolver problemas relacionados a una temática diferente. Los datos recolectados contemplan las siguientes variables:
+
+| Variable   | Descripción                                                                                                                                                                                                                           |
+|-------------|-----------------------------------------------------------|
+| id         | identificador único de cada participante.                                                                                                                                                                                             |
+| área       | Área temática de los problemas que el participante debe responder. Variable categórica con los niveles Arquitectura, Biología, Computación, Economía, Física, Leyes, Literatura, Matemáticas, Música, Pedagogía, Psicología, Química. |
+| dificultad | Nivel de dificultad del problema resuelto. Variable categórica con los niveles Baja, Media y Alta.                                                                                                                                    |
+| tiempo     | Tiempo, en segundos, que toma al participante formular la consulta.                                                                                                                                                                   |
+
+------------------------------------------------------------------------
+
+### **En este momento, los investigadores buscan determinar si existen diferencias en el tiempo que tardan los usuarios en formular consultas para problemas con diferente nivel de dificultad en el área de química.**
+
+------------------------------------------------------------------------
+
+#### **Hipótesis**
+
+-   $H_0:$ No hay diferencias significativas en el tiempo que tardan los usuarios en formular consultas para problemas con diferente nivel de dificultad en el área de química.
+
+-   $H_A:$ Existe al menos una diferencia significativa entre los tiempos que tardan los usuarios en formular consultas para problemas con diferente nivel de dificultad en el área de química.
+
+------------------------------------------------------------------------
+
+En base a lo entregado por el enunciado procederemos a leer y filtrar los datos para posteriormente verificar la condición de normalidad, se lleva a cabo el siguiente gráfico Q-Q
+
+```{r, include = FALSE}
+library(tidyverse)
+library(ggpubr)
+library(dplyr)
+library(nlme)
+library(ez)
+library(emmeans)
+```
+
+------------------------------------------------------------------------
+
+```{r}
+datos <- read.csv("EP06 Datos.csv")
+
+head(datos)
+```
+
+------------------------------------------------------------------------
+
+Para responder esta pregunta requerimos filtrar los datos para obtener las observaciones para el área de química.
+
+------------------------------------------------------------------------
+
+```{r}
+
+# Filtramos los datos
+datos <- subset(datos, area %in% "Química", select = c(id,area,tiempo, dificultad))
+
+# Convertir Time a factor
+datos[["dificultad"]] <- factor(datos[["dificultad"]])
+
+head(datos)
+
+```
+
+------------------------------------------------------------------------
+
+#### **Condiciones a verificar**
+
+**El procedimiento ANOVA requiere que se cumplan algunas condiciones:**
+
+1.  **La escala con que se mide la variable dependiente tiene las propiedades de una escala de intervalos iguales.**
+
+-   La primera condición se verifica, puesto que el tiempo, como toda magnitud física, tiene una escala de intervalos iguales
+
+------------------------------------------------------------------------
+
+2.  **Las mediciones son independientes al interior de cada grupo**
+
+-   El enunciado sugiere que el proceso seguido para obtener los datos garantiza el cumplimiento de la segunda condición
+
+------------------------------------------------------------------------
+
+3.  **Se puede suponer razonablemente que la(s) población(es) de origen sigue(n) una distribución normal.**
+
+-   Notamos que los puntos del gráfico Quantil-Quantil (QQ plot) se ajustan a la recta, lo que sugiere que los datos siguen una distribución normal.
+
+```{r}
+
+# Graficar Q-Q plot
+g <- ggqqplot(datos, x = "tiempo", color = "dificultad")
+g <- g + facet_wrap(~ dificultad, scales = "free")
+g <- g + rremove("x.ticks") + rremove("x.text")
+g <- g + rremove("y.ticks") + rremove("y.text")
+g <- g + rremove("axis.title")
+print(g)
+```
+
+A fin de confirmar esta hipótesis se lleva a cabo un **Shapiro Test**
+
+-   $H_0:$ La variable "tiempo" sigue una distribución normal para cada nivel de "dificultad" (Alta, Baja, Media).
+
+-   $H_A:$ La variable "tiempo" no sigue una distribución normal para alguno de los niveles de "dificultad".
+
+```{r}
+testNormalidad <- datos %>%
+  group_by(dificultad) %>%
+  summarise(shapiro_p_value = shapiro.test(tiempo)$p.value)
+
+# Mostrar los resultados
+print(testNormalidad)
+```
+
+Para cada nivel de "dificultad" (Alta, Baja, Media), los valores p obtenidos son mayores a 0.05, por lo que no hay suficiente evidencia para rechazar la hipótesis nula en ningún caso. **Esto sugiere que los datos de "tiempo" pueden considerarse como normalmente distribuidos** para cada uno de los niveles de dificultad.
+
+------------------------------------------------------------------------
+
+4.  **La matriz de varianzas-covarianzas es esférica (ESFERICIDAD)**
+
+Por último, se verifica la esfericidad por medio de la función `ezANOVA()` de la librería `ez`, la cual realiza una prueba de Mauchly para verificar la esfericidad de los datos.
+
+```{r}
+# Realizar prueba de Mauchly
+mauchly <- ezANOVA(data = datos, dv = tiempo, within = dificultad, wid = id, return_aov = TRUE)
+print(mauchly[["Mauchly's Test for Sphericity"]])
+```
+
+Con lo anterior, como p \> 0.05 se demuestra que es posible llevar a cabo la prueba ANOVA para muestras correlacionadas, y que los resultados entregados a partir de ésta sean confiables.
+
+------------------------------------------------------------------------
+
+#### **Análisis de varianza (ANOVA)**
+
+```{r}
+anova <- ezANOVA(data = datos, dv = tiempo, within = dificultad,
+                  wid = id, return_aov = TRUE)
+
+# Imprimir resultados del ANOVA
+cat("\nResultados del ANOVA:\n")
+print(anova)
+```
+
+------------------------------------------------------------------------
+
+Dado que $p = 7.383407 \times 10^{-9}$ es significativamente menor que el nivel de significancía $\alpha = 0.05$. En este caso, tenemos suficiente evidencia para rechazar la hipótesis nula ($H_0$).
+
+Rechazamos la hipótesis nula y aceptamos la hipótesis alternativa ($H_A$) con un 95% de confianza, lo que indica que existen diferencias significativas entre los tiempos que tardan los usuarios en formular consultas para problemas con diferentes niveles de dificultad en el área de química.
+
+Sin embargo, la información entregada por la prueba solamente indica que existe al menos una diferencia de medias distinta a las otras, sin indicar cuál, por lo que se lleva a cabo el análisis **Post-Hoc** utilizando la prueba HSD de Tukey.
+
+------------------------------------------------------------------------
+
+#### **Prueba post-hoc: HSD de Tukey**
+
+```{r}
+# Procedimiento post-hoc HSD de Tukey
+mixto <- lme(tiempo ~ dificultad, data = datos, random = ~1|id)
+medias <- emmeans(mixto, "dificultad")
+tukey <- pairs(medias, adjust = "tukey")
+
+cat("\n\nPrueba HSD de Tukey:\n\n")
+print(tukey)
+```
+
+------------------------------------------------------------------------
+
+En la salida de la prueba post hoc de HSD de Tukey, se muestran comparaciones entre los diferentes niveles de dificultad (Alta, Baja, Media) y los tiempos que tardan los usuarios en formular consultas. Las conclusiones principales se pueden extraer observando el valor $p$ en cada comparación:
+
+1.  **Alta - Baja**: La diferencia en tiempo entre los niveles de dificultad Alta y Baja tiene un valor $p$ muy bajo (<0.0001), lo que indica que esta diferencia es estadísticamente significativa.
+
+2.  **Alta - Media**: La diferencia entre los niveles de dificultad Alta y Media tiene un valor $p$ de 0.8891, el cual es mucho mayor que 0.05. Esto indica que no hay una diferencia significativa en el tiempo entre estos dos niveles.
+
+3.  **Baja - Media**: La comparación entre los niveles Baja y Media también tiene un valor $p$ muy bajo (<0.0001), lo que indica una diferencia estadísticamente significativa en el tiempo entre estos niveles.
+
+**Conclusión**: Existen diferencias significativas en el tiempo para formular consultas entre las dificultades "Alta - Baja" y "Baja - Media" con una confianza mayor al 99%, pero no hay una diferencia significativa entre las dificultades "Alta - Media". Esto sugiere que los tiempos de respuesta entre las dificultades Alta y Baja, así como entre Baja y Media, son significativamente distintos, mientras que los tiempos entre Alta y Media son similares en el área de química.
+
+------------------------------------------------------------------------

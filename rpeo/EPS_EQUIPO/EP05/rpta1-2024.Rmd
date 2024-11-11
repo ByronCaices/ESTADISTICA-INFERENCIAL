@@ -1,0 +1,109 @@
+---
+title: "EP05"
+author: "Equipo 1"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+options(repos = c(CRAN = "https://cran.rstudio.com/"))
+# Importación de las librerías
+if (!requireNamespace('dplyr', quietly = TRUE)){
+  install.packages('dplyr')
+}
+if (!requireNamespace('tidyverse', quietly = TRUE)){
+  install.packages('tidyverse')
+}
+if (!requireNamespace('car', quietly = TRUE)){
+  install.packages('car')
+}
+
+library(car)
+library(dplyr)
+library(tidyverse)
+```
+
+
+```{r}
+# Lectura del archivo CSV
+
+# Para la revisión se ha de poner la ruta en la cual se encuentre el archivo en su dispositivo. Si pertenece a la misma carpeta, solo poner el nombre del archivo con los datos
+
+datos_cubos <- read.csv2("EP05 Datos.csv")
+```
+
+Pregunta : ¿Existen diferencias en el tiempo de resolución de cubos 2x2x2 entre participantes de Chile, Peru y Argentina?
+
+Primero, se establecen las hipótesis
+
+Hipótesis nula (H0): No existe diferencia entre las medias de los tiempos de resolución entre los paises.
+Hipótesis alternativa (Ha): Hay al menos un pais que presenta una media de tiempo de resolución distinta a la de los otros Paises
+
+Se cumplen las condiciones para utilizar ANOVA:
+1.- Como dice el enunciado las muestras son aleatorias.
+2.- Los datos siguen una distribución aproximádamente normal, comprobado mediante el test de Shapiro.
+3.- Se cumple que los intervalos de la variable independiente(tiempo) posee propiedades de una escala de intervalos iguales(La diferencia entre 10 y 20 seg, es la misma entre 20 y 30 seg).
+4.- La homogeneidad de varianzas se verifica con el test de Levene.
+
+```{r}
+# Filtrar por tipo de cubo y países
+datos_filtrados <- datos_cubos %>%
+  filter(tipo == "2x2x2", pais %in% c("Perú", "Chile", "Argentina"))
+
+# Se establece el nivel de significancia
+alpha <- 0.05
+```
+
+```{r}
+# Filtración de los datos por país
+chile = datos_filtrados%>%
+  filter(pais == 'Chile')
+
+argentina = datos_filtrados %>%
+  filter(pais == 'Argentina')
+
+peru = datos_filtrados %>%
+  filter(pais == 'Perú')
+
+# Cálculo de la normalidad de los datos de cada país con el test de Shapiro
+shp_c<- shapiro.test(chile$tiempo)
+shp_c
+
+shp_a<- shapiro.test(argentina$tiempo)
+shp_a
+
+shp_p<- shapiro.test(peru$tiempo)
+shp_p
+```
+Se comprueba la normalidad de los datos, ya que p > 0.05 en todos los tests
+
+```{r}
+# Realización de la prueba de Levene para verificar la homogeneidad de las varianzas
+levene_resultado <- leveneTest(tiempo ~ pais, data = datos_filtrados)
+print(levene_resultado)
+```
+Se comprueba la homogeneidad de las varianzas, ya que p > 0.05
+
+```{r}
+# Uso de la prueba ANOVA para muestras independientes de una sola vía 
+  #tiempo : variable dependiente
+  #pais : variable independiente
+
+prueba <- aov(tiempo ~ pais, data = datos_filtrados)
+
+print(summary(prueba))
+```
+Dado que p < 0.05, existe fuerte evidencia para rechazar la hipótesis nula, indicando que hay al menos una diferencia significativa entre los tiempos de resolución de los países.
+
+Para determinar cuál es el país diferente, se realiza un procedimiento post-hoc, específicamente la prueba HSD de Tukey
+```{r}
+# Realización de la prueba post-hoc a la ANOVA realizada
+post_hoc <- TukeyHSD(prueba, "pais",ordered = TRUE, conf.level = 1-alpha)
+post_hoc
+```
+
+Como se observa, la diferencia que presentan Chile y Perú es casi nula, en cambio que la diferencia de estos dos paises con Argentina supera el valor de 0.05 (nivel de significancia), siendo Argentina el único país que muestra diferencias significativas. Por ende, se concluye que Argentina difiere en las medias y, dado que existe esta diferencia, hay suficiente evidencia para rechazar la hipótesis nula y apoyar la hipótesis alternativa con un 95% de confianza. En otras palabras, sí existe una diferencia entre las medias de los tiempos.

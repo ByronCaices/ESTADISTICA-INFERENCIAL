@@ -1,0 +1,94 @@
+---
+title: "Análisis de Distancia de Frenado"
+author: "Byron Caices"
+date: "2024-10-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+En este análisis se busca responder si en promedio se requieren más de 40 pies para detener un vehículo que viaja a más de 10 millas por hora.
+
+## Hipótesis
+- **H0**: La media de la distancia de frenado es menor o igual a 40 pies.
+- **HA**: La media de la distancia de frenado es mayor a 40 pies.
+
+## Verificación de Normalidad en los Datos Originales
+
+Para decidir si necesitamos transformar los datos, primero evaluaremos su normalidad. Esto lo haremos usando la prueba de Shapiro-Wilk y visualizando un gráfico Q-Q. Si los datos no cumplen con la normalidad, aplicaremos la transformación Box-Cox.
+
+```{r}
+# cargar el conjunto de datos
+data(cars)
+
+# subconjunto de datos para velocidades mayores a 10 mph
+subset_cars <- subset(cars, speed > 10)
+
+# prueba de Shapiro-Wilk para normalidad
+shapiro_test <- shapiro.test(subset_cars$dist)
+shapiro_test
+
+# gráfico Q-Q de los datos originales
+library(ggpubr)
+ggqqplot(subset_cars$dist, main = "Q-Q Plot de distancia de frenado (original)", color = "blue") + 
+  ggtitle("Q-Q Plot de distancia de frenado (original)") +
+  theme_minimal()
+```
+
+Como el p-valor de la prueba de Shapiro-Wilk es menor que 0.05, rechazaremos la normalidad y aplicaremos la transformación Box-Cox.
+
+## Transformación Box-Cox
+
+Dado que la prueba de Shapiro-Wilk sugiere que los datos no siguen una distribución normal, aplicaremos la transformación Box-Cox.
+
+```{r}
+library(DescTools)
+
+# aplicar transformación Box-Cox
+lambda <- BoxCoxLambda(subset_cars$dist, lower = -4, upper = 4)
+dist_transformed <- BoxCox(subset_cars$dist, lambda = lambda)
+
+# exploración de los datos transformados
+gghistogram(dist_transformed, bins = 10, fill = "blue", color = "black", 
+            title = "Histograma de distancias de frenado (transformadas)", 
+            xlab = "Distancia transformada (pies)") +
+  theme_minimal()
+
+ggqqplot(dist_transformed, main = "Q-Q Plot de distancia de frenado (transformada)", color = "blue") + 
+  ggtitle("Q-Q Plot de distancia de frenado (transformada)") +
+  theme_minimal()
+```
+
+## Condiciones para aplicar la prueba t
+
+Para que la prueba t sea válida, deben cumplirse las siguientes condiciones:
+
+1. **Normalidad**: Los datos transformados deben tener una distribución aproximadamente normal.
+2. **Independencia**: Las observaciones deben ser independientes entre sí.
+3. **Escala de Intervalo o Razón**: La variable debe estar en una escala de intervalo o razón.
+
+## Prueba t
+
+```{r}
+# ajustamos el valor de mu según la transformación
+mu_transformed <- BoxCox(40, lambda = lambda)
+
+# realizar la prueba t
+t_test_transformed <- t.test(dist_transformed, mu = mu_transformed, alternative = "greater")
+t_test_transformed
+```
+
+## Conclusión
+
+```{r}
+if (t_test_transformed$p.value < 0.05) {
+  cat("Se rechaza la hipótesis nula. En promedio, se requieren más de 40 pies para detener un vehículo que viaja a más de 10 mph.")
+} else {
+  cat("No se puede rechazar la hipótesis nula. No hay evidencia suficiente para concluir que se requieren más de 40 pies.")
+}
+```
+
+Este análisis, tras verificar la normalidad, aplicar la transformación Box-Cox y realizar la prueba t, permite concluir si es razonable afirmar que, en promedio, se necesitan más de 40 pies para detener un vehículo que viaja a más de 10 mph.
+

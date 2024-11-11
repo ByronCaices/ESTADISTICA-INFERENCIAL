@@ -1,0 +1,976 @@
+---
+generator: pandoc
+title: Ejemplo de solución ejercicio prático N°3
+viewport: width=device-width, initial-scale=1
+---
+
+::: {.container-fluid .main-container}
+::: {#header}
+# Ejemplo de solución ejercicio prático N°3 {#ejemplo-de-solución-ejercicio-prático-n3 .title .toc-ignore}
+
+### Poder estadístico en pruebas con medias {#poder-estadístico-en-pruebas-con-medias .subtitle}
+:::
+
+::: {#nota .section .level4 .nota}
+#### Nota:
+
+Puesto que hay preguntas en relación a poder estadístico de pruebas con
+medias unilaterales (de una cola) y bilaterales (de dos colas), se
+presentan aquí ejemplos de solución para ambos escenarios.
+:::
+
+::: {#enunciado .section .level2}
+## Enunciado
+
+En una planta química hay dos máquinas que envasan detergentes
+industriales en bidones con un volumen de producto que sigue una
+distribución normal con desviación estándar de 1 litro. La ingeniera a
+cargo de la planta debe asegurar que los bidones se están llenando con
+una media de 10 litros. Pero ella tiene la sospecha de que hay
+desviaciones en esta media, lo que piensa confirmar usando una muestra
+aleatoria de 100 envases (50 de cada una de las máquinas). También cree
+que hay diferencia en el cumplimiento del volumen requerido entre la
+máquina más antigua y la más moderna, que han de andar por el 90% y 96%
+de los bidones, respectivamente.
+:::
+
+::: {#pregunta-1-prueba-bilateral .section .level2}
+## Pregunta 1 --- prueba bilateral
+
+Si la ingeniera piensa rechazar la hipótesis nula cuando la muestra
+presente una media menor a 9,9 litros o mayor a 10,1 litros, ¿cuál es la
+probabilidad de que cometa un error de tipo I?
+
+Definimos los valores conocidos.
+
+```{r}
+desviacion.estandar <- 1
+tamano.muestra <- 100
+valor.nulo <- 10
+cota.inferior <- 9.9
+cota.superior <- 10.1
+```
+
+Del enunciado se desprende que se trata de una **prueba t de Student
+para una muestra, con hipótesis alternativa bilateral**, para la que
+podríamos enunciar las siguientes hipótesis.
+
+::: hip
+H[\\(\_0\\)]{.math .inline}: el volumen medio ([\\(\\bf{\\small
+\\mu\_{V}}\\)]{.math .inline}) de los bidones de detergente es de 10
+litros ([\\(\\bf{\\small \\mu\_{V} = 10}\\)]{.math .inline} \[L\]).\
+H[\\(\_A\\)]{.math .inline}: el volumen medio de los bidones es distinto
+de 10 litros ([\\(\\bf{\\small \\mu\_{V} \\neq 10}\\)]{.math .inline}
+\[L\]).
+:::
+
+La probabilidad de cometer un error tipo I corresponde al nivel de
+significación ([\\(\\alpha\\)]{.math .inline}), que es lo que se
+solicita. El nivel de significación está dado por **el área de la región
+de rechazo** de la distribución que deberían seguir las medias
+muestrales bajo la hipótesis nula. En estos casos, esta distribución
+usualmente sigue una distribución t, pero en este enunciado en
+particular también se puede usar la distribución normal dado que se
+conoce **la desviación estándar en la población** y podemos calcular de
+forma exacta el error estándar.
+
+```{r}
+error.estandar <- desviacion.estandar / sqrt(tamano.muestra)
+```
+
+Generemos una distribución normal en torno al valor nulo, con 5.000
+valores.
+
+```{r}
+puntos <- 5000
+
+x <- seq(valor.nulo - 5.2 * error.estandar, valor.nulo + 5.2 * error.estandar,
+         length.out = puntos)
+
+y <- dnorm(x, mean = valor.nulo, sd = error.estandar)
+distr <- data.frame(x, y)
+```
+
+Con esta simulación, graficamos la distribución muestral.
+
+```{r}
+library(ggpubr)
+
+# Definimos una paleta de colores.
+colores <- hcl(h = (seq(15, 255, length.out = 3)), c = 100, l = 65)
+
+# Comenzamos por la cuadrícula con fondo blanco.
+g.dist <- ggplot(data = distr, aes(x))
+g.dist <- g.dist + theme_pubr()
+
+# Agregamos la distribución normal.
+g.dist <- g.dist +
+          stat_function(fun = dnorm,
+                        args = list(mean = valor.nulo, sd = error.estandar),
+                        colour = colores[1], linewidth = 1)
+
+# Quitamos las etiquetas y marcas del eje y.
+g.dist <- g.dist + ylab("")
+g.dist <- g.dist + scale_y_continuous(breaks = NULL)
+
+# Agregamos marcas y etiquetas rotadas al eje x.
+g.dist <- g.dist +
+          scale_x_continuous(name = "Volumen [L]",
+                             breaks = seq(round(min(x), 1), round(max(x), 1), 0.1))
+g.dist <- g.dist +
+          theme(axis.text.x = element_text(angle = 30, size = 10))
+
+# Agregamos la media bajo la hipótesis nula.
+g.dist <- g.dist +
+          geom_vline(xintercept = valor.nulo,
+                     colour = colores[1], linetype = "longdash")
+
+# Agregamos el título.
+g.dist <- g.dist + ggtitle("Distribución de las medias muestrales bajo H0")
+
+# Finalmente Mostramos el gráfico.
+print(g.dist)
+```
+
+KAAh4AAAAAAABAAlDAAwAAAAAAAEgACngAAAAAAAAACUABDwAAAAAAACABKOABAAAAAAAAJAAFPAAAAAAAAIAEoIAHAAAAAAAAkAAU8AAAAAAAAAAS8P9LfT24NLdEsgAAAABJRU5ErkJggg==){width="672"}
+
+Ahora podemos marcar las regiones de rechazo definidas por el ingeniero.
+
+```{r}
+# Marcamos el lado izquierdo.
+g.1.bilateral <- g.dist +
+                 geom_area(data = subset(distr, x < cota.inferior),
+                           aes(y = y), colour = colores[1],
+                           fill = colores[1], alpha = 0.5)
+
+# Marcamos el lado derecho.
+g.1.bilateral <- g.1.bilateral +
+                 geom_area(data = subset(distr, x > cota.superior),
+                           aes(y = y), colour = colores[1],
+                           fill = colores[1], alpha = 0.5)
+
+# Agregamos el título y mostramos el gráfico
+g.1.bilateral <- g.1.bilateral + ggtitle("Pregunta 1 - hipótesis bilateral")
+print(g.1.bilateral)
+```
+
+
+
+Se puede apreciar que la ingeniera definió grandes regiones de rechazo.
+Esperamos entonces un nivel de significación alto. Calculemos esta
+probabilidad (como el área de estas regiones).
+
+```{r}
+alfa_izquierdo <- pnorm(cota.inferior, mean = valor.nulo, sd = error.estandar,
+                        lower.tail = TRUE)
+alfa_derecho <- pnorm(cota.superior, mean = valor.nulo, sd = error.estandar,
+                      lower.tail = FALSE)
+alfa.1.bilateral <- alfa_izquierdo + alfa_derecho
+```
+
+Y mostremos el resultado en pantalla.
+
+```{r}
+cat("La probabilidad de cometer un error tipo I es alfa =", alfa.1.bilateral,"\n\n")
+```
+
+
+La probabilidad de cometer un error tipo I es alfa = 0.3173105 
+
+
+Interpretemos este análisis.
+
+::: conclusion
+Con los umbrales definidos por la ingeniera para rechazar la hipótesis
+nula (9,9 y 10,1 litros), la probabilidad de que cometa un error de tipo
+I es [\\(\\alpha\\)]{.math .inline}=0,317.
+:::
+:::
+
+::: {#pregunta-2-prueba-bilateral .section .level2}
+## Pregunta 2 --- prueba bilateral
+
+Si el verdadero volumen medio de los bidones fuera de 9,95 litros, ¿cuál
+sería la probabilidad de que la ingeniera, que obviamente no conoce este
+dato, cometa un error de tipo II?
+
+Es importante darse cuenta de que estamos trabajando con la misma
+prueba, solo que ahora conocemos la verdadera media (lo que no ocurre en
+la realidad). Para responder, construimos un gráfico de la distribución
+muestral con esta verdadera media que superponemos al de la hipótesis
+nula. Primero simulamos 5.000 valores.
+
+```{r}
+media.bilateral <- 9.95
+
+x1 <- seq(media.bilateral - 5.2 * error.estandar,
+          media.bilateral + 5.2 * error.estandar, length.out = puntos)
+
+y1 <- dnorm(x1, mean = media.bilateral, sd = error.estandar)
+distr1 <- data.frame(x = x1, y = y1)
+```
+
+Y graficamos la curva de esta *verdadera* distribución muestral.
+
+```{r}
+g.2.bilateral <- g.1.bilateral +
+                 stat_function(fun = dnorm, n = puntos,
+                               args = list(mean = media.bilateral, sd = error.estandar),
+                               colour = colores[3], linewidth = 1)
+
+g.2.bilateral <- g.2.bilateral +
+                 geom_vline(xintercept = media.bilateral, colour = colores[3],
+                            linetype = "longdash")
+
+g.2.bilateral <- g.2.bilateral + ggtitle("Pregunta 2 - hipótesis bilateral")
+print(g.2.bilateral)
+```
+
+
+
+El error tipo II significa **no rechazar la hipótesis nula cuando esta
+es falsa**. En este caso, no rechazar la idea de que la media de la
+población es 10 \[L\], siendo que en realidad es 9,95 \[L\]. Este tipo
+de error ocurre si **la media muestral cae fuera de las regiones
+críticas** definidas por la ingeniera. Marquemos esta región.
+
+```{r}
+g.2.bilateral <- g.2.bilateral + geom_area(
+  data = subset(distr1, x >= cota.inferior & x <= cota.superior),
+  aes(y = y), colour = colores[3], fill = colores[3], alpha = 0.5)
+print(g.2.bilateral)
+```
+
+
+Es decir, se comete un error de tipo II cuando la media de la muestra
+sea mayor al umbral inferior y menor al umbral superior escogidas por la
+ingeniera. Calculemos esta probabilidad (área de la región azul).
+
+```{r}
+# Calcular la probabilidad de esta región (beta)
+beta.superior <- pnorm(cota.superior, mean = media.bilateral,
+                       sd = error.estandar, lower.tail = TRUE)
+
+beta.inferior <- pnorm(cota.inferior, mean = media.bilateral,
+                       sd = error.estandar, lower.tail = TRUE)
+
+beta.bilateral <- beta.superior - beta.inferior
+```
+
+Y mostremos el resultado en pantalla.
+
+```{r}
+cat("La probabilidad de cometer un error tipo II es beta =", beta.bilateral, "\n\n")
+```
+
+``` bg-ivory
+La probabilidad de cometer un error tipo II es beta = 0.6246553 
+```
+
+Ahora podemos responder.
+
+::: conclusion
+Si la verdadera media fuera 9,95 \[L\], con los umbrales definidos por
+la ingeniera para rechazar la hipótesis nula (9,9 y 10,1 litros), la
+probabilidad de que cometa un error de tipo II sería
+[\\(\\beta\\)]{.math .inline}=0,625.
+:::
+:::
+
+::: {#pregunta-3-prueba-bilateral .section .level2}
+## Pregunta 3 --- prueba bilateral
+
+Como no se conoce el verdadero volumen medio, genere un gráfico del
+poder estadístico con las condiciones anteriores, pero suponiendo que el
+verdadero volumen medio podría variar de 9,6 a 10,4 litros.
+
+Como es extremadamente inusual conocer la verdadera media de la
+población, es más realista revisar cómo cambia la probabilidad de
+detectar que H[\\(\_0\\)]{.math .inline} es falsa para diferentes
+valores de la verdadera media. Esta probabilidad es lo que se conoce
+como **el poder estadístico** (o potencia estadística) y lo que se nos
+pide es un gráfico de cómo cambia a medida que se acerca o aleja del
+valor nulo considerado.
+
+Para mayor facilidad, primero definimos una función que calcule el poder
+estadísticos para una media, un error estándar y umbrales dados.
+
+```{r}
+calcula_poder <- function(media, error_estandar, umbral_inf = NULL, umbral_sup = NULL) {
+  poder_inf <- 0
+  poder_sup <- 1
+  
+  if(!is.null(umbral_inf))
+    poder_inf <- pnorm(umbral_inf, mean = media, sd = error_estandar,
+                       lower.tail = TRUE)
+  if(!is.null(umbral_sup))
+    poder_sup <- pnorm(umbral_sup, mean = media, sd = error_estandar,
+                       lower.tail = FALSE)
+  
+  poder <- poder_inf + poder_sup
+  return(poder)
+}
+```
+
+::: {#nota-1 .section .level4 .nota}
+#### Nota:
+
+Esta función maneja hipótesis alternativas tanto bilaterales como
+unilaterales. Basta dar valor `NULL` al umbral no definido.
+:::
+
+Generamos algunos puntos en el rango indicado en la pregunta para poder
+graficar, considerando el error estándar y umbrales definidos en el
+enunciado.
+
+```{r}
+x3 <- seq(9.6, 10.4, 0.01)
+y3 <- sapply(x3, calcula_poder, error_estandar = error.estandar,
+             umbral_inf = cota.inferior, umbral_sup = cota.superior)
+distr3 <- data.frame(x = x3, y = y3)
+```
+
+Ahora generamos el gráfico con la curva de poder.
+
+```{r}
+g.3.bilateral <- ggplot(distr3, aes(x, y)) + ylim(c(0, 1))
+g.3.bilateral <- g.3.bilateral + 
+                 scale_x_continuous(name = "Volumen media verdadero [L]",
+                                    breaks = seq(round(min(x3), 1), round(max(x3), 1), 0.1))
+g.3.bilateral <- g.3.bilateral + geom_line(colour = colores[2])
+g.3.bilateral <- g.3.bilateral + ylab("Poder estadístico")
+g.3.bilateral <- g.3.bilateral + theme_pubr()
+g.3.bilateral <- g.3.bilateral + 
+                 theme(axis.text.x = element_text(angle = 30, size = 10))
+g.3.bilateral <- g.3.bilateral + ggtitle("Pregunta 3 - hipótesis bilateral")
+
+print(g.3.bilateral)
+```
+
+
+En el gráfico se puede ver la curva de poder que resulta, la cual se
+acerca a uno a medida que la verdadera media se aleja del valor de la
+hipótesis nula (10 \[L\]), mientras que disminuye a medida que se acerca
+a este valor, donde alcanza su valor mínimo que corresponde a la
+probabilidad de rechazar H[\\(\_0\\)]{.math .inline} cuando, después de
+todo, es verdadera. Es decir, este valor es la probabilidad de cometer
+un error de tipo I ([\\(\\alpha\\)]{.math .inline}).
+:::
+
+::: {#pregunta-4-prueba-bilateral .section .level2}
+## Pregunta 4 --- prueba bilateral
+
+Considerando la suposición de que el verdadero volumen medio de los
+bidones es de 9,95 litros, ¿cuántos bidones deberían revisarse para
+conseguir un poder estadístico de 0,9 y un nivel de significación de
+0,05?
+
+Aquí se pregunta por el **tamaño de la muestra** para conseguir los
+valores para los factores de la prueba dados tanto explícitamente
+([\\(\\alpha\\)]{.math .inline}= 0,05 y [\\((1-\\beta)\\)]{.math
+.inline}=0,90) como implícitamente, que en este caso es el **tamaño del
+efecto**: [\\(\\delta = \\lvert \\mu\_{V}-\\mu\_{0} \\rvert =\\)]{.math
+.inline} [\\(\\lvert\\)]{.math .inline} 9,95 [\\(-\\)]{.math
+.inline} 10,00 [\\(\\rvert\\)]{.math .inline} [\\(=\\)]{.math .inline}
+0,05.
+
+Recordemos que el paquete `pwr` contiene funciones para responder este
+tipo de preguntas, pero que utilizan el tamaño del efecto expresado como
+la [\\(d\\)]{.math .inline} de Cohen. En este caso:
+
+```{r}
+efecto.bilateral <- (media.bilateral - valor.nulo) / desviacion.estandar
+```
+
+Si consideramos que estamos realizando una prueba Z, se puede usar la
+función para este tipo.
+
+```{r}
+library(pwr)
+
+poder.z.bilateral <- pwr.norm.test(d = efecto.bilateral, sig.level = 0.05,
+                                   power = 0.90, alternative = "two.sided")
+print(poder.z.bilateral)
+```
+
+```{bg-ivory}
+     Mean power calculation for normal distribution with known variance 
+
+              d = 0.05
+              n = 4202.968
+      sig.level = 0.05
+          power = 0.9
+    alternative = two.sided
+```
+
+```{r}
+tamano.z.bilateral <- ceiling(poder.z.bilateral[["n"]])
+cat("El tamaño de la muestra para una prueba Z debe ser n =",
+    tamano.z.bilateral, "\n\n")
+```
+
+```{bg-ivory}
+El tamaño de la muestra para una prueba Z debe ser n = 4203 
+```
+
+Si en vez consideramos una prueba t de Student, usamos la función para
+esa prueba.
+
+```{r}
+poder.t1.bilateral <- pwr.t.test(d = efecto.bilateral, sig.level = 0.05,
+                                 power = 0.90, type = "one.sample",
+                                 alternative = "two.sided")
+print(poder.t1.bilateral)
+```
+
+```{bg-ivory}
+     One-sample t test power calculation 
+
+              n = 4204.889
+              d = 0.05
+      sig.level = 0.05
+          power = 0.9
+    alternative = two.sided
+```
+
+```{r}
+tamano.t1.bilateral <- ceiling(poder.t1.bilateral[["n"]])
+cat("El tamaño de la muestra para una prueba t debe ser n =",
+    tamano.t1.bilateral, "\n\n")
+```
+
+```{bg-ivory}
+El tamaño de la muestra para una prueba t debe ser n = 4205 
+```
+
+Otra alternativa es usar la función `power.t.test()` (disponible en el
+*core* de R) que considera el tamaño del efecto expresado en la escala
+de la variable ([\\(\\delta\\)]{.math .inline}).
+
+```{r}
+diferencia.bilateral <- media.bilateral - valor.nulo
+poder.t2.bilateral <- power.t.test(delta = diferencia.bilateral,
+                                   sd = desviacion.estandar,
+                                   sig.level = 0.05, power = 0.90,
+                                   type = "one.sample",
+                                   alternative = "two.sided")
+print(poder.t2.bilateral)
+```
+
+```{bg-ivory}
+     One-sample t test power calculation 
+
+              n = 4204.89
+          delta = 0.05
+             sd = 1
+      sig.level = 0.05
+          power = 0.9
+    alternative = two.sided
+```
+
+```{r}
+tamano.t2.bilateral <- ceiling(poder.t2.bilateral[["n"]])
+cat("El tamaño de la muestra para una prueba t debe ser n =",
+    tamano.t2.bilateral, "\n\n")
+```
+
+```{bg-ivory}
+El tamaño de la muestra para una prueba t debe ser n = 4205 
+```
+
+Podemos ver que las alternativas para la prueba t de Student llevan al
+mismo resultado, mientras que usando una prueba Z se llega a un número
+muy similar. Escribamos la conclusión considerando esta última prueba.
+
+::: conclusion
+Suponiendo que el verdadero volumen medio de los bidones es de 9,95, se
+necesita una muestra de al menos 4.203 bidones para conseguir un poder
+estadístico de 0,9 y un nivel de significación de 0,05. Lo lógico, si
+ambas máquinas se usan con igual productividad, sería obtener muestras
+de 2.102 bidones de la máquina antigua e igual número de bidones de la
+máquina más moderna.
+:::
+:::
+
+::: {#pregunta-5-prueba-bilateral .section .level2}
+## Pregunta 5 --- prueba bilateral
+
+¿Alcanzaría esta muestra para detectar la diferencia que la ingeniera
+sospecha que existe entre las dos máquinas de la planta con las mismas
+probabilidades de cometer errores?
+
+Primero debemos notar que esta pregunta considera que la ingeniera
+sospecha que existe una diferencia en la tasa de cumplimiento del
+volumen requerido entre las dos máquinas de la planta. Es decir, ahora
+vamos a considerar las siguientes hipótesis.
+
+::: hip
+H[\\(\_0\\)]{.math .inline}: la tasa de bidones que cumplen el volumen
+requerido de 10 \[L\] que obtiene la máquina antigua ([\\(\\bf{\\small
+p\_{\\mathrm{antigua}}}\\)]{.math .inline}) es la misma que consigue la
+máquina moderna ([\\(\\bf{\\small p\_{\\mathrm{moderna}}}\\)]{.math
+.inline}); es decir [\\(\\bf{\\small p\_{\\mathrm{antigua}} -
+p\_{\\mathrm{antigua}} = 0}\\)]{.math .inline}.\
+H[\\(\_A\\)]{.math .inline}: las tasas de bidones que cumplen el volumen
+requerido que obtienen las máquinas de la planta son distintas; es decir
+[\\(\\bf{\\small p\_{\\mathrm{antigua}} - p\_{\\mathrm{antigua}} \\ne
+0}\\)]{.math .inline}.
+:::
+
+Aquí se pregunta por el **tamaño de la muestra** para mantener las
+probabilidades de cometer errores de la pregunta anterior
+([\\(\\alpha\\)]{.math .inline}= 0,05 y [\\((1-\\beta)\\)]{.math
+.inline}=0,90), pero ahora para contrastar estas nuevas hipótesis.
+
+Para responder la duda de la ingeniera podemos seguir diferentes
+caminos:
+
+1.  usando el tamaño del efecto sospechado por la ingeniera, el tamaño
+    de la muestra calculado en la pregunta anterior y fijando el nivel
+    de significación, obtener la potencia de la prueba y verificar si es
+    igual o mayor al 90% solicitado;
+2.  análogo a lo anterior, pero fijando la potencia y calculando el
+    nivel de significación conseguido para comprobar si cumple el 5%
+    solicitado; o
+3.  fijar los factores de la prueba y calcular el tamaño de la muestra
+    necesitado, para compararlo con el tamaño requerido para la pregunta
+    anterior.
+
+Aquí seguiremos la tercera estrategia.
+
+```{r}
+# Obtenemos el tamaño del efecto
+p.antigua <- 0.90
+p.moderna <- 0.96
+p.h <- ES.h(p.antigua, p.moderna)
+
+# Obtenemos los tamaños de las muestras
+poder.2p <- pwr.2p.test(h = p.h, sig.level = 0.05, power = 0.90, alternative = "two.sided")
+print(poder.2p)
+```
+
+```{bg-ivory}
+     Difference of proportion power calculation for binomial distribution (arcsine transformation) 
+
+              h = 0.2407853
+              n = 362.4651
+      sig.level = 0.05
+          power = 0.9
+    alternative = two.sided
+
+NOTE: same sample sizes
+```
+
+```{r}
+tamano.2p <- ceiling(poder.2p[["n"]])
+mje <- paste0("El tamaño de las muestras para una prueba de la diferencia\n",
+              "de dos proporciones independientes n =")
+cat(mje, tamano.2p, "\n\n")
+```
+
+```{bg-ivory}
+El tamaño de las muestras para una prueba de la diferencia
+de dos proporciones independientes n = 363 
+```
+
+Podemos concluir fácilmente:
+
+::: conclusion
+Para resolver la duda sobre la igualdad o diferencia de las tasas de
+cumplimiento del llenado de bidones por las dos máquinas de la planta,
+se necesitarían muestras de 363 bidones de cada una para conseguir un
+poder estadístico de 90% y un nivel de significación del 5% considerando
+una diferencia hipotética de 6%.
+
+De este modo, las muestras de 2.102 bidones de cada máquina requerida
+para responder la pregunta anterior serían más que suficientes en este
+caso.
+:::
+:::
+
+::: {#pregunta-1-prueba-unilateral .section .level2}
+## Pregunta 1 --- prueba unilateral
+
+Si la ingeniera está segura de que el verdadero volumen medio no puede
+ser inferior a 10 litros y piensa rechazar la hipótesis nula cuando la
+muestra presente una media mayor a 10,1 litros, ¿cuál es la probabilidad
+de que cometa un error de tipo I?
+
+Definimos los valores conocidos.
+
+```{r}
+desviacion.estandar <- 1
+tamano.muestra <- 100
+valor.nulo <- 10
+cota.inferior <- NULL
+cota.superior <- 10.1
+```
+
+Ahora trabajamos con una **prueba t de Student para una muestra con
+hipótesis alternativa unilateral**, para la que se puede enunciar las
+siguientes hipótesis.
+
+::: hip
+H[\\(\_0\\)]{.math .inline}: el volumen medio ([\\(\\bf{\\small
+\\mu\_{V}}\\)]{.math .inline}) de los bidones de detergente es de 10
+litros ([\\(\\bf{\\small \\mu\_{V} = 10}\\)]{.math .inline} \[L\]).\
+H[\\(\_A\\)]{.math .inline}: el volumen medio de los bidones es mayor a
+10 litros ([\\(\\bf{\\small \\mu\_{V} \> 10}\\)]{.math .inline} \[L\]).
+:::
+
+Como vimos en el caso de una prueba bilateral, nos preguntan por la
+probabilidad de cometer un error tipo I que corresponde al nivel de
+significación [\\(\\alpha\\)]{.math .inline}, el cual está dado por el
+área de la región de rechazo de la distribución que deberían seguir las
+medias muestrales bajo la hipótesis nula. Como conocemos la desviación
+estándar de la población, usemos una vez más la distribución normal
+(prueba Z).
+
+Tomando como base el gráfico de la distribución normal que hicimos para
+el caso bilateral, ahora marcamos la única región de rechazo definida
+por la ingeniera.
+
+```{r}
+g.1.unilateral <- g.dist + 
+                  geom_area(data = subset(distr, x > cota.superior),
+                            aes(y = y), colour = colores[1],
+                            fill = colores[1], alpha = 0.5)
+
+g.1.unilateral <- g.1.unilateral +
+                  ggtitle("Pregunta 1 - hipótesis unilateral")
+
+print(g.1.unilateral)
+```
+
+
+Calculemos la probabilidad asociada a esta región de rechazo que
+corresponde a su área.
+
+```{r}
+# Calcular la probabilidad de la región de rechazo.
+alfa.1.unilateral <- pnorm(cota.superior, mean = valor.nulo,
+                           sd = error.estandar, lower.tail = FALSE)
+
+cat("La probabilidad de cometer un error tipo I es alfa =", alfa.1.unilateral, "\n\n")
+```
+
+```{bg-ivory}
+La probabilidad de cometer un error tipo I es alfa = 0.1586553 
+```
+
+Interpretemos lo obtenido.
+
+::: conclusion
+Considerando la que la ingeniera va a rechazar la hipótesis nula cuando
+la muestra presente una media mayor a 10,1 litros, la probabilidad de
+que cometa un error de tipo I es [\\(\\alpha=\\)]{.math .inline} 0,159.
+:::
+:::
+
+::: {#pregunta-2-prueba-unilateral .section .level2}
+## Pregunta 2 --- prueba unilateral
+
+Si el verdadero volumen medio de los bidones fuera de 10,05 litros,
+¿cuál sería la probabilidad de que la ingeniera, que obviamente no
+conoce este dato, cometa un error de tipo II?
+
+Para responder, superponemos al gráfico anterior (hipótesis nula) la
+curva de la distribución muestral con esta verdadera media. Simulamos
+valores y graficamos la curva.
+
+``` {r}
+media.unilateral <- 10.05
+x2 <- seq(media.unilateral - 5.2 * error.estandar,
+          media.unilateral + 5.2 * error.estandar, length.out = puntos)
+
+y2 <- dnorm(x2, mean = media.unilateral, sd = error.estandar)
+distr2 <- data.frame(x = x2, y = y2)
+
+g.2.unilateral <- g.1.unilateral + 
+                  stat_function(fun = dnorm, n = puntos,
+                                args = list(mean = media.unilateral, sd = error.estandar),
+                                colour = colores[3], linewidth = 1)
+
+g.2.unilateral <- g.2.unilateral +
+                  geom_vline(xintercept = media.unilateral,
+                             colour = colores[3],
+                             linetype = "longdash")
+```
+
+Recordando que el error tipo II significa **no rechazar la hipótesis
+nula cuando esta es falsa**, lo que en este caso se traduce no rechazar
+la idea de que la media de la población es 10 \[L\], siendo que en
+realidad es 10,05 \[L\]. Marquemos la región que incluya **las medias
+muestrales que caen fuera de la región crítica** definida por el
+ingeniero.
+
+``` {r}
+g.2.unilateral <- g.2.unilateral +
+                  geom_area(data = subset(distr2, x <= cota.superior),
+                            aes(y = y), colour = colores[3],
+                            fill = colores[3], alpha = 0.5)
+
+g.2.unilateral <- g.2.unilateral + ggtitle("Pregunta 2 - hipótesis unilateral")
+print(g.2.unilateral)
+```
+
+
+
+Calculemos esta probabilidad.
+
+``` {r}
+# Calcular la probabilidad de esta región (beta)
+beta.unilateral <- pnorm(cota.superior, mean = media.unilateral,
+                         sd = error.estandar, lower.tail = TRUE)
+
+cat("La probabilidad de cometer un error tipo II es beta =", beta.unilateral,
+    "\n\n")
+```
+
+``` {bg-ivory}
+La probabilidad de cometer un error tipo II es beta = 0.6914625 
+```
+
+Respondemos la pregunta.
+
+::: conclusion
+Con un valor para la verdadera media de 10.05 \[L\] y el umbral definido
+por la ingeniera para rechazar la hipótesis nula (10,1 litros), la
+probabilidad de cometer un error de tipo II sería [\\(\\beta\\)]{.math
+.inline}=0,691.
+:::
+:::
+
+::: {#pregunta-3-prueba-unilateral .section .level2}
+## Pregunta 3 --- prueba unilateral
+
+Como no se conoce el verdadero volumen medio, genere un gráfico del
+poder estadístico con las condiciones anteriores, pero suponiendo que el
+verdadero volumen medio podría variar de 10 a 10,3 litros.
+
+Tal como en el caso bilateral nos piden la curva del cambio de la
+probabilidad de detectar que H[\\(\_0\\)]{.math .inline} es falsa (es
+decir, el poder estadístico) para diferentes valores de la verdadera
+media.
+
+Usaremos la [función ya presentada]{#función calcula poder} que calcula
+el poder.
+
+Generamos algunos puntos en el rango indicado en la pregunta para poder
+graficar, considerando el error estándar y el umbral definido en el
+enunciado.
+
+``` {r}
+x4 <- seq(9.75, 10.25, 0.01)
+y4 <- sapply(x4, calcula_poder, error_estandar = error.estandar,
+             umbral_inf = cota.inferior, umbral_sup = cota.superior)
+distr4 <- data.frame(x = x4, y = y4)
+```
+
+Ahora generamos el gráfico con la curva de poder.
+
+``` {r}
+g.3.unilateral <- ggplot(distr4, aes(x, y)) + ylim(c(0, 1))
+g.3.unilateral <- g.3.unilateral + geom_line(colour = colores[2])
+g.3.unilateral <- g.3.unilateral + ylab("Poder estadístico")
+g.3.unilateral <- g.3.unilateral + xlab("Volumen media verdadero [L]")
+g.3.unilateral <- g.3.unilateral + theme_pubr()
+g.3.unilateral <- g.3.unilateral +
+                  theme(axis.text.x = element_text(angle = 30, size = 10))
+g.3.unilateral <- g.3.unilateral + ggtitle("Pregunta 3 - hipótesis unilateral")
+
+print(g.3.unilateral)
+```
+
+
+En el gráfico se puede ver la curva de poder que resulta, la que es muy
+cercana a cero cuando es menor que el valor nulo (puesto que esto fue
+considerado como imposible por la ingeniera), pasa por el valor de
+[\\(\\alpha\\)]{.math .inline} cuando la verdadera media coincide con la
+hipótesis nula (10 \[L\]), para acercarse al valor uno mientras más se
+aleja a la derecha de este valor.
+:::
+
+::: {#pregunta-4-prueba-unilateral .section .level2}
+## Pregunta 4 --- prueba unilateral
+
+Considerando un volumen medio de 10 litros, ¿cuántos bidones deberían
+revisarse para conseguir un poder estadístico de 0,9 y un nivel de
+significación de 0,05?
+
+Aquí tenemos las mismas alternativas que para la prueba bilateral
+considerando [\\(\\alpha\\)]{.math .inline}= 0,05,
+[\\((1-\\beta)\\)]{.math .inline}=0,90 y [\\(\\delta = \\lvert
+\\mu\_{V}-\\mu\_{0} \\rvert =\\)]{.math .inline} [\\(\\lvert
+10,50-10,00\\rvert=0,05\\)]{.math .inline}.
+
+Calculemos el tamaño del efecto expresado como la [\\(d\\)]{.math
+.inline} de Cohen. En este caso:
+
+``` {r}
+diferencia.unilateral <- media.unilateral - valor.nulo
+efecto.unilateral <- diferencia.unilateral / desviacion.estandar
+```
+
+Primero consideremos una prueba Z.
+
+```{r}
+poder.z.unilateral <- pwr.norm.test(d = efecto.unilateral, sig.level = 0.05,
+                                    power = .9, alternative = "greater")
+print(poder.z.unilateral)
+```
+
+``` {bg-ivory}
+## 
+##      Mean power calculation for normal distribution with known variance 
+## 
+##               d = 0.05
+##               n = 3425.539
+##       sig.level = 0.05
+##           power = 0.9
+##     alternative = greater
+```
+
+Consideramos una prueba t de Student usando el paquete `pwr`.
+
+``` {r}
+poder.t1.unilateral <- pwr.t.test(d = efecto.unilateral, sig.level = 0.05,
+                                 power = 0.9, type = "one.sample",
+                                 alternative = "greater")
+print(poder.t1.unilateral)
+```
+
+``` {bg-ivory}
+## 
+##      One-sample t test power calculation 
+## 
+##               n = 3426.892
+##               d = 0.05
+##       sig.level = 0.05
+##           power = 0.9
+##     alternative = greater
+```
+
+Finalmente comprobamos la alternativa con el tamaño del efecto expresado
+en como [\\(\\delta\\)]{.math .inline}.
+
+```{r}
+poder.t2.unilateral <- power.t.test(delta = diferencia.unilateral,
+                                    sd = desviacion.estandar,
+                                    sig.level = 0.05, power = 0.9,
+                                    type = "one.sample",
+                                    alternative = "one.sided")
+print(poder.t2.unilateral)
+```
+
+``` {bg-ivory}
+## 
+##      One-sample t test power calculation 
+## 
+##               n = 3426.892
+##           delta = 0.05
+##              sd = 1
+##       sig.level = 0.05
+##           power = 0.9
+##     alternative = one.sided
+```
+
+Confirmamos que las alternativas para la prueba t de Student llevan al
+mismo resultado, muy similar al que se llega usando una prueba Z,
+Escribamos la conclusión con esta última prueba.
+
+::: conclusion
+Suponiendo que el verdadero volumen medio de los bidones es de 10,05, se
+necesita una muestra de al menos 3.426 bidones (1.713 de cada máquina)
+para conseguir una prueba Z con un poder estadístico de 0,9 y un nivel
+de significación de 0,05.
+:::
+:::
+
+::: {#pregunta-5-prueba-unilateral .section .level2}
+## Pregunta 5 --- prueba unilateral
+
+¿Alcanzaría esta muestra para detectar que la tasa de cumplimiento de la
+máquina más moderna es mejor que la alcanzada por la máquina más
+antigua?
+
+Como para el caso bilateral, esta pregunta considera una posible
+diferencia en la tasa de cumplimiento del volumen requerido entre las
+dos máquinas de la planta, aunque esta vez solamente consideramos la
+posibilidad de que esta tasa es mayor en la máquina más moderna. Las
+hipótesis serían:
+
+::: hip
+H[\\(\_0\\)]{.math .inline}: la tasa de bidones que cumplen el volumen
+requerido de 10 \[L\] que obtiene la máquina antigua ([\\(\\bf{\\small
+p\_{\\mathrm{antigua}}}\\)]{.math .inline}) es la misma que consigue la
+máquina moderna ([\\(\\bf{\\small p\_{\\mathrm{moderna}}}\\)]{.math
+.inline}); es decir [\\(\\bf{\\small p\_{\\mathrm{antigua}} -
+p\_{\\mathrm{antigua}} = 0}\\)]{.math .inline}.\
+H[\\(\_A\\)]{.math .inline}: las tasas de bidones que cumplen el volumen
+requerido que obtienen la máquina antigua es menor que la obtenida por
+la máquina moderna; es decir [\\(\\bf{\\small p\_{\\mathrm{antigua}} -
+p\_{\\mathrm{antigua}} \< 0}\\)]{.math .inline}.
+:::
+
+Aquí también nos interesa conocer el **tamaño de la muestra** que
+permitiría mantener las probabilidades de cometer errores de la pregunta
+anterior ([\\(\\alpha\\)]{.math .inline}= 0,05 y
+[\\((1-\\beta)\\)]{.math .inline}=0,90), pero ahora para contrastar
+estas nuevas hipótesis.
+
+Siguiendo la lógica usada en el caso bilateral, podemos ejecutar el
+siguiente código:
+
+``` {r}
+# Obtenemos el tamaño del efecto
+p.antigua <- 0.90
+p.moderna <- 0.96
+p.h <- ES.h(p.antigua, p.moderna)
+
+# Obtenemos los tamaños de las muestras
+poder.2p <- pwr.2p.test(h = p.h, sig.level = 0.05, power = 0.90, alternative =  "less")
+print(poder.2p)
+```
+
+``` {bg-ivory}
+     Difference of proportion power calculation for binomial distribution (arcsine transformation) 
+
+              h = -0.2407853
+              n = 295.4195
+      sig.level = 0.05
+          power = 0.9
+    alternative = less
+
+NOTE: same sample sizes
+```
+
+``` {r}
+tamano.2p <- ceiling(poder.2p[["n"]])
+mje <- paste0("El tamaño de las muestras para una prueba unilateral de la\n",
+              "diferencia de dos proporciones independientes es n =")
+cat(mje, tamano.2p, "\n\n")
+```
+
+``` {bg-ivory}
+El tamaño de las muestras para una prueba unilateral de la
+diferencia de dos proporciones independientes es n = 296 
+```
+
+Notemos que la única diferencia con el código usado en el caso bilateral
+es que indicamos que la hipótesis alternativa solamente considera la
+cola inferior (`alternative = less`). Interpretemos el resultado.
+
+::: conclusion
+Para contrastar las hipótesis sobre las tasas de cumplimiento del
+llenado de bidones por parte de las dos máquinas de la planta, se
+necesitarían muestras de 296 bidones de cada una para conseguir un poder
+estadístico de 90% y un nivel de significación del 5% considerando una
+diferencia hipotética de 6%.
+
+De este modo, las muestras de 1.713 bidones de cada máquina requerida
+para responder la pregunta anterior serían más que suficientes para esta
+prueba.
+:::
+:::
+:::

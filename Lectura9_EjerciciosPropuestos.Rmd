@@ -1,0 +1,139 @@
+---
+title: "Lectura 9"
+author: "Byron Caices"
+date: "2024-10-26"
+output:
+    html_document:
+    highlight: tango
+    word_document: default
+    pdf_document: default
+---
+
+<style>
+body {
+  font-family: 'Calibri', sans-serif;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 11.2 Pruebas no paramétricas con una y dos muestras numéricas
+
+### 11.2.1 Prueba de Suma de Rangons Wilcoxon
+
+aka Prueba U de Mann-Whitney o Prueba de Wilcoxon-Mann-Whitney
+
+La prueba de suma de rangos de Wilcoxon es una prueba no paramétrica que se utiliza para **comparar dos muestras independientes**. La hipótesis nula es que las dos muestras provienen de la misma población. La hipótesis alternativa es que las dos muestras no provienen de la misma población.
+
+### Condiciones:
+
+1. Las observaciones de ambas muestras son independientes
+
+2. La escala de medida de las variables debe ser a lo menos ordinal, de modo que tenga sentido hablar de relaciones de orden ("igual que", "mayor que", "menor que")
+
+- H0: No hay duferencia entre las dos muestras (los valores se distribuyen de igual forma)
+- HA: Sí hay diferencia entre las dos muestras (los valores no se distribuyen de igual forma)
+
+Notemos que las hipótesis no hacen referencia a algún parámetro
+
+## Paso a Paso
+
+1. Combinar Observaciones de los conjuntos A y B en un conjunto de tamaño \(n_T = n_A + n_B\) y ordenarlas de menor a mayor
+
+2. Asignar rangos a las observaciones, de 1 a \(n_T\), de acuerdo a su orden. En caso de que un valor aparece más de una vez, cada repetición toma como valor el rango promedio de todas las ocurrencias del valor.
+
+3. Calcular la suma de los rangos de las observaciones de A, \(R_A\) y la suma de los rangos de las observaciones de B, \(R_B\)
+
+- Suma de rangos para la muestra combinada:
+
+\[R_T = \frac{n_T(n_T + 1)}{2}\]
+
+- Rango promedio:
+
+\[R_{\text{promedio}} = \frac{n_T+1}{2}\]
+
+Si la hipoótesis nula es verdadera, entonces la suma de los rangos de A y B debería ser similar a la suma de los rangos esperados para la muestra combinada. Por lo tanto, se espera que \(R_A + R_B\) sea cercano a \(R_T\)
+
+\[S_{H0}^{A} = n_A \cdot R_{\text{promedio}} = n_A \cdot \frac{n_T+1}{2}\]
+
+\[S_{H0}^{B} = n_B \cdot R_{\text{promedio}} = n_B \cdot \frac{n_T+1}{2}\]
+
+### Prueba de suma de rangos de Wilcoxon para muestras grandes
+
+Poblaciones con igual distribucion, las sumas de los rangos de las muestras A y B tienen la misma desviación estándar
+
+\[\sigma_{S} = \sqrt{\frac{n_A \cdot n_B \cdot (n_T + 1)}{12}}\]
+
+Cuandos ambas muestras tienen tamaño >= 5 las distribuciones muestrales S_A y S_B son aproximadamente normales.
+
+Una vez conocida la media y desv estandar podemos calcular z para S_A y S_B
+
+- \( S^M \) es cualquiera de los valores observados, \( S^A \) o \( S^B \).
+- \( S^M_{H_0} \) es el valor nulo (la media de la distribución muestral de \( S^M \) si la hipótesis nula es cierta).
+- \( \sigma_S \) es el error estándar de \( S^M \) (es decir, la desviación estándar de su distribución muestral).
+
+La fórmula para calcular \( z \) es:
+
+\[
+z = \frac{(S^M - S^M_{H_0}) \pm 0.5}{\sigma_S}
+\]
+
+### Prueba de suma de rangos de Wilcoxon para muestras pequeñas
+
+_Menos de 5 observaciones_
+
+No podemos usar el supuesto de normalidad como en la prueba anterior y debemos usar la distribución exacta de la suma de los rangos.
+
+\[
+S_{\text{max}}^A = n^A \cdot n^B + \frac{n^T \cdot (n^T + 1)}{2}
+\]
+\[
+S_{\text{max}}^B = n^B \cdot n^A + \frac{n^T \cdot (n^T + 1)}{2}
+\]
+
+Así, para el ejemplo:
+
+\[
+S_{\text{max}}^A = 12 \cdot 11 + \frac{12 \cdot (12 + 1)}{2} = 210
+\]
+\[
+S_{\text{max}}^B = 11 \cdot 12 + \frac{11 \cdot (11 + 1)}{2} = 198
+\]
+
+Con esto podemos definir un nuevo estadístico de prueba \( U \), como muestra la ecuación:
+
+\[
+U^A = S_{\text{max}}^A - S^A
+\]
+\[
+U^B = S_{\text{max}}^B - S^B
+\]
+\[
+U = \min(U^A, U^B)
+\]
+
+Por lo que en el ejemplo:
+
+\[
+U^A = 210 - 139 = 71
+\]
+\[
+U^B = 198 - 137 = 61
+\]
+\[
+U = 61
+\]
+
+Si la hipótesis nula fuera verdadera, esperaríamos que:
+
+\[
+U^A = U^B = \frac{n^A \cdot n^B}{2}
+\]
+
+
+
+
+
+

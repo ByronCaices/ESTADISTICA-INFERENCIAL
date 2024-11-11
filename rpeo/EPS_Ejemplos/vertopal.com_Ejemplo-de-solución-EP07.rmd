@@ -1,0 +1,637 @@
+---
+generator: pandoc
+title: Pruebas no paramétricas para inferir con variables numéricas
+viewport: width=device-width, initial-scale=1
+---
+
+::: {.container-fluid .main-container}
+::: {#header}
+# Pruebas no paramétricas para inferir con variables numéricas {#pruebas-no-paramétricas-para-inferir-con-variables-numéricas .title .toc-ignore}
+
+### Ejemplo de solución ejercicio prático N°7 {#ejemplo-de-solución-ejercicio-prático-n7 .subtitle}
+:::
+
+::: {#enunciado .section .level2}
+## Enunciado
+
+En el trabajo de título de una estudiante del DIINF se reportan tiempos
+de ejecución (en milisegundos) y la cercanía con la solución óptima (en
+por ciento) de la mejor solución encontrada con tres versiones de un
+algoritmo genético para resolver instancias del problema del vendedor
+viajero disponibles en repositorios públicos. Ahora debe enfrentar el
+análisis de estos datos, por que está solicitando ayuda de las y los
+estudiantes de Estadística Inferencial.
+
+Comencemos cargando los paquetes que vamos a utilizar.
+
+```{r}
+library(dplyr)
+library(ggpubr)
+library(tidyr)
+```
+
+Y cargando los datos.
+
+```{r}
+#src_dir <- "~/Downloads"
+src_basename <- "EP07 Datos.csv"
+#src_file <- file.path(src_dir, src_basename)
+datos <- read.csv(file = src_basename, stringsAsFactors = TRUE)
+
+# Revisamos lo leído
+print(head(datos))
+```
+
+
+
+Vemos que los datos se leyeron adecuadamente y que vienen en formato
+ancho.
+:::
+
+::: {#pregunta-1 .section .level2}
+## Pregunta 1
+
+::: enunciado
+Observando los datos, la memorista sospecha que hay diferencias
+significativas en el tiempo de ejecución entre las versiones A y C del
+algoritmo cuando las instancias tienen 100 o más nodos. ¿Los datos
+respaldan la intuición de la memorista?
+
+Para responder, filtren los datos para tener las instancias con 100 o
+más nodos y seleccionen las columnas de los tiempos de ejecución de las
+versiones A y C en formato ancho. Usando como semilla el valor 213,
+obtengan muestras aleatorias independientes de 20 tiempos registrados
+por la versión A y 18 tiempos registrados por la versión C del
+algoritmo. Realicen un análisis estadístico pertinente (enunciar
+hipótesis, revisar condiciones, seleccionar prueba) para responder la
+pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+:::
+
+Primero, filtramos para quedarnos con las instancias que nos interesan y
+quitar las columnas que no necesitamos. También obtenemos la puestra en
+formato largo para las funciones que las necesitan de esa manera
+
+```{r}
+set.seed(213)
+muestra_1 <- datos |>
+  filter(n.nodos >= 100) |>
+  select(instancia, tiempo.A, tiempo.C) |>
+  sample_n(20 + 18)
+
+instancia <- muestra_1 |> pull(instancia)
+tiempo_A <- muestra_1 |> slice(1:20) |> pull(tiempo.A)
+tiempo_C <- muestra_1 |> slice(21:(20 + 18)) |> pull(tiempo.C)
+version <- c(rep("A", 20), rep("C", 18))
+tiempo <- c(tiempo_A, tiempo_C)
+
+datos_1_largos <- data.frame(instancia, version, tiempo) |>
+  mutate(instancia = factor(instancia)) |>
+  mutate(version = factor(version))
+```
+
+Como es aconsejado, echemos un vistazo a los datos que se están
+trabajando.
+
+```{r}
+# Llevamos los tiempos a minutos para mejor legibilidad
+datos_1_largos <- datos_1_largos |>
+  mutate(minutos = tiempo / 1000 / 60)
+
+# Creamos y mostramos el gráfico
+p1 <- gghistogram(datos_1_largos, x = "minutos",
+                  xlab = "Tiempo [minutos]",  ylab = "Frecuencia",
+                  color = "version", fill = "version",
+                  bins = 10)
+p1 <- p1 + facet_grid(~ version)
+print(p1)
+```
+
+
+Podemos ver que las muestras no parecen tomadas desde una distribución
+normal, lo que podemos confirmar con pruebas auxiliares de normalidad.
+
+```{r}
+print(shapiro.test(tiempo_A))
+print(shapiro.test(tiempo_C))
+```
+
+
+Se confirma que hay una fuerte evidencia de que los tiempos exhibidos
+por la versión C no provienen de una distribución normal [([\\(\\small
+W=0{,}799\\)]{.math .inline};]{.no-break} [[\\(\\small
+p=0{,}001\\)]{.math .inline})]{.no-break}. Corresponde entonces usar una
+prueba no paramétrica para analizar estos datos. En este caso, una
+prueba de **Wilcoxon-Mann-Whitney**, en reemplazo de una prueba t de
+Student para muestras independientes.
+
+Como vimos, las hipótesis contrastadas por esta prueba depende de la
+forma de las distribuciones de las poblaciones desde donde provienen las
+muestras. Mirando el histograma, no parece que estas poblaciones se
+podrían distribuir de manera similar. Esto, lo podemos corroborar con
+una prueba auxiliar: la **prueba de Kolmogorov--Smirnov**, que es una
+prueba no paramétrica que evalúa la hipótesis nula de que *ambas
+muestras provienen de distribuciones iguales* (unidimensionales,
+continuas u ordinales) (Berger & Zhou, 2014). Esta prueba puede
+accederse en R a través de la función
+`ks.test(x, y, alternative = c("two.sided", "less", "greater"))`, como
+muestra el siguiente código.
+
+```{r}
+print(ks.test(tiempo_A, tiempo_C))
+```
+
+
+
+Vemos que hay evidencia suficiente [([\\(\\small D=0{,}694\\)]{.math
+.inline};]{.no-break} [[\\(\\small p \\ll 0{,}001\\)]{.math
+.inline})]{.no-break} para descartar que las muestras provienen de
+distribuciones iguales, por lo que las hipótesis **no podrían referirse
+a medianas**. Así, enunciamos las siguientes hipótesis:
+
+::: hip
+H[\\(\_0\\)]{.math .inline}: no hay diferencia en los tiempos de
+ejecución requeridos por las versiones A y C del algoritmo para
+instancias con 100 o más nodos.
+
+H[\\(\_A\\)]{.math .inline}: los tiempos de ejecución requeridos por
+ambas versiones para instancias con 100 o más nodos son distintos.
+:::
+
+Verifiquemos que se cumplen las condiciones para aplicar esta prueba no
+paramétrica con validez:
+
+1.  Las observaciones de ambas muestras son independientes. De como
+    hicimos el muestreo más arriba, podemos asegurar que las muestras
+    fueron escogidas de forma aleatoria y no comparten alguna instancia.
+2.  La escala de medición empleada debe ser a lo menos ordinal. Como la
+    variable en estudio es de tiempo, que corresponde a una medición
+    física, la escala de la medición cumple con condiciones más exigente
+    que solo la ordinal, y tiene sentido hablar de "más/igual/menos
+    tiempo".
+
+Como se cumplen bien las condiciones, usemos el típico nivel de
+significación [\\(\\small \\alpha=0{,}05\\)]{.math .inline} Procedamos
+entonces a realizar la prueba.
+
+```{r}
+alfa <- 0.05
+prueba_1 <- wilcox.test(tiempo_A, tiempo_C,
+                        paired = FALSE)
+print(prueba_1)
+```
+
+
+
+Podemos concluir:
+
+Existe fuerte evidencia en contra de la hipótesis nula [([\\(\\small
+W=310;\\, p \\ll 0{,}001\\)]{.math .inline})]{.no-break}, por lo que la
+rechazamos en favor de la alternativa. Esto es, los tiempos que tarda la
+versión A del algoritmo en resolver instancias con 100 o más nodos del
+problema del vendedor viajero son distintos a los que tarda la versión
+C. Mirando los histogramas de los datos, podemos sugerir que el
+algoritmo C requiere, en promedio, significativamente menos tiempo de
+procesamiento.
+:::
+
+::: {#pregunta-2 .section .level2}
+## Pregunta 2
+
+::: enunciado
+La memorista también sospecha que, al comparar las mismas instancias con
+70 a 85 nodos, las mejores soluciones encontradas por las versiones B y
+C tienen rendimientos distintos. ¿Estará en lo cierto?
+
+Para responder, filtren los datos para tener las instancias que tengan
+de 70 a 85 nodos y seleccionen las columnas con el mejor rendimiento de
+las versiones B y C en formato ancho. Usando como semilla el valor 117,
+obtengan una muestra aleatoria de 24 instancias. Lleven los datos a
+formato largo y utilicen una prueba no paramétrica apropiada para
+analizar las muestras obtenidas.
+:::
+
+Obtenemos la muestra de datos que se nos indica. Como tenemos que
+comparar los resultados obtenidos por los algoritmos con **las mismas
+instancias**, debemos obtener una muestra apareada de 24 observaciones.
+
+```{r}
+set.seed(117)
+
+muestra_2 <- datos |>
+  filter(n.nodos >= 70, n.nodos <= 85) |>
+  select(instancia, mejor.B, mejor.C) |>
+  sample_n(24)
+
+datos_2_largos <- muestra_2 |>
+  pivot_longer(-instancia, names_to = "version",
+               names_pattern = "mejor[.](.*)",
+               values_to = "mejor_sol") |>
+  mutate(instancia = factor(instancia)) |>
+  mutate(version = factor(version))
+```
+
+Revisemos los datos con un diagrama de cajas.
+
+```{r}
+p2 <- ggboxplot(datos_2_largos,
+                x = "version", y = "mejor_sol", fill = "version", 
+                xlab = "Versión del algoritmo",
+                ylab = "Mejor resultado (% del óptimo)")
+print(p2)
+```
+
+
+Vemos que los datos para el algoritmo B presentan una leve asimetría y
+la presencia de valores atípicos. Además, se está trabajando con
+*porcentajes*, que tiene un rango de valores limitado al intervalo \[0,
+100\], lo que usualmente viola la idea de *variable continua*. Sería
+prudente, entonces, utilizar una prueba no paramétrica para el análisis,
+como alternativa a una prueba t de Student para muestras apareadas, que
+en este caso correspondería a una **prueba de rangos con signo de
+Wilcoxon**.
+
+Si miramos con cuidado el diagrama de cajas, vemos que las muestras
+parecen seguir distribuciones con el mismo tipo de asimetría. Usemos la
+prueba de Kolmogorov--Smirnov para corroborar esta sospecha.
+
+```{r}
+print(ks.test(muestra_2[["mejor.B"]], muestra_2[["mejor.C"]]))
+```
+
+
+
+Vemos, entonces, que hay no evidencia que permita descartar que las
+mejores soluciones para las mismas instancias de prueba que consiguen
+las versiones B y C del algoritmo se distribuyen de igual forma
+[([\\(\\small D=0{,}167\\)]{.math .inline};]{.no-break} [[\\(\\small
+p=0{,}889\\)]{.math .inline})]{.no-break}. Con este resultados, la
+prueba puede interpretarse como una **comparación de medianas** con las
+siguientes hipótesis (bilaterales):
+
+::: hip
+H[\\(\_0\\)]{.math .inline}: no hay diferencia en las medianas de la
+calidad de las mejores soluciones encontradas por las versiones B y C
+del algoritmo en las mismas instancias con 70 a 85 nodos.
+
+H[\\(\_A\\)]{.math .inline}: sí hay diferencias en las medianas de la
+calidad de las mejores soluciones obtenidas por ambas versiones del
+algoritmo en las mismas instancias con 70 a 85 nodos.
+:::
+
+Verifiquemos las condiciones:
+
+1.  Los pares de observaciones son independientes. Efectivamente, si el
+    experimento fue realizado correctamente por la memorista, cómo se
+    desempeña un algoritmo no debería tener influencia en cómo rinde el
+    segundo.
+2.  La escala de medición empleada para ambas muestras debe ser a lo
+    menos ordinal. Valores porcentuales cumplen esta condición, pues
+    podemos compararlos y ordenarlos.
+
+Procedamos con la prueba no paramétrica, con el nievel de significación
+usual, ya que se cumplen todas las condiciones.
+
+```{r}
+alfa <- 0.05
+prueba_2 <- wilcox.test(muestra_2[["mejor.B"]],
+                        muestra_2[["mejor.C"]],
+                        paired = TRUE)
+print(prueba_2)
+```
+
+
+
+Concluyamos a la luz de estos resultados.
+
+La prueba de rangos con signo de Wilcoxon falla en rechazar la hipótesis
+nula [([\\(\\small V=167\\)]{.math .inline};]{.no-break}
+[[\\(p=0{,}643\\)]{.math .inline})]{.no-break}. Así, no es posible
+descartar que la calidad (cercanía con la solución óptima) de las
+mejores soluciones conseguidas por la versión B del algoritmo tiene la
+misma mediana que las obtenidas por la versión C en las mismas
+instancias con 70 a 85 nodos.
+
+\
+:::
+
+::: {#pregunta-3 .section .level2}
+## Pregunta 3
+
+::: enunciado
+La memorista además cree que hay diferencias significativas en el tiempo
+de ejecución entre las versiones del algoritmo cuando las instancias de
+prueba tienen 100 o más nodos. ¿Los datos respaldan la intuición de la
+memorista?
+
+Para responder, filtren los datos para tener las instancias con 100 o
+más nodos y seleccionen las columnas con los tiempos de ejecución
+registrados (en formato ancho). Usando como semilla el valor 33,
+obtengan muestras aleatorias independientes de 12, 13 y 14 tiempos
+registrados por las versiones A, B y C, respectivamente. Lleven los
+datos a formato largo y utilicen una prueba no paramétrica para analizar
+las muestras obtenidas.
+:::
+
+Primero, filtramos para quedarnos con las instancias que nos interesan y
+quitar las columnas que no necesitamos, siguiendo las instrucciones
+dadas.
+
+```{r}
+set.seed(33)
+
+muestra_3 <- datos |>
+  filter(n.nodos >= 100) |>
+  select(instancia, tiempo.A, tiempo.B, tiempo.C) |>
+  sample_n(12 + 13 + 14)
+
+instancia <- muestra_3 |> pull(instancia)
+tiempo_A <- muestra_3 |> slice(1:12) |> pull(tiempo.A)
+tiempo_B <- muestra_3 |> slice(13:(12+13)) |> pull(tiempo.B)
+tiempo_C <- muestra_3 |> slice((12+13+1):(12+13+14)) |> pull(tiempo.C)
+version <- c(rep("A", 12), rep("B", 13), rep("C", 14))
+tiempo <- c(tiempo_A, tiempo_B, tiempo_C)
+
+datos_3_largos <- data.frame(instancia, version, tiempo) |>
+  mutate(instancia = factor(instancia)) |>
+  mutate(version = factor(version))
+```
+
+Puesto que cada muestra contiene instancias de prueba distintas, la
+primera alternativa sería usar ANOVA de una vía para muestras
+independientes para este análisis. Esta prueba permitiría determinar si
+la memorista tiene o no razón en pensar que existen diferencias
+significativas en los tiempos medios de ejecución de los algoritmos.
+
+Verificamos las condiciones:
+
+1.  Existe independencia entre las muestras, pues no hay elementos en
+    común y el tiempo que tarda una versión del algoritmo en alguna de
+    las instancias escogida no debería influir en el tiempo que tarda
+    otra versión en otra instancia.
+2.  También se cumple que la variable dependiente tiene una escala de
+    intervalos iguales, pues es una medición física (tiempo).
+3.  Veamos si se cumple con las condiciones de normalidad y
+    homocedasticidad por medio de histogramas.
+
+```{r}
+# Llevamos los tiempos a minutos para mejor legibilidad
+datos_3_largos <- datos_3_largos |>
+  mutate(minutos = tiempo / 1000 / 60)
+
+# Creamos y mostramos el gráfico
+p3 <- gghistogram(
+  datos_3_largos, x = "minutos",
+  color = "version", fill = "version", bins = 10,
+  xlab = "Tiempo [minutos]", ylab = "Frecuencia")
+p3 <- p3 + facet_grid(~ version)
+print(p3)
+```
+
+
+
+Podemos ver que las muestras no siguen un comportamiento aproximadamente
+normal, por lo que no podríamos suponer razonablemente que las
+poblaciones de donde provienen sí tengan dicha distribución.
+
+Como el problema no parece requerir un valor de las medias estudiadas,
+sería conveniente bajar las exigencias y optar por una prueba no
+paramétrica, como se nos indica en el enunciado. En este caso,
+correspondería una prueba de **Kruskal-Wallis**.
+
+Del histograma, tampoco podríamos suponer que las formas de las
+distribuciones subyacentes sean iguales, por lo que las hipótesis no
+podrían referirse a medianas. Así, las hipótesis no paramétricas a
+contrastar serían:
+
+::: hip
+H[\\(\_0\\)]{.math .inline}: todas las versiones del algoritmo tardan
+tiempos similares en resolver instancias del problema del vendedor
+viajero con 100 o más nodos.
+
+H[\\(\_A\\)]{.math .inline}: al menos uno de las versiones del algoritmo
+exhibe tiempos de ejecución significativamente distintos a (al menos)
+una de las otras versiones para resolver instancias con 100 o más nodos.
+:::
+
+Verifiquemos las condiciones:
+
+1.  Ya sabemos que existe independencia ente las observaciones.
+2.  También se verifica que la variable independiente tiene más de dos
+    niveles (versiones A, B y C).
+3.  Por último, la escala de la variable dependiente debe ser al menos
+    ordinal, y sabemos que las mediciones físicas cumplen de sobra con
+    tal condición.
+
+Aplicamos la prueba, con el nivel de significación más común.
+
+```{r}
+alfa <- 0.05
+prueba_3 <- kruskal.test(tiempo ~ version, data = datos_3_largos)
+
+print(prueba_3)
+```
+
+
+Escribamos la conclusión ómnibus.
+
+La prueba indica que hay suficiente evidencia para rechazar la hipótesis
+nula en favor de la hipótesis alternativa [([\\(\\small
+\\chi\^2=19{,}80\\)]{.math .inline};]{.no-break} [[\\(p \\ll
+0{,}001\\)]{.math .inline})]{.no-break}. En consecuencia, podemos
+concluir con 95% de confianza que al menos una de las versiones del
+algoritmo difiere significativamente en el tiempo que tarda en resolver
+las instancias del problema del vendedor viajero con 100 o más nodos.
+
+Como la prueba ómnibus de Kruskal-Wallis detecta diferencias, debemos
+hacer ahora un **procedimiento post-hoc**. Para ello usaremos múltiples
+pruebas de Wilcoxon-Mann-Whitney entre pares de grupos, aplicando el
+ajuste de Benjamini & Hochberg (1995) por tener mayor poder estadístico
+que varios otros métodos.
+
+```{r}
+posthoc_3 <- pairwise.wilcox.test(tiempo, version, paired = FALSE,
+                                  p.adjust.method = "BH")
+print(posthoc_3)
+```
+
+
+
+Ahora podemos hacer la conclusión completa.
+
+El procedimiento post-hoc no encuentra diferencias significativas entre
+las versiones A y B del algoritmo [([\\(\\small p=0{,}650\\)]{.math
+.inline})]{.no-break}, pero estas dos versiones parecen tardar
+significativamente más que la versión C [([\\(\\small
+p\<0{,}001\\)]{.math .inline})]{.no-break} en resolver instancias del
+problema del vendedor viajero con 100 o más nodos.
+
+\
+:::
+
+::: {#pregunta-4 .section .level2}
+## Pregunta 4
+
+::: enunciado
+La memorista también intuye que, al comparar las mismas instancias de
+prueba con 100 o más nodos, las mejores soluciones encontradas por las
+diferentes versiones del algoritmo tienen rendimientos distintos.
+¿Estará en lo cierto?
+
+Para responder, filtren los datos para tener las instancias con 100 o
+más nodos y seleccionen las columnas con los mejores rendimientos
+registrados. Usando como semilla el valor 33, obtengan una muestra
+aleatoria de 26 instancias. Lleven los datos a formato largo y utilicen
+una prueba no paramétrica apropiada para analizar los datos obtenidos.
+:::
+
+Obtenemos la muestra de datos en formato ancho. Como tenemos que
+comparar los resultados obtenidos por los algoritmos con *las mismas
+instancias*, debemos obtener una muestra apareada de 26 observaciones.
+
+```{r}
+set.seed(33)
+
+muestra_4 <- datos |>
+  filter(n.nodos >= 100) |>
+  select(instancia, mejor.A, mejor.B, mejor.C) |>
+  sample_n(26)
+
+datos_4_largos <- muestra_4 |>
+  pivot_longer(-instancia, names_to = "version",
+               names_pattern = "mejor[.](.*)",
+               values_to = "mejor_sol") |>
+  mutate(instancia = factor(instancia)) |>
+  mutate(version = factor(version))
+```
+
+Puesto que cada muestra contiene la calidad de la solución obtenida por
+cada versión del algoritmo al resolver las mismas instancias de prueba,
+correspondería usar **ANOVA de una vía para medidas repetidas**, que
+permitiría determinar si la memorista tiene o no razón en pensar que
+existen diferencias significativas entre las versiones.
+
+Revisemos los datos con un diagrama de cajas.
+
+```{r}
+p4 <- ggboxplot(datos_4_largos,
+                x = "version", y = "mejor_sol", fill = "version",
+                xlab = "Versión del algoritmo",
+                ylab = "Mejor resultado (% del óptimo)")
+print(p4)
+```
+
+
+
+Vemos que existen ciertas asimetrías y algunos valores atípicos en los
+datos. Además, por la forma de las cajas, parece improbable que estos
+datos cumplan la condición de esfericidad. Y como notamos anteriormente,
+la calidad de las soluciones se mide como el porcentaje de cercanía con
+la solución óptima, por lo que la variable tiene un rango limitado. Por
+todas estas razones, preferimos usar una prueba no paramétrica, como nos
+instruye el enunciado. Al tratarse de medidas repetidas y más de dos
+grupos, corresponde usar la **prueba de Friedman**.
+
+Verificamos las condiciones:
+
+1.  La variable independiente es categórica y tiene a lo menos tres
+    niveles: versiones A, B y C del algoritmo.
+2.  Las tripletas de observaciones son independientes pues, si el
+    experimento fue realizado correctamente, el desempeño en una
+    instancia de prueba específica no debería tener influencia en el
+    rendimiento que se alcance en otra.
+3.  La escala de la variable dependiente es a lo menos ordinal, pues
+    valores porcentuales se pueden comparar y ordenar.
+
+En consecuencia, se cumplen las condiciones para aplicar la prueba de
+Friedman. Como las muestras presentan evidentes diferencias de
+varianzas, no podríamos confiar en que las poblaciones subyacentes se
+distribuyan de forma equivalente. Por lo tanto, no podemos inferir sobre
+las medianas de las poblaciones y contrastamos las siguientes hipótesis
+no paramétricas:
+
+::: hip
+H[\\(\_0\\)]{.math .inline}: la calidad de las mejores soluciones
+conseguidas para las mismas instancias de prueba con 100 o más nodos por
+las tres versiones del algoritmo son similares.
+
+H[\\(\_A\\)]{.math .inline}: al menos una de las versiones del algoritmo
+entrega mejores soluciones con calidad significativamente distinta que
+al menos otra versión al resolver las mismas instancias del problema del
+vendedor viajero con 100 o más nodos.
+:::
+
+Aplicamos la prueba con un nivel de significación exigente por la
+dispersión heterogénea de las muestras y la presencia de valores
+atípicos [([\\(\\small \\alpha=0{,}01\\)]{.math .inline})]{.no-break}.
+
+```{r}
+alfa <- 0.01
+prueba_4 <- friedman.test(mejor_sol ~ version | instancia,
+                          data = datos_4_largos)
+
+print(prueba_4)
+```
+
+
+Podemos hacer la conclusión ómnibus.
+
+La prueba de Friedman indica que hay suficiente evidencia [([\\(\\small
+\\chi\^2=21{,}69\\)]{.math .inline};]{.no-break} [[\\(p \\ll
+0{,}001\\)]{.math .inline})]{.no-break} para rechazar la hipótesis nula
+en favor de la alternativa. En consecuencia, podemos concluir con 99% de
+confianza que al menos una de las versiones estudiadas del algoritmo
+tiene un rendimiento distinto a alguna de las otras o a ambas.
+
+Puesto que la prueba ómnibus (de Friedman) detecta diferencias, debemos
+hacer ahora un **procedimiento post-hoc** usando múltiples pruebas de
+rangos con signo de Wilcoxon entre pares de grupos y, al igual que en la
+pregunta anterior, aplicando el ajuste de Benjamini & Hochberg (1995).
+
+```{r}
+posthoc_4 <- pairwise.wilcox.test(datos_4_largos[["mejor_sol"]],
+                                  datos_4_largos[["version"]],
+                                  paired = TRUE, p.adjust.method = "BH")
+```
+
+
+
+```{r}
+print(posthoc_4)
+```
+
+
+
+Por ahora vamos a ignorar el warning que nos da la función, puesto que
+sabemos que si hay empates, el algoritmo interno de esta prueba los
+descarta antes del cálculo de los rangos. Si fuéramos muy rigorosos,
+deberíamos revisar que no son *tantos* empates en cada caso. Si esto es
+así, los p-valores que se obtienen son buenas aproximaciones de los
+exactos.
+
+Expresemos la conclusión.
+
+Con 99% confianza, el procedimiento post-hoc no encuentra diferencias
+significativas en la calidad de las mejores soluciones obtenidas entre
+las versiones B y C del algoritmo [([\\(\\small p \> 0{,}038\\)]{.math
+.inline})]{.no-break}, pero estas soluciones son de peor calidad (más
+lejanas a la solución óptima) que las que consigue la versión A
+[([\\(\\small p \< 0{,}003\\)]{.math .inline})]{.no-break} al resolver
+las mismas instancias del problema del vendedor viajero con 100 o más
+nodos.
+
+\
+:::
+
+::: {#referencias .section .level2}
+## Referencias
+
+Benjamini, Y., & Hochberg, Y. (1995). Controlling the false discovery
+rate: a practical and powerful approach to multiple testing. *Journal of
+the Royal statistical society: series B (Methodological), 57*(1),
+289-300.
+
+Berger, V. W., & Zhou, Y. (2014). Kolmogorov--smirnov test: Overview.
+Wiley statsref: Statistics reference online.
+<https://doi.org/10.1002/9781118445112.stat06558>\]\
+:::
+:::

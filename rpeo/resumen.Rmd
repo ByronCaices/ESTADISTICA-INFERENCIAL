@@ -1,0 +1,838 @@
+---
+title: "Lectura 9"
+author: "Byron Caices"
+date: "2024-11-09"
+output:
+    html_document:
+    highlight: tango
+    word_document: default
+    pdf_document: default
+---
+
+<style>
+body {
+  font-family: 'Calibri', sans-serif;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo =FALSE, warning=FALSE, message=FALSE}
+options(repos = c(CRAN = "https://cran.rstudio.com/"))
+
+if (!requireNamespace('tidyverse', quietly = TRUE)){
+  install.packages('tidyverse')
+}
+library(tidyverse)
+if (!requireNamespace('ggpubr', quietly = TRUE)){
+  install.packages('ggpubr')
+}
+library(ggpubr)
+if (!requireNamespace('ez', quietly = TRUE)){
+  install.packages('ez')
+}
+library(ez)
+if (!requireNamespace('RVAideMemoire', quietly = TRUE)){
+  install.packages('RVAideMemoire')
+}
+library(RVAideMemoire)
+if (!requireNamespace('rcompanion', quietly = TRUE)){
+  install.packages('rcompanion')
+}
+library(rcompanion)
+if (!requireNamespace('dplyr', quietly = TRUE)){
+  install.packages('dplyr')
+}
+library(dplyr)
+```
+
+# Lectura 1
+
+Para convertir una columna de datos en una variable categórica, se puede utilizar la función `factor()`. Esta función permite especificar los niveles y las etiquetas asociadas a cada nivel de la variable categórica. Además, se puede indicar si la variable es ordinal o no mediante el argumento `ordered`.
+
+`factor(x, levels, labels, ordered = FALSE)`
+
+x: Nombre de la variable a convertir
+levels: Argumento opcional con los posibles vlalores de la variable categorica
+labels: Argumento opcional con las etiquetas asociadas a cada nivel
+orderer: Valor logico que especifica si la variable es o no ordinal
+
+```{r}
+datos <- mtcars
+# Renombrar columnas.
+datos <- datos %>% rename(Rendimiento = mpg, Cilindrada = cyl,
+                          Desplazamiento = disp, Potencia = hp,
+                          Eje = drat, Peso = wt, Cuarto_milla = qsec,
+                          Motor = vs, Transmision = am, Cambios = gear,
+                          Carburadores = carb)
+
+# Dar formato categórico a las variables Motor y Transmision, renombrando sus niveles.
+datos[["Motor"]] <- factor(datos[["Motor"]], levels = c(0, 1),
+                           labels = c("V", "Recto"))
+
+datos[["Transmision"]] <- factor(datos[["Transmision"]], levels = c(0, 1),
+                                 labels = c("Automático", "Manual"))
+
+# Dar formato ordinal a las variables Cilindrada y Cambios, renombrando sus niveles.
+datos[["Cilindrada"]] <- factor(datos[["Cilindrada"]], levels = c(4, 6, 8),
+                                labels = c("4 cilindros", "6 cilindros", "8 cilindros"),
+                                ordered = TRUE)
+
+head(datos)
+
+```
+
+------
+
+
+# Lectura 2
+
+# Distribución Normal
+
+Distribución Normal Standar o Z ~ N(0,1)
+
+1. **`dnorm(x, mean, sd)`**: Calcula la función de densidad de una distribución normal para un valor `x`, dada una media (`mean`) y una desviación estándar (`sd`). Útil para obtener la probabilidad de densidad en un punto específico en una distribución normal.
+
+2. **`pnorm(q, mean, sd, lower.tail)`**: Calcula la función de distribución acumulativa para un valor `q`. Devuelve la probabilidad de que una variable aleatoria normal sea menor o igual que `q` \( P(X \leq q)\) cuando `lower.tail = TRUE` (por defecto), o mayor que `q` si `lower.tail = FALSE`  \( P(X > q)\)
+
+3. **`qnorm(p, mean, sd, lower.tail)`**: Calcula el cuantil asociado a una probabilidad `p` en una distribución normal. Devuelve el valor `q` tal que la probabilidad acumulada a la izquierda es `p` si `lower.tail = TRUE`, o a la derecha si `lower.tail = FALSE`. Es la función inversa de `pnorm`.
+
+4. **`rnorm(n, mean, sd)`**: Genera `n` valores aleatorios de una distribución normal con una media `mean` y una desviación estándar `sd`. Útil para simulaciones o generación de muestras aleatorias normales.
+
+**Argumentos comunes**:
+- `x`: Vector numérico con los valores en los que se evalúa la función de densidad.
+- `q`: Vector numérico con los cuantiles a calcular.
+- `p`: Vector numérico con las probabilidades a calcular.
+- `mean`: Media de la distribución normal.
+- `sd`: Desviación estándar de la distribución normal.
+- `lower.tail`: Indica si la probabilidad acumulada es desde la izquierda (TRUE) o derecha (FALSE).
+- `n`: Tamaño de la muestra a generar en `rnorm`.
+
+# Distribución Chi-Cuadrado
+
+Aquí tienes un resumen de las funciones para la **distribución chi-cuadrado** en R:
+
+1. **`dchisq(x, df)`**: Calcula la **densidad de probabilidad** para un valor específico `x` en una distribución chi-cuadrado con `df` grados de libertad. Es útil para obtener la probabilidad en un punto particular de la distribución.
+
+2. **`pchisq(q, df, lower.tail)`**: Calcula la **probabilidad acumulada** hasta un valor `q` en la distribución chi-cuadrado. Devuelve la probabilidad de que una variable aleatoria chi-cuadrado sea menor o igual que `q` si `lower.tail = TRUE` (por defecto), o mayor que `q` si `lower.tail = FALSE`.
+
+3. **`qchisq(p, df, lower.tail)`**: Calcula el **cuantil** correspondiente a una probabilidad `p` en una distribución chi-cuadrado. Devuelve el valor `q` tal que la probabilidad acumulada a la izquierda es `p` si `lower.tail = TRUE`, o a la derecha si `lower.tail = FALSE`. Es la función inversa de `pchisq`.
+
+4. **`rchisq(n, df)`**: Genera `n` **valores aleatorios** de una distribución chi-cuadrado con `df` grados de libertad. Útil para simulaciones o generación de muestras aleatorias.
+
+**Argumentos principales**:
+- `x`, `q`: Vectores de cuantiles (valores específicos en la distribución).
+- `p`: Vector de probabilidades.
+- `n`: Número de observaciones o muestras a generar.
+- `df`: Grados de libertad de la distribución chi-cuadrado.
+- `lower.tail`: Lógico que indica si la probabilidad acumulada es desde la izquierda (`TRUE`) o derecha (`FALSE`).
+
+Estas funciones ayudan a trabajar con la distribución chi-cuadrado en cálculos de probabilidad, pruebas de hipótesis y simulaciones.
+
+
+
+# Distribución t de Student
+
+La **distribución t de Student** es una distribución de probabilidad que se usa principalmente cuando se trabaja con muestras pequeñas y no se conoce la desviación estándar de la población. Es similar a la distribución normal, pero tiene colas más largas, lo que significa que da más probabilidad a valores alejados de la media. A medida que aumentan los grados de libertad, la distribución t se aproxima a la distribución normal.
+
+### Funciones en R
+
+1. **`dt(x, df)`**: Calcula la **densidad de probabilidad** en un punto específico `x` para una distribución t con `df` grados de libertad. Es útil para conocer la probabilidad de observar un valor particular en la distribución.
+
+2. **`pt(q, df, lower.tail)`**: Calcula la **probabilidad acumulada** hasta un valor `q` en la distribución t. Devuelve la probabilidad de que una variable aleatoria t sea menor o igual que `q` si `lower.tail = TRUE` (por defecto), o mayor que `q` si `lower.tail = FALSE`.
+
+3. **`qt(p, df, lower.tail)`**: Calcula el **cuantil** correspondiente a una probabilidad `p` en la distribución t. Devuelve el valor `q` tal que la probabilidad acumulada a la izquierda es `p` si `lower.tail = TRUE`, o a la derecha si `lower.tail = FALSE`. Es la función inversa de `pt`.
+
+4. **`rt(n, df)`**: Genera `n` **valores aleatorios** de una distribución t con `df` grados de libertad. Útil para simulaciones y generación de muestras que siguen una distribución t.
+
+**Argumentos principales**:
+- `x`, `q`: Vectores de cuantiles (valores específicos en la distribución).
+- `p`: Vector de probabilidades.
+- `n`: Número de observaciones o muestras a generar.
+- `df`: Grados de libertad de la distribución t.
+- `lower.tail`: Indica si la probabilidad acumulada es desde la izquierda (`TRUE`) o desde la derecha (`FALSE`).
+
+Estas funciones son útiles en pruebas de hipótesis y en análisis estadístico cuando se trabaja con muestras pequeñas o con datos que se aproximan a la distribución t.
+
+---------
+
+| Verdad           | Conclusión de la prueba                  |                          |
+|------------------|------------------------------------------|--------------------------|
+|                  | No rechazar \(H_0\)                     | Rechazar \(H_0\) en favor de \(H_A\) |
+| \(H_0\) verdadera  | Decisión correcta                       | Error tipo I             |
+| \(H_A\) verdadera  | Error tipo II                          | Decisión correcta        |
+
+-------
+
+# **PRUEBA Z**
+
+Como ya adelantamos, la prueba Z es adecuada para inferir acerca de las medias con una o dos muestras, aunque aquí solo veremos el primer caso. Para poder usarla, debemos **verificar el cumplimiento** de algunas condiciones, muchas de las cuales están asociadas al modelo normal que conocimos en el capítulo anterior:
+
+- Las observaciones deben ser independientes, es decir que la elección de una observación para la muestra no influye en la selección de las otras.
+- La población de donde se obtuvo la muestra sigue aproximadamente una distribución normal.
+- La muestra debe tener al menos 30 observaciones (y asumir que la varianza observada corresponde a la varianza de la población). Si la muestra tiene menos de 30 observaciones, se debe conocer la varianza de la población.
+
+El **z-test** es una prueba estadística que permite comparar la media de una muestra con un valor de referencia o la media de otra población. En R, se realiza usando la función `z.test(x, mu, stdev, alternative, conf.level)`, donde:
+
+- **`x`**: es el vector con las observaciones de la muestra.
+- **`mu`**: es el valor nulo o la media de referencia con la cual se compara.
+- **`stdev`**: es la desviación estándar de la población.
+- **`alternative`**: define el tipo de hipótesis alternativa. Puede ser:
+  - `"two.sided"` para una prueba bilateral, es decir, si la media es diferente al valor nulo.
+  - `"less"` si se desea probar si la media es menor que el valor nulo (prueba unilateral).
+  - `"greater"` si se desea probar si la media es mayor que el valor nulo (prueba unilateral).
+- **`conf.level`**: es el nivel de confianza para el intervalo de confianza.
+
+Este test se usa cuando la desviación estándar de la población es conocida y la muestra es suficientemente grande (generalmente \( n \geq 30 \)).
+
+---
+
+\( H_0 \): la media de las utilidades obtenidas por las empresas el mes pasado (\( \mu \)) es de 20 millones de pesos, es decir: \( \mu = 20 \) [M$].
+
+\( H_A \): las utilidades obtenidas el mes pasado por las empresas son, en promedio, distintas de 20 millones de pesos, es decir: \( \mu \neq 20 \) [M$].
+
+---
+
+Estas hipótesis se plantean para verificar si las utilidades promedio de las empresas el mes pasado son significativamente diferentes de 20 millones de pesos.
+
+```{r}
+
+library(TeachingDemos)
+library(ggpubr)
+
+# Ingresar los datos.
+muestra <- c(19.33, 29.37, 29.14, 32.10, 25.04, 22.22, 31.26, 26.92,
+             31.40, 17.66, 22.55, 20.69, 24.68, 28.74, 26.85, 29.68,
+             29.27, 26.72, 27.08, 20.62)
+
+# Establecer los datos conocidos.
+desv_est <- 2.32
+n <- length(muestra)
+valor_nulo <- 20
+
+# Crear gráfico Q-Q para verificar la distribución de la muestra.
+datos <- data.frame(muestra)
+
+g <- ggqqplot(datos, x = "muestra", color = "SteelBlue")
+print(g)
+
+# Verificar distribución muestral usando la prueba de normalidad de Shapiro-Wilk.
+normalidad <- shapiro.test(muestra)
+print(normalidad)
+
+# Fijar un nivel de significación.
+alfa <- 0.01
+
+# Calcular la media de la muestra.
+cat("\tPrueba Z para una muestra\n\n")
+media <- mean(muestra)
+cat("Media =", media, "M$\n")
+
+# Calcular el estadístico de prueba.
+Z <- (media - valor_nulo) / (desv_est / sqrt(n))
+cat("Z =", Z, "\n")
+
+# Calcular el valor p.
+p <- 2 * pnorm(Z, lower.tail = FALSE)
+cat("p =", p, "\n")
+
+# Hacer la prueba Z con R.
+# Una alternativa es usando la media muestral y el tamaño de la muestra.
+prueba1 <- z.test(media, mu = valor_nulo, n = 20, alternative = "two.sided",
+                  stdev = desv_est, conf.level = 1 - alfa)
+
+print(prueba1)
+
+# Otra opción es usando la muestra directamente.
+prueba2 <- z.test(muestra, mu = valor_nulo, alternative = "two.sided",
+                  stdev = desv_est, conf.level = 1 - alfa)
+
+print(prueba2)
+```
+
+# Prueba T
+
+## Prueba T para una muestra
+
+Se utiliza para evaluar si la media de una muestra difiere significativamente de un valor conocido (llamado valor nulo). Es útil cuando no se conoce la desviación estándar de la población y la muestra es pequeña (generalmente \( n < 30 \)). La prueba t asume que las observaciones son independientes entre sí y provienen de una distribución cercana a la normal.
+
+### Diferencias con la prueba Z
+- **Prueba Z**: Se usa cuando la desviación estándar de la población es conocida y la muestra es grande (normalmente \( n \geq 30 \)). Asume que la población tiene una distribución normal o que se tiene una muestra grande (por el teorema central del límite).
+- **Prueba t**: Se utiliza cuando la desviación estándar de la población no es conocida y la muestra es pequeña. Utiliza la distribución t de Student, que tiene colas más largas que la normal, adaptándose mejor a muestras pequeñas.
+
+
+### La prueba t opera bajo los siguientes supuestos:
+
+1. Las observaciones son independientes entre sí.
+2. Las observaciones provienen de una distribución cercana a la normal.
+
+
+Estas condiciones aseguran que la prueba t sea adecuada para inferir sobre la media de la muestra en relación con un valor de referencia.
+
+### Código en R para la prueba t
+
+- H0: el tiempo promedio que tarda el algoritmo en resolver una instancia del problema es igual a 500 milisegundos.
+
+- HA: el tiempo promedio que tarda el algoritmo en resolver una instancia del problema es inferior a 500 milisegundos.
+
+Este código carga los datos, verifica la normalidad, calcula el estadístico t, el valor p, construye un intervalo de confianza y aplica la prueba t con la función `t.test` en R.
+
+```{r}
+# library(ggpubr)
+
+# Cargar los datos.
+tiempo <- c(411.5538, 393.2753, 445.8905, 411.4022, 498.8969,
+            388.6731, 430.0382, 469.4734, 409.5844, 442.0800,
+            418.1169, 408.4110, 463.3733, 407.0908, 516.5222)
+
+# Establecer los datos conocidos.
+n <- length(tiempo)
+grados_libertad <- n - 1
+valor_nulo <- 500
+
+# Verificar si la distribución se acerca a la normal.
+g <- ggqqplot(data = data.frame(tiempo),
+              x = "tiempo",
+              color = "steelblue",
+              xlab = "Teórico",
+              ylab = "Muestra",
+              title = "Gráfico Q-Q muestra v/s distr. normal")
+print(g)
+
+# Fijar un nivel de significación.
+alfa <- 0.025
+
+# Calcular el estadístico de prueba.
+cat("\tPrueba t para una muestra\n\n")
+media <- mean(tiempo)
+cat("Media =", media, "M$\n")
+desv_est <- sd(tiempo)
+error <- desv_est / sqrt(n)
+t <- (media - valor_nulo) / error
+cat("t =", t, "\n")
+
+# Calcular el valor p.
+p <- pt(t, df = grados_libertad, lower.tail = TRUE)
+cat("p =", p, "\n")
+
+# Construir el intervalo de confianza.
+t_critico <- qt(alfa, df = grados_libertad, lower.tail = FALSE)
+superior <- media + t_critico * error
+cat("Intervalo de confianza = (-Inf, ", superior, "]\n", sep = "")
+
+# Aplicar la prueba t de Student con la función de R.
+prueba <- t.test(tiempo,
+                 alternative = "less",
+                 mu = valor_nulo,
+                 conf.level = 1 - alfa)
+print(prueba)
+```
+
+### Explicación del código
+1. **Carga los datos** de una variable `tiempo`.
+2. **Establece parámetros conocidos**, como el tamaño de la muestra (`n`), grados de libertad (`grados_libertad`), y el valor nulo (`valor_nulo`).
+3. **Verifica la normalidad** de la muestra usando un gráfico Q-Q.
+4. **Calcula el estadístico t** utilizando la media de la muestra y el error estándar.
+5. **Calcula el valor p** para el estadístico t.
+6. **Construye un intervalo de confianza** para la media de la población.
+7. **Realiza la prueba t** utilizando la función `t.test` de R, proporcionando el resultado de la prueba de hipótesis. 
+
+Esta prueba permite evaluar si la media de la muestra es significativamente menor al valor nulo especificado en el contexto de una hipótesis unilateral.
+
+----
+
+## Prueba T para muestras correlacionadas
+
+En este caso, la función `t.test()` de R permite efectuar la prueba de dos maneras diferentes (con idéntico resultado), como muestra el script 5.3. La primera de ellas (línea 32) es aplicar la prueba t directamente a las diferencias, tal como en la sección anterior (es decir, una prueba t para una muestra). La segunda (línea 41) consiste en entregar a la función ambas muestras por separado e indicarle que están pareadas. En este caso, la llamada tiene la forma `t.test(x, y, paired, alternative, mu, conf.level)`, donde los argumentos son:
+
+- **`x`**: vector de valores numéricos para la primera muestra.
+- **`y`**: vector de valores numéricos para la segunda muestra.
+- **`paired`**: booleano (por defecto falso) que, cuando es verdadero, indica que ambas muestras están pareadas.
+- **`alternative`**: tipo de prueba de hipótesis.
+- **`mu`**: valor nulo.
+- **`conf.level`**: nivel de confianza.
+
+---
+
+### Código en R
+
+```{r t test para muestras correlacionadas}
+# Cargar los datos.
+instancia <- seq(1, 35, 1)
+
+t_A <- c(436.5736, 470.7937, 445.8354, 470.9810, 485.9394,
+         464.6145, 466.2139, 468.9065, 473.8778, 413.0639,
+         496.8705, 450.6578, 502.9759, 465.6358, 437.6397,
+         458.8806, 503.1435, 430.0524, 438.5959, 439.7409,
+         464.5916, 467.3522, 495.4094, 493.7082, 493.7082,
+         433.1082, 445.7443, 515.2049, 441.9420, 472.1396,
+         451.2234, 476.5149, 440.7918, 460.1070, 450.1008)
+
+t_B <- c(408.5142, 450.1075, 490.2311, 513.6910, 467.6467,
+         484.1897, 465.9334, 502.6670, 444.9693, 456.3341,
+         501.1443, 471.7833, 441.1206, 544.1575, 447.8844,
+         432.4108, 457.1712, 482.8282, 458.2536, 474.9863,
+         496.9132, 451.4505, 457.4253, 483.3700, 510.7131,
+         467.5739, 482.5621, 453.5986, 385.9391, 548.7884,
+         467.2533, 494.7049, 451.9716, 522.3699, 444.1270)
+
+diferencia <- t_A - t_B
+
+# Verificar si la distribución se acerca a la normal.
+normalidad <- shapiro.test(diferencia)
+print(normalidad)
+
+# Fijar un nivel de significación.
+alfa <- 0.05
+
+# Aplicar la prueba t de Student a la diferencia de medias.
+valor_nulo <- 0
+
+prueba_1 <- t.test(diferencia,
+                   alternative = "two.sided",
+                   mu = valor_nulo,
+                   conf.level = 1 - alfa)
+
+print(prueba_1)
+
+# Otra alternativa puede ser aplicar la prueba t de Student
+# para dos muestras pareadas.
+prueba_2 <- t.test(x = t_A,
+                   y = t_B,
+                   paired = TRUE,
+                   alternative = "two.sided",
+                   mu = valor_nulo,
+                   conf.level = 1 - alfa)
+
+print(prueba_2)
+```
+
+---
+
+# Prueba t para dos muestras independientes
+
+Los resultados para esta prueba son:
+
+- El valor para el estadístico de prueba t es \( t = -1.9816 \).
+- Se consideran \( df = 34 \) grados de libertad para la distribución t.
+- El valor p obtenido es \( p = 0.05565 \).
+- El intervalo de confianza obtenido es \([-24.4804542; 0.3086313]\).
+- La media de la muestra es \( \bar{x} = -12.08591 \).
+
+En este caso, la media de las diferencias está dentro del intervalo de confianza, y además el valor p es mayor que el nivel de significación, por lo que se falla al rechazar la hipótesis nula. Pero el resultado está cerca del borde de significación. En consecuencia, se puede afirmar con 95% de confianza que pareciera no haber suficiente evidencia para descartar que ambos algoritmos tardan, en promedio, lo mismo en procesar las instancias del problema, aunque sería necesario conseguir una muestra más grande para tener mayor certeza.
+
+
+Aquí tienes el texto y el código extraídos de las imágenes sobre la prueba t para dos muestras independientes:
+
+---
+
+Las hipótesis a formular en este caso son:
+
+\( H_0 \): no hay diferencia entre la efectividad promedio de ambas vacunas.  
+\( H_A \): la vacuna A es, en promedio, más efectiva que la B.
+
+En lenguaje matemático:
+
+Si \( \mu_A \) y \( \mu_B \) son las concentraciones medias de anticuerpos presentes en personas luego de un mes de recibir la vacuna A y B, respectivamente, entonces:
+
+\( H_0: \mu_A = \mu_B \)  
+\( H_A: \mu_A > \mu_B \)
+
+---
+
+### Código en R para la prueba t de dos muestras independientes
+
+```{r}
+library(ggpubr)
+
+# Cargar los datos.
+vacuna_A <- c(6.04, 19.84, 8.62, 13.02, 12.20, 14.78, 4.53, 26.67,
+              3.14, 19.14, 10.86, 13.13, 6.34, 11.16, 7.62)
+
+vacuna_B <- c(5.32, 3.31, 5.68, 5.73, 4.86, 5.68, 2.93, 5.48, 6.10,
+              2.56, 7.52, 7.41, 4.02)
+
+# Verificar si las muestras se distribuyen de manera cercana a la normal.
+normalidad_A <- shapiro.test(vacuna_A)
+print(normalidad_A)
+normalidad_B <- shapiro.test(vacuna_B)
+print(normalidad_B)
+
+# Fijar un nivel de significación.
+alfa <- 0.01
+
+# Aplicar la prueba t para dos muestras independientes.
+prueba <- t.test(x = vacuna_A,
+                 y = vacuna_B,
+                 paired = FALSE,
+                 alternative = "greater",
+                 mu = 0,
+                 conf.level = 1 - alfa)
+
+print(prueba)
+
+# Calcular la diferencia entre las medias.
+media_A <- mean(vacuna_A)
+media_B <- mean(vacuna_B)
+diferencia <- media_A - media_B
+cat("Diferencia de las medias =", diferencia, "[mg/ml]\n")
+```
+
+---
+
+Este código en R realiza los siguientes pasos:
+
+1. **Carga de datos**: Define dos conjuntos de datos (`vacuna_A` y `vacuna_B`) que representan las concentraciones de anticuerpos para cada vacuna.
+2. **Prueba de normalidad**: Utiliza el test de Shapiro-Wilk para verificar si los datos de cada grupo siguen una distribución normal.
+3. **Nivel de significación**: Fija un nivel de significación (\( \alpha = 0.01 \)).
+4. **Prueba t para dos muestras independientes**: Realiza la prueba t para evaluar si la media de la concentración de anticuerpos en el grupo de la vacuna A es significativamente mayor que en el grupo de la vacuna B.
+5. **Cálculo de la diferencia de medias**: Calcula y muestra la diferencia entre las medias de los dos grupos.
+
+Este análisis ayuda a determinar si existe una diferencia significativa en la efectividad de las vacunas A y B, en términos de la concentración promedio de anticuerpos generada.
+
+
+---------
+
+ **alfa**, **beta**, **errores de Tipo I y II**, **poder estadístico**, y **tamaño del efecto** basados en la información de la imagen:
+
+### Alfa (α) y Error de Tipo I
+- **Alfa (α)** es el **nivel de significancia** de una prueba estadística, y representa la probabilidad de cometer un **error de Tipo I**.
+- **Error de Tipo I**: Ocurre cuando se rechaza la hipótesis nula (\( H_0 \)) en favor de la hipótesis alternativa (\( H_A \)) cuando \( H_0 \) es realmente verdadera. Este tipo de error se considera serio porque implica detectar un efecto o diferencia que en realidad no existe.
+- El nivel de significancia, α, se establece para controlar la ocurrencia de este error, ya que, en muchas situaciones, la hipótesis nula representa el **status quo** (mantener las condiciones como están). Si se rechaza \( H_0 \), suele ser necesario tomar alguna acción, lo cual puede implicar costos o esfuerzos.
+
+### Beta (β) y Error de Tipo II
+- **Beta (β)** es la **probabilidad de cometer un error de Tipo II** en una prueba estadística.
+- **Error de Tipo II**: Ocurre cuando no se rechaza la hipótesis nula (\( H_0 \)) en favor de la hipótesis alternativa (\( H_A \)) cuando \( H_A \) es realmente verdadera. En otras palabras, no se detecta un efecto o diferencia cuando realmente existe.
+- Este tipo de error es relevante porque implica la posibilidad de pasar por alto un cambio o efecto significativo. Mientras más pequeña sea la muestra, más evidente es la relación entre α y β, donde **reducir β incrementa α, y viceversa**.
+
+### Poder Estadístico (1 - β)
+- **Poder estadístico** (o **potencia**) es la probabilidad de **rechazar correctamente \( H_0 \)** cuando es falsa, es decir, la capacidad de detectar un efecto real cuando este existe.
+- Se calcula como \( 1 - \beta \), y un poder estadístico alto significa que es más probable detectar un efecto real en la muestra.
+- En otras palabras, la potencia de una prueba indica su capacidad para distinguir un efecto real de una simple casualidad.
+
+### Tamaño del Efecto
+- El **tamaño del efecto** cuantifica la **magnitud de la diferencia** o asociación entre dos grupos o variables.
+- Es una medida importante para interpretar los resultados, ya que indica cuán fuerte es la relación o diferencia detectada, más allá de si es significativa o no.
+- Existen varias maneras de medir el tamaño del efecto según el tipo de análisis, como correlación, diferencias de medias o variabilidad en frecuencias. Un tamaño de efecto grande significa una asociación o diferencia considerable, mientras que un tamaño de efecto pequeño puede ser menos relevante.
+
+### Resumen de la Relación entre Alfa, Beta, Poder y Tamaño del Efecto
+- Reducir **β** (aumentar el poder estadístico) implica una mayor probabilidad de detectar un efecto real, pero puede aumentar la probabilidad de un **error de Tipo I** si no se ajusta adecuadamente α.
+- **Alfa** y **beta** son interdependientes y están influenciados por el tamaño de la muestra y el tamaño del efecto. Para mantener controlados ambos errores, es necesario diseñar bien la prueba, teniendo en cuenta estos factores.
+- El **poder estadístico** de una prueba es esencial para asegurar que cualquier efecto real no pase desapercibido, mientras que el **tamaño del efecto** da contexto a la importancia práctica de los hallazgos.
+
+Aquí tienes el texto extraído de las imágenes sobre la prueba chi-cuadrado de Pearson, incluyendo el subtítulo:
+
+---
+
+### Prueba Chi-Cuadrado de Pearson
+
+Conocida también como **Prueba \(\chi^2\) de Asociación**, la prueba chi-cuadrado de Pearson sirve para inferir con proporciones cuando disponemos de dos variables categóricas y **una de ellas es dicotómica** (es decir, tiene solo dos niveles). En este caso, podemos registrar las frecuencias observadas para las posibles combinaciones de ambas variables mediante una **tabla de contingencia** o **matriz de confusión**, como ya estudiamos en el capítulo 2. En adelante, nos referiremos a cada una de estas combinaciones como "un grupo".
+
+Debemos verificar algunas condiciones antes de poder usar la prueba chi-cuadrado:
+
+1. Las observaciones deben ser independientes entre sí.
+2. Debe haber al menos 5 observaciones esperadas en cada grupo.
+
+Bondad de Ajuste: Una sola variable categórica vs. distribución teórica.
+Homogeneidad: Una variable categórica en múltiples poblaciones o grupos.
+Independencia: Dos variables categóricas dentro de una misma población.
+
+#### Prueba Chi-Cuadrado de Homogeneidad
+
+\[
+\begin{array}{|c|c|c|c|c|c|c|}
+\hline
+\text{Lenguaje} & \text{C} & \text{Java} & \text{Python} & \text{Ruby} & \text{Otro} & \text{Total} \\
+\hline
+\text{Programadores} & 44.7 & 53.3 & 52.0 & 28.0 & 22.0 & 200.0 \\
+\text{Programadoras} & 22.3 & 26.7 & 26.0 & 14.0 & 11.0 & 100.0 \\
+\text{Total} & 67.0 & 80.0 & 78.0 & 42.0 & 33.0 & 300.0 \\
+\hline
+\end{array}
+\]
+
+---
+
+\( H_0 \): las programadoras y los programadores tienen las mismas preferencias en lenguaje de programación favorito (ambas poblaciones muestran las mismas proporciones para cada lenguaje estudiado).
+
+\( H_A \): las programadoras y los programadores tienen preferencias distintas en lenguajes de programación favorito.
+
+### Código en R para la prueba chi-cuadrado de homogeneidad
+
+```{r}
+# Crear tabla de contingencia.
+programadores <- c(42, 56, 51, 27, 24)
+programadoras <- c(25, 24, 27, 15, 9)
+
+tabla <- as.table(rbind(programadores, programadoras))
+dimnames(tabla) <- list(sexo = c("programadores", "programadoras"),
+                        lenguajes = c("C", "Java", "Python", "Ruby", "Otro"))
+print(tabla)
+
+# Hacer prueba chi-cuadrado de homogeneidad.
+prueba <- chisq.test(tabla)
+print(prueba)
+```
+
+---
+
+#### Prueba chi-cuadrado de bondad de ajuste
+
+Esta prueba permite comprobar si una distribución de frecuencias observada se asemeja a una distribución esperada. Usualmente se emplea para comprobar si una muestra es representativa de la población (NIST/SEMATECH, 2013, p. 1.3.5.15).
+
+Para entender mejor esta idea, supongamos ahora que una gran empresa de desarrollo de software cuenta con una nómina de 660 programadores y programadoras, especialistas en diferentes lenguajes de programación. El gerente ha seleccionado un subconjunto de 55 personas desde esta nómina, supuestamente de forma aleatoria, para enviarlos a cursos de perfeccionamiento en sus respectivos lenguajes, pero el sindicato lo ha acusado de “seleccionar estas personas a conveniencia de los intereses mezquinos de la gerencia, impidiendo que el grupo sea representativo a fin de asegurar una mejora en la productividad de toda la empresa”. Ante el inminente riesgo de movilizaciones, el gerente necesita demostrar que el grupo seleccionado es una muestra representativa de sus programadores y programadoras.
+
+La tabla 8.4 muestra la cantidad de especialistas en cada lenguaje, tanto para la nómina de la empresa como para la muestra seleccionada.
+
+Como ya es habitual, comencemos por verificar las condiciones. Puesto que la muestra representa menos del 10 % de la población y fue elegida de manera aleatoria, las observaciones son independientes entre sí.
+
+---
+
+En este ejemplo, las hipótesis a contrastar son:
+
+- \( H_0 \): las proporciones de especialistas en cada lenguaje en la muestra son las mismas que para la nómina completa.
+- \( H_A \): las proporciones de especialistas en cada lenguaje son diferentes en la nómina que en la muestra.
+
+En este caso se puede proceder de igual manera que para la prueba de homogeneidad, como muestra el script 8.2, cuyo resultado puede verse en la figura 8.2. Para este ejemplo, el valor p resultante es \( p = 0.461 \), por lo que se falla al rechazar la hipótesis nula con un nivel de significación \( \alpha = 0.05 \). En consecuencia, podemos concluir con 95 % de confianza que no hay evidencia de que la muestra seleccionada no sea representativa de la nómina de programadores y programadoras de la empresa, por lo que la acusación del sindicato no tiene fundamentos.
+
+---
+
+```{r}
+# Crear tabla de contingencia.
+nomina <- c(236, 78, 204, 76, 66)
+muestra <- c(17, 9, 14, 10, 5)
+
+tabla <- as.table(rbind(nomina, muestra))
+dimnames(tabla) <- list(grupo = c("Nómina", "Muestra"),
+                        lenguajes = c("C", "Java", "Python", "Ruby", "Otro"))
+print(tabla)
+
+# Verificar si se esperan más de 5 observaciones por cada grupo.
+n_nomina <- sum(nomina)
+n_muestra <- sum(muestra)
+proporciones <- round(nomina / n_nomina, 3)
+esperados <- round(proporciones * n_muestra, 3)
+cat("Frecuencias esperadas:\n")
+print(esperados)
+
+# Hacer prueba chi-cuadrado de bondad de ajuste.
+prueba <- chisq.test(tabla, correct = FALSE)
+print(prueba)
+```
+
+--- 
+
+
+Aquí tienes el texto extraído sobre la prueba chi-cuadrado de independencia:
+
+---
+
+En este caso, las hipótesis a contrastar son:
+
+- \( H_0 \): las variables clase y forma del sombrero son independientes.
+- \( H_A \): las variables clase y forma del sombrero están relacionadas.
+
+Al ejecutar la prueba en R, utilizando el script 8.3, obtenemos la salida presentada en la figura 8.3. El valor para el estadístico de prueba es \( \chi^2 = 485.64 \), con \( v = 4 \) grados de libertad y un \( p < 0.001 \) ( \( p \approx 2.2 \times 10^{-16} \) ). Aún para un nivel de significación muy exigente, como \( \alpha = 0.01 \), el valor p obtenido nos permite rechazar la hipótesis nula en favor de la hipótesis alternativa. En consecuencia, concluimos con 99% de confianza que hay evidencia de que las variables clase y forma del sombrero están relacionadas (son dependientes).
+
+---
+
+#### Prueba chi-cuadrado de independencia
+
+```{r}
+# Crear tabla de contingencia.
+comestible <- c(404, 1948, 32, 228, 1596)
+venenoso <- c(48, 1708, 0, 600, 1556)
+
+tabla <- as.table(rbind(comestible, venenoso))
+dimnames(tabla) <- list(tipo = c("comestible", "venenoso"),
+                        sombrero = c("campana", "convexo", "hundido", "nudoso", "plano"))
+print(tabla)
+
+# Hacer prueba chi-cuadrado de independencia.
+prueba <- chisq.test(tabla)
+cat("\n")
+cat("La prueba internamente calcula los valores esperados:\n")
+esperados <- round(prueba[["expected"]], 3)
+print(esperados)
+
+cat("\n")
+cat("Resultado de la prueba:\n")
+print(prueba)
+```
+
+Aquí tienes el texto extraído sobre la prueba exacta de Fisher y el código correspondiente:
+
+---
+
+### Prueba Exacta de Fisher
+
+Hemos visto que la prueba \(\chi^2\) nos pide que las observaciones esperadas para cada grupo sean al menos 5. Sin embargo, hay escenarios donde esta condición no se cumple, por lo que debemos recurrir a alguna alternativa.
+
+La **prueba exacta de Fisher** es una alternativa a la prueba \(\chi^2\) de independencia en el caso de que ambas variables sean dicotómicas. Así, las hipótesis a contrastar son:
+
+- \( H_0 \): las variables son independientes.
+- \( H_A \): las variables están relacionadas.
+
+---
+
+### Código en R para la prueba exacta de Fisher
+
+```{r}
+# Construir la tabla de contingencia.
+vacuna <- c(rep("Argh", 6), rep("Grrr", 11))
+resultado <- c(rep("Humano", 12), rep("Vampiro", 5))
+datos <- data.frame(resultado, vacuna)
+tabla <- xtabs(~ ., datos)
+print(tabla)
+
+# Aplicar la prueba exacta de Fisher a la tabla de contingencia.
+prueba_1 <- fisher.test(tabla)
+cat("\n")
+cat("Prueba exacta de Fisher usando la tabla de contingencia:\n")
+print(prueba_1)
+
+# Aplicar la prueba exacta de Fisher directamente a las muestras.
+prueba_2 <- fisher.test(vacuna, resultado)
+cat("\n")
+cat("Prueba exacta de Fisher usando las muestras:\n")
+print(prueba_2)
+```
+
+---
+
+Aquí tienes el texto y el código extraídos sobre la prueba de McNemar:
+
+---
+
+### Prueba de McNemar
+
+Las dos pruebas anteriores utilizan muestras independientes para comparar las poblaciones subyacentes. En esta sección se presenta la **prueba de McNemar**, que considera el análisis de frecuencias apareadas, es decir, cuando una misma característica, con respuesta dicotómica, se mide en dos ocasiones (o situaciones) diferentes para el mismo grupo de casos.
+
+En estas condiciones, la prueba de McNemar permite determinar si se produce o no un cambio significativo en las proporciones observadas entre ambas mediciones. Una vez más, podemos registrar las frecuencias en una matriz de confusión. En ella, bajo este contexto, podemos reconocer que las celdas \( a \) y \( d \) corresponden a instancias en que no hay cambios, mientras que la celda \( b \) representa a las instancias que cambian de Presente a Ausente y la celda \( c \), a instancias que cambian de Ausente a Presente.
+
+Las hipótesis asociadas a la prueba de McNemar son:
+
+- \( H_0 \): no hay cambios significativos en las respuestas.
+- \( H_A \): sí hay cambios significativos en las respuestas.
+
+---
+
+```{r}
+# Construir la tabla de contingencia.
+alumno <- seq(1:25)
+modelo_1 <- c(rep("Correcto", 16), rep("Incorrecto", 9))
+modelo_2 <- c(rep("Correcto", 9), rep("Incorrecto", 11), rep("Correcto", 5))
+datos <- data.frame(alumno, modelo_2, modelo_1)
+tabla <- table(modelo_2, modelo_1)
+print(tabla)
+
+# Aplicar la prueba de McNemar a la tabla de contingencia.
+prueba_1 <- mcnemar.test(tabla)
+cat("\n")
+cat("Prueba de McNemar usando la tabla de contingencia:\n")
+print(prueba_1)
+
+# Aplicar la prueba de McNemar directamente a las muestras.
+prueba_2 <- mcnemar.test(modelo_2, modelo_1)
+cat("\n")
+cat("Prueba de McNemar usando las muestras:\n")
+print(prueba_2)
+```
+
+---
+
+Este código en R construye una tabla de contingencia a partir de las variables `modelo_1` y `modelo_2` y luego aplica la prueba de McNemar en dos formas: primero usando la tabla de contingencia (`prueba_1`) y después directamente sobre las variables (`prueba_2`).
+
+Aquí tienes el texto extraído:
+
+---
+
+### Prueba Q de Cochran
+
+La prueba Q de Cochran es una extensión de la prueba de McNemar, adecuada cuando la variable de respuesta es dicotómica y la variable independiente tiene más de dos observaciones apareadas (cuando ambas variables son dicotómicas, esta prueba es equivalente a la de McNemar).
+
+**Ejemplo:** Elsa Capunta, estudiante de un curso de algoritmos, tiene como tarea determinar si existe una diferencia significativa en el desempeño de tres metaheurísticas que buscan resolver el problema del vendedor viajero. Para ello, el profesor le ha proporcionado los datos presentados en la tabla 8.13, donde la primera columna identifica cada una de las 15 instancias del problema empleadas para evaluar las metaheurísticas, mientras que las columnas restantes indican si la metaheurística en cuestión encontró (1) o no (0) la solución óptima para dicha instancia.
+
+Las hipótesis contrastadas por la prueba Q de Cochran son que la proporción de "éxitos" es la misma (o no) en todas las mediciones. Para el ejemplo de Elsa:
+
+- \( H_0 \): la proporción de instancias en que se encuentra la solución óptima es la misma para todas las metaheurísticas.
+- \( H_A \): la proporción de instancias en que se encuentra la solución óptima es distinta para al menos una de las metaheurísticas.
+
+**Condiciones:** Esta prueba también requiere cumplir con algunas condiciones:
+1. La variable de respuesta es dicotómica (la metaheurística consigue o no la solución óptima).
+2. La variable independiente es categórica (metaheurística utilizada).
+3. Las observaciones son independientes entre sí.
+4. El tamaño de la muestra es suficientemente grande.
+
+
+
+Glen (2016a) sugiere que \( b \cdot k \geq 24 \), donde \( b \) es el número de "bloques" en que se organizan las observaciones (la cantidad de instancias, para el ejemplo), y \( k \) es la cantidad de "tratamientos" estudiados (la cantidad de metaheurísticas, para el ejemplo).
+
+Podemos ver que los cálculos necesarios para esta prueba son tediosos, por lo que suele hacerse mediante software. En R, esta prueba está implementada en la función `cochran.qtest(formula, data, alpha = 0.05)` del paquete `RVAideMemoire`, donde:
+- **formula**: fórmula de la forma `respuesta ~ tratamientos | bloques`.
+- **data**: matriz de datos en formato largo.
+- **alpha**: nivel de significación.
+
+Es importante notar que la hipótesis nula de la prueba Q de Cochran no es específica, sino que comprueba la igualdad de todas las proporciones. Esta clase de hipótesis nula suele llamarse *ómnibus* (en ocasiones también *colectiva* o *global*). Así, se dice que la prueba Q de Cochran es una prueba ómnibus porque tiene esta clase de hipótesis nula, con la dificultad de que solo detecta si existe al menos un tratamiento con una proporción de "éxito" diferente a otro. Sin embargo, de ser afirmativa la respuesta, no nos dice qué tratamientos presentan diferencias (Lane, s.f.).
+
+Esto es un problema, ya que todo buen estudiante sabe que Elsa debe entregar en su tarea una respuesta más detallada que la que hemos obtenido hasta ahora, pues el profesor esperaría que ella le dijera qué metaheurísticas tienen rendimientos diferentes.
+
+Desde luego, existen métodos para responder a esta última pregunta, llamados *pruebas post-hoc*, o también a posteriori. Reciben este nombre porque se realizan una vez que se ha llegado a la conclusión, gracias a la prueba ómnibus, de que existen diferencias significativas.
+
+Algo importante que debemos recordar: solo haremos un procedimiento post-hoc si la prueba ómnibus rechaza la hipótesis nula en favor de la hipótesis alternativa. Además, el procedimiento post-hoc realizado debe considerar el mismo nivel de significación que la prueba ómnibus.
+
+Para la prueba Q de Cochran, el procedimiento post-hoc consiste en efectuar pruebas de McNemar entre cada par de tratamientos. Podemos hacer esto en R mediante la función `pairwiseMcnemar(formula, data, method)` del paquete `rcompanion`, donde `formula` y `data` son las mismas que para la prueba Q de Cochran y `method` nos permite determinar el método para ajustar los valores p de las comparaciones. Pero… ¿por qué querríamos ajustar los valores p?
+
+Como explican Goeman y Solari (2014), cuando contrastamos hipótesis acotamos la probabilidad de cometer errores tipo I por medio del nivel de significación α. Sin embargo, cuando hacemos múltiples contrastes de hipótesis simultáneamente, cada uno de ellos tendrá una probabilidad α de cometer un error de tipo I. Esto se traduce en un incremento de la probabilidad de cometer este tipo de errores a medida que aumenta la cantidad de hipótesis contrastadas y, en consecuencia, en una reducción del poder estadístico.
+
+
+```{r}
+# Cargar librerías
+library(tidyverse)
+library(RVAideMemoire)
+library(rcompanion)
+
+# Crear matriz de datos
+instancia <- 1:15
+annealing <- c(0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0)
+hormigas <- c(0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1)
+genetico <- c(1, 0, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1)
+
+datos <- data.frame(instancia, annealing, hormigas, genetico)
+
+# Llevar matriz de datos a formato largo
+datos <- datos %>% pivot_longer(c("annealing", "hormigas", "genetico"),
+                                names_to = "metaheuristica",
+                                values_to = "resultado")
+datos[["instancia"]] <- factor(datos[["instancia"]])
+datos[["metaheuristica"]] <- factor(datos[["metaheuristica"]])
+
+# Hacer prueba Q de Cochran
+prueba <- cochran.qtest(resultado ~ metaheuristica | instancia, data = datos, alpha = 0.05)
+print(prueba)
+
+# Procedimiento post-hoc con corrección de Bonferroni
+post_hoc_1 <- pairwiseMcnemar(resultado ~ metaheuristica | instancia, data = datos, method = "bonferroni")
+cat("\nProcedimiento post-hoc con corrección de Bonferroni\n")
+print(post_hoc_1)
+
+# Procedimiento post-hoc con corrección de Holm
+post_hoc_2 <- pairwiseMcnemar(resultado ~ metaheuristica | instancia, data = datos, method = "holm")
+cat("\nProcedimiento post-hoc con corrección de Holm\n")
+print(post_hoc_2)
+```
+
+
+
+| Prueba                       | Tipo de Variables                               | Propósito                                                                                          | Condiciones                                                                                                                                                   |
+|------------------------------|-------------------------------------------------|---------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Chi-cuadrado de Homogeneidad | **Dependiente**: Categórica<br>**Independiente**: Categórica (dos o más niveles) | Comparar distribuciones de frecuencias entre diferentes grupos para una variable categórica.       | 1. Observaciones independientes<br>2. Al menos 5 observaciones esperadas en cada grupo.                                                                       |
+| Chi-cuadrado de Independencia| **Dependiente**: Categórica<br>**Independiente**: Categórica (dos o más niveles) | Evaluar la independencia entre dos variables categóricas.                                         | 1. Observaciones independientes<br>2. Al menos 5 observaciones esperadas en cada celda de la tabla de contingencia.                                           |
+| Chi-cuadrado de Bondad de Ajuste | **Dependiente**: Categórica<br>**Independiente**: No aplica (comparación contra distribución teórica) | Comparar una distribución observada con una distribución teórica o esperada.                       | 1. Observaciones independientes<br>2. Al menos 5 observaciones esperadas en cada categoría.<br>3. Muestra representativa de la población.                   |
+| Prueba Exacta de Fisher      | **Dependiente**: Dicotómica<br>**Independiente**: Dicotómica (2x2 tabla de contingencia) | Evaluar la independencia entre dos variables en tablas de 2x2 cuando los recuentos son bajos.      | 1. Ambas variables deben ser dicotómicas (dos categorías cada una).                                                                                           |
+| Prueba de McNemar            | **Dependiente**: Dicotómica (medida en dos momentos o condiciones)<br>**Independiente**: No aplica (diseño pareado) | Evaluar cambios en proporciones de datos emparejados (antes y después en el mismo grupo de casos). | 1. Muestra pareada<br>2. Observaciones independientes<br>3. Respuestas dicotómicas en ambos momentos de medición.                                             |
+| Prueba Q de Cochran          | **Dependiente**: Dicotómica<br>**Independiente**: Categórica (varias observaciones o tratamientos) | Evaluar si hay diferencias significativas en proporciones de éxito en múltiples tratamientos.      | 1. Variable de respuesta dicotómica<br>2. Variable independiente categórica<br>3. Observaciones independientes<br>4. Tamaño de muestra adecuado, con b*k ≥ 24 |
+
+
