@@ -20,11 +20,13 @@ set.seed(1111)
 
 # Leemos los datos
 datos <- read.csv("EI-2024-2-PE2-Datos-Forma-15.csv")
+
+# Con la funcion str verificamos que el tipo de datos esté correcto
 str(datos)
+# Notamos que macro_zona y franja hay que convertirlos a factores puesto que son variables categoricas
 
 datos$macro_zona <- as.factor(datos$macro_zona)
 datos$franja <- as.factor(datos$franja)
-
 str(datos)
 
 
