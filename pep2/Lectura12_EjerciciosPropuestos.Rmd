@@ -1,0 +1,76 @@
+---
+title: "Lectura_12"
+author: "Byron Caices"
+date: "2024-11-16"
+output:
+    html_document:
+    highlight: tango
+    word_document: default
+    pdf_document: default
+---   
+
+```{=html}
+<style>
+body {
+  font-family: 'Calibri', sans-serif;
+}
+</style>
+```
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo =FALSE, warning=FALSE, message=FALSE}
+options(repos = c(CRAN = "https://cran.rstudio.com/"))
+
+if (!requireNamespace('tidyverse', quietly = TRUE)){
+  install.packages('tidyverse')
+}
+library(tidyverse)
+if (!requireNamespace('ggpubr', quietly = TRUE)){
+  install.packages('ggpubr')
+}
+library(ggpubr)
+if (!requireNamespace('ez', quietly = TRUE)){
+  install.packages('ez')
+}
+library(ez)
+if (!requireNamespace('RVAideMemoire', quietly = TRUE)){
+  install.packages('RVAideMemoire')
+}
+library(RVAideMemoire)
+if (!requireNamespace('rcompanion', quietly = TRUE)){
+  install.packages('rcompanion')
+}
+library(rcompanion)
+if (!requireNamespace('dplyr', quietly = TRUE)){
+  install.packages('dplyr')
+}
+library(dplyr)
+if (!requireNamespace('WRS2', quietly = TRUE)){
+  install.packages('WRS2')
+}
+library(WRS2)
+```
+
+# Metodos basados en remuestreo no paramétrico
+
+- Remuestreo: El remuestreo se refiere al proceso de tomar múltiples muestras de la muestra original, generalmente con reemplazo. Es decir, en cada remuestreo, cada observación de la muestra original puede ser seleccionada más de una vez o no ser seleccionada en absoluto. Este procedimiento permite generar una distribución empírica de una estadística (como la media, la mediana, la desviación estándar, etc.) sin asumir una distribución específica para la población.
+
+## Bootstrapping
+
+- Idealmente en estadística se debe contar con varias muestras grandes.
+
+- Sin embargo muchas veces contamos con muestras pequeñas pero si esta muestra es representativa de la población esperaríamos que las observaciones que ella contiene aparecieran con frecuencia similares a la de la población.
+
+
+1. **Remuestreo con reemplazo**: Se generan muchas remuestras (cientos o miles) a partir de la muestra original, con el mismo tamaño y usando reemplazo (un dato puede repetirse en la misma remuestra).
+
+2. **Cálculo del estadístico bootstrap**: Se calcula el estadístico de interés (\( \hat{\theta}^* \)) para cada remuestra, formando una distribución empírica conocida como **distribución bootstrap**.
+
+3. **Uso de la distribución bootstrap**: Esta distribución se utiliza para analizar la forma, el centro y la variabilidad del estadístico de interés, proporcionando información sobre su distribución muestral.
+
+### Bootstrapping para una muestra
+
+
+  

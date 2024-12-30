@@ -1,0 +1,411 @@
+---
+title: "Lectura_11"
+author: "Byron Caices"
+date: "2024-11-14"
+output:
+    html_document:
+    highlight: tango
+    word_document: default
+    pdf_document: default
+---
+
+```{=html}
+<style>
+body {
+  font-family: 'Calibri', sans-serif;
+}
+</style>
+```
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo =FALSE, warning=FALSE, message=FALSE}
+options(repos = c(CRAN = "https://cran.rstudio.com/"))
+
+if (!requireNamespace('tidyverse', quietly = TRUE)){
+  install.packages('tidyverse')
+}
+library(tidyverse)
+if (!requireNamespace('ggpubr', quietly = TRUE)){
+  install.packages('ggpubr')
+}
+library(ggpubr)
+if (!requireNamespace('ez', quietly = TRUE)){
+  install.packages('ez')
+}
+library(ez)
+if (!requireNamespace('RVAideMemoire', quietly = TRUE)){
+  install.packages('RVAideMemoire')
+}
+library(RVAideMemoire)
+if (!requireNamespace('rcompanion', quietly = TRUE)){
+  install.packages('rcompanion')
+}
+library(rcompanion)
+if (!requireNamespace('dplyr', quietly = TRUE)){
+  install.packages('dplyr')
+}
+library(dplyr)
+if (!requireNamespace('WRS2', quietly = TRUE)){
+  install.packages('WRS2')
+}
+library(WRS2)
+```
+
+# **Lectura 11: Alternativas más recientes para analizas datos problemáticos**
+
+## Métodos Robustos
+
+- Media Truncada: elimina directamente los valores de los extremos de una muestra
+
+- Media Winsorizada: reemplaza los valores en ves de eliminarlos
+
+### Prueba de Yuen para dos muestras independientes
+
+- Varianzas de ambas muestras muy diferentes o tamaños muy dispares
+
+- No se recomienda usar si las muestras se truncan cerca de 0.5
+
+```{r, eval=FALSE}
+# Para pruebas bilaterales
+yuen(formula, data, tr)
+
+# Para pruebas unilaterales
+yuen(formula, data, tr, nboot)
+```
+
+- `formula` tiene la forma Var dependiente ~ Var independiente
+- Var independiente debe tener dos niveles, a fin de determinar a que muestra pertenece cada observacion de la var dependiente
+
+- `data` matriz de datos
+
+- `tr` parametro $ \gamma $ de la poda (Determina un cierto porcentaje de valores que eliminará de los extremos
+
+- `nboot` señala la cantidad de repeticiones a realizar mediante bootstraping
+
+
+### **Hipótesis nula (\(H_0\))**
+\[
+H_0: \mu_{t1} = \mu_{t2}
+\]
+- La hipótesis nula establece que las medias truncadas de las dos poblaciones son **iguales**. 
+- Esto implica que no hay una diferencia significativa entre las dos poblaciones cuando se eliminan los valores extremos.
+
+---
+
+### **Hipótesis alternativa (\(H_a\))**
+#### 1. **Prueba bilateral (dos colas):**
+\[
+H_a: \mu_{t1} \neq \mu_{t2}
+\]
+- La hipótesis alternativa bilateral evalúa si las medias truncadas son **diferentes**, sin importar la dirección de la diferencia.
+
+#### 2. **Prueba unilateral (una cola):**
+   - **Para \( \mu_{t1} > \mu_{t2} \):**
+   \[
+   H_a: \mu_{t1} > \mu_{t2}
+   \]
+   - **Para \( \mu_{t1} < \mu_{t2} \):**
+   \[
+   H_a: \mu_{t1} < \mu_{t2}
+   \]
+   En este caso, la prueba se realiza para verificar si una de las medias truncadas es **mayor o menor** que la otra.
+
+---
+
+### **Decisión**
+1. Si el valor \( p \) obtenido de la prueba es **menor que el nivel de significancia (\( \alpha \))**, se **rechaza la hipótesis nula** (\(H_0\)).
+   - Esto indica que hay una diferencia significativa entre las medias truncadas.
+2. Si el valor \( p \) es **mayor o igual a \( \alpha \)**, no se rechaza \(H_0\).
+   - Esto indica que no hay evidencia suficiente para afirmar que las medias truncadas son diferentes.
+
+
+```{r}
+
+# Construir data frame.
+a <- c(25.1, 25.2, 25.3, 25.3, 25.4, 25.4, 25.5, 25.5, 25.6, 25.8, 25.8,
+       25.9, 25.9, 26.0, 26.0, 26.2, 26.2, 26.2, 26.3, 26.4, 26.5, 26.5,
+       26.6, 26.7, 26.7, 26.9, 26.9, 27.0, 27.1, 27.3, 27.8, 28.4, 28.5,
+       29.0, 29.8, 30.2, 31.8, 31.9, 33.3, 33.7)
+
+b <- c(24.1, 24.4, 24.4, 24.5, 24.7, 24.8, 24.8, 25.1, 25.2, 25.2, 25.2,
+       25.3, 25.4, 25.7, 25.7, 26.3, 26.4, 26.4, 26.5, 27.2, 27.7, 28.3,
+       28.4, 28.4, 28.6, 28.7, 29.6, 29.9, 30.1, 30.5)
+
+tiempo <- c(a, b)
+algoritmo <- c(rep("A", length(a)), rep("B", length(b)))
+datos <- data.frame(tiempo, algoritmo)
+
+# Comprobar normalidad.
+g <- ggqqplot(datos, x = "tiempo", facet.by = "algoritmo",
+              palette = c("blue", "red"), color = "algoritmo")
+
+print(g)
+
+# Establecer nivel de significación.
+alfa <- 0.05
+
+# Ver poda del 20%.
+gamma <- 0.2
+n_a <- length(a)
+n_b <- length(b)
+
+poda_a <- n_a * gamma
+poda_b <- n_b * gamma
+
+a_truncada <- a[(poda_a+1):(n_a - poda_a)]
+b_truncada <- b[(poda_b+1):(n_b - poda_b)]
+
+tiempo <- c(a_truncada, b_truncada)
+algoritmo <- c(rep("A", length(a_truncada)), rep("B", length(b_truncada)))
+datos_truncados <- data.frame(tiempo, algoritmo)
+
+g <- ggqqplot(datos_truncados, x = "tiempo", facet.by = "algoritmo",
+              palette = c("blue", "red"), color = "algoritmo")
+
+print(g)
+
+# Aplicar prueba de Yuen.
+prueba <- yuen(tiempo ~ algoritmo, data = datos, tr = gamma)
+print(prueba)
+```
+Como p = 0.659 > 0.05 entonces no se rechaza H0. Esto indica que no hay evidencia suficiente para afirmar que las medias truncadas son diferentes
+
+### Prueba de Yuen para dos muestras pareadas
+
+```{r Prueba de Yuen para dos muestras pareadas}
+
+# Construir data frame.
+x <- c(32.0, 32.0, 32.0, 32.0, 32.1, 32.1, 32.1, 32.2, 32.3, 32.3, 32.5,
+       32.7, 32.7, 32.7, 33.1, 33.4, 33.9, 34.1, 34.2, 34.5, 36.0, 36.6,
+       36.7, 37.2, 38.0)
+
+y <- c(33.0, 33.0, 33.0, 33.0, 33.0, 33.0, 33.3, 33.3, 33.3, 33.3, 33.5, 
+       33.6, 33.7, 33.9, 33.9, 34.2, 34.2, 34.3, 34.3, 34.4, 34.5, 34.6,
+       36.4, 38.9, 40.2)
+
+# Fijar nivel de significación.
+alfa <- 0.05
+
+# Aplicar prueba de Yuen para muestras pareadas.
+gamma <- 0.2
+prueba <- yuend(x = x, y = y, tr = gamma)
+print(prueba)
+
+```
+
+### Comparaciones de una vía para multiples grupos independientes
+
+El paquete WRS2 ofrece alternativas al ANOVA de una vía para muestras independientes, útiles cuando los **tamaños muestrales son desiguales o no se cumple la homocedasticidad**. Estas alternativas incluyen:
+
+TODO: anotar las condiciones de anova para muestras independientes
+
+```{r, eval=FALSE}
+# Utiliza medias truncadas
+t1way(formula, data, tr, alpha)
+
+# Post Hoc Con
+lincon(formula, data, tr, alpha)
+```
+
+```{r, eval=FALSE}
+# Similar al anterior pero incorpora bootstrapping
+t1waybt(formula, data, tr, nboot)
+
+# Post Hoc con
+mcppb20(formula, data, tr, nboot)
+```
+
+```{r, eval=FALSE}
+# Emplea las medianas y proceso iterativo
+med1way(formula, data, iter)
+# No ofrece post hoc
+```
+
+- `formula` de la forma Var dependiente ~ Var independiente
+
+- `data` matriz de datos
+
+- `tr` parametro $\gamma$ de poda
+
+- `alpha` nivel de significación
+
+- `nboot` cantidad de repeticiones mediante bootstraping
+
+- `iter` cantidad de iteraciones a realizar
+
+```{r}
+a <- c(25.1, 25.2, 25.3, 25.3, 25.4, 25.4, 25.5, 25.5, 25.6, 25.8, 25.8, 
+       25.9, 25.9, 26.0, 26.0, 26.2, 26.2, 26.2, 26.3, 26.4, 26.5, 26.5, 
+       26.6, 26.7, 26.7, 26.9, 26.9, 27.0, 27.1, 27.3, 27.8, 28.4, 28.5, 
+       29.0, 29.8, 30.2, 31.8, 31.9, 33.3, 33.7)
+
+b <- c(24.1, 24.4, 24.4, 24.5, 24.7, 24.8, 24.8, 25.1, 25.2, 25.2, 25.2,
+       25.3, 25.4, 25.7, 25.7, 26.3, 26.3, 26.4, 26.5, 27.2, 27.7, 28.3, 
+       28.4, 28.4, 28.6, 28.7, 29.6, 29.9, 30.1, 30.5)
+
+c <- c(24.5, 24.5, 24.5, 24.5, 24.5, 24.5, 24.6, 24.6, 24.6, 24.6, 24.6, 
+       24.6, 24.7, 24.7, 24.7, 24.7, 24.8, 25.0, 25.0, 25.0, 25.2, 25.2, 
+       25.2, 25.2, 25.5, 25.7, 25.9, 26.2, 26.5, 26.5, 26.7, 27.0, 29.2, 
+       29.9, 30.1)
+
+
+tiempo <- c(a, b, c)
+algoritmo <- c(rep("A", length(a)), rep("B", length(b)), rep("C", length(c)))
+datos <- data.frame(tiempo, algoritmo)
+
+# Fijar nivel de significación.
+alfa <- 0.05
+
+# Comparar los diferentes algoritmos usando medias truncadas.
+cat("Comparación entre grupos usando medias truncadas\n\n")
+gamma <- 0.2
+
+set.seed(666)
+
+medias_truncadas <- t1way(tiempo ~ algoritmo, data = datos, tr = gamma,
+                          alpha = alfa)
+
+print(medias_truncadas)
+if (medias_truncadas$p.value < alfa) {
+  cat("\nProcedimiento post-hoc\n\n")
+  
+  set.seed(666)
+  
+  post_hoc <- lincon(tiempo ~ algoritmo, data = datos, tr = gamma,
+                     alpha = alfa)
+  
+  print(post_hoc)
+}
+
+# Comparar los diferentes algoritmos usando bootstrap.
+cat("Comparación entre grupos usando bootstrap\n\n")
+muestras <- 999
+
+set.seed(666)
+
+bootstrap <- t1waybt(tiempo ~ algoritmo, data = datos, tr = gamma,
+                     nboot = muestras)
+
+print(medias_truncadas)
+if (medias_truncadas$p.value < alfa) {
+  cat("\nProcedimiento post-hoc\n\n")
+  
+  set.seed(666)
+  
+  post_hoc <- mcppb20(tiempo ~ algoritmo, data = datos, tr = gamma,
+                      nboot = muestras)
+  
+  print(post_hoc)
+}
+```
+
+### Comparaciones de una vía para multiples grupos correlacionados
+
+El paquete WRS2 también ofrece opciones robustas para reemplazar el ANOVA de una vía para muestras correlacionadas, útiles cuando los datos disponibles violan la condición de esfericidad. Estas alternativas incluyen:
+
+TODO: anotar las condiciones de anova para muestras correlacionadas
+
+```{r, eval=FALSE}
+# Utiliza medias truncadas
+rmanova(y, groups, blocks, tr)
+
+# Post Hoc con
+rmcmp(y, groups, blocks, tr, alpha)
+```
+
+```{r, eval=FALSE}
+# Similar al anterior pero incorpora bootstrapping
+rmanovab(y, groups, blocks, tr, nboot)
+
+# Post Hoc con
+pairdepb(y, groups, blocks, tr, nboot)
+```
+
+- `formula`: de la forma variable dependiente ~ variable independiente
+
+- `y`: vector con la variable dependiente
+
+- `groups`: vector que indica los grupos
+
+- `blocks`: vector que identifica los casos o bloques
+
+- `tr`: parámetro $\gamma$ de la poda
+
+- `alpha`: nivel de significación
+
+- `nboot`: cantidad de repeticiones mediante bootstrapping
+
+```{r, eval=FALSE}
+# Construir data frame.
+X <- c(32.0, 32.0, 32.0, 32.0, 32.1, 32.1, 32.1, 32.2, 32.3, 32.3, 32.5,
+       32.7, 32.7, 32.7, 33.1, 33.4, 33.9, 34.1, 34.2, 34.5, 36.0, 36.6,
+       36.7, 37.2, 38.0)
+
+Y <- c(33.0, 33.0, 33.0, 33.0, 33.0, 33.0, 33.3, 33.3, 33.3, 33.3, 33.5, 
+       33.6, 33.7, 33.9, 33.9, 34.2, 34.2, 34.3, 34.3, 34.4, 34.5, 34.6, 
+       36.4, 38.9, 40.2)
+
+Z <- c(32.0, 32.2, 32.5, 32.6, 32.7, 32.7, 32.7, 33.0, 33.2, 33.4, 33.6,
+       33.6, 33.9, 34.1, 34.3, 34.4, 34.4, 34.5, 34.6, 34.7, 36.3, 36.6,
+       36.7, 38.9, 39.2)
+
+instancia <- 1:length(X)
+datos <- data.frame(instancia, X, Y, Z)
+
+# Llevar data frame a formato largo.
+datos <- datos %>% pivot_longer(c("X", "Y", "Z"), names_to = "algoritmo",
+                                values_to = "tiempo")
+
+datos[["algoritmo"]] <- factor(datos[["algoritmo"]])
+
+# Fijar nivel de significación.
+alfa <- 0.05
+
+# Aplicar alternativa robusta para ANOVA de una vía con muestras correlacionadas.
+gamma <- 0.2
+
+prueba <- rmanova(y = datos[["tiempo"]], groups = datos[["algoritmo"]],
+                  blocks = datos[["instancia"]], tr = gamma)
+
+print(prueba)
+
+if(prueba$p.value < alfa) {
+  cat("\nProcedimiento post-hoc\n\n")
+  
+  post_hoc <- rmcmp(y = datos[["tiempo"]], groups = datos[["algoritmo"]],
+                    blocks = datos[["instancia"]], tr = gamma, alpha = alfa)
+  
+  print(post_hoc)
+}
+```
+
+Las pruebas robustas, como la prueba de Yuen y los métodos del paquete `WRS2`, se usan en lugar del ANOVA de una vía tradicional cuando los datos no cumplen con supuestos clave del ANOVA, como la normalidad o la homocedasticidad (igualdad de varianzas). Aquí hay algunas razones específicas:
+
+1. **Desigualdad en Varianzas**: El ANOVA de una vía asume que las varianzas de los grupos son similares. Si esta condición no se cumple, los resultados pueden ser poco fiables. La prueba de Yuen y los métodos de WRS2 usan medias truncadas o medias winsorizadas, lo cual hace que las pruebas sean menos sensibles a las diferencias en varianzas.
+
+2. **Asimetrías o Datos Atípicos**: ANOVA puede verse afectado por valores atípicos o distribuciones asimétricas. Los métodos robustos eliminan parte de los datos extremos (media truncada) o limitan su influencia (media winsorizada), reduciendo el efecto de estos puntos atípicos.
+
+3. **Desigualdad en Tamaños Muestrales**: Cuando los grupos tienen tamaños de muestra muy diferentes, ANOVA puede generar resultados distorsionados. Los métodos robustos son más estables ante tamaños de muestra desiguales.
+
+4. **Esfericidad en Muestras Correlacionadas**: En ANOVA para muestras correlacionadas (repeated measures ANOVA), se asume esfericidad, un tipo de homogeneidad de varianzas. Si este supuesto no se cumple, los resultados pueden ser engañosos. Los métodos robustos de `WRS2`, como `rmanova` o `rmanovab`, permiten evaluar los datos correlacionados sin requerir este supuesto.
+
+Los métodos robustos proveen alternativas válidas y confiables cuando el ANOVA tradicional no es adecuado debido a estas limitaciones.
+
+
+| Método / Prueba                                  | Uso Principal                                | Características Clave                                                    | Código de Ejemplo                      |
+|--------------------------------------------------|----------------------------------------------|--------------------------------------------------------------------------|----------------------------------------|
+| **Media Truncada**                               | Reducción de influencia de valores extremos  | Calcula la media sin incluir un porcentaje de valores en los extremos    | `a_truncada <- a[(poda_a+1):(n_a - poda_a)]` |
+| **Media Winsorizada**                            | Reducción de impacto de valores extremos     | Ajusta los valores extremos al percentil más cercano                     | `winsorize(data, gamma)` (hipotético)  |
+| **Prueba de Yuen (dos muestras independientes)** | Comparación de dos grupos                    | Usada cuando varianzas son diferentes o tamaños muestrales dispares      | `yuen(formula, data, tr)`              |
+| **Prueba de Yuen (dos muestras pareadas)**       | Comparación de datos pareados                | Ideal para datos pareados con varianzas diferentes                       | `yuend(x = x, y = y, tr = gamma)`      |
+| **t1way**                                        | Alternativa al ANOVA de una vía              | Usa medias truncadas y permite comparaciones post-hoc                    | `t1way(formula, data, tr, alpha)`      |
+| **t1waybt**                                      | Alternativa con bootstrapping                | Similar a t1way, pero con resampling (bootstrapping)                     | `t1waybt(formula, data, tr, nboot)`    |
+| **med1way**                                      | Alternativa usando medianas                  | Emplea medianas y un proceso iterativo; no tiene comparaciones post-hoc   | `med1way(formula, data, iter)`         |
+| **rmanova**                                      | Alternativa a ANOVA para muestras correlacionadas | Usa medias truncadas y es robusto ante falta de esfericidad       | `rmanova(y, groups, blocks, tr)`       |
+| **rmanovab**                                     | Alternativa robusta con bootstrapping        | Similar a rmanova, pero con bootstrapping para mayor robustez            | `rmanovab(y, groups, blocks, tr, nboot)`|
+| **Post-hoc lincon**                              | Comparaciones múltiples para t1way           | Comparación post-hoc basada en medias truncadas                          | `lincon(formula, data, tr, alpha)`     |
+| **Post-hoc mcppb20**                             | Comparaciones múltiples con bootstrapping    | Comparación post-hoc usando bootstrapping                                | `mcppb20(formula, data, tr, nboot)`    |
+| **Post-hoc rmcmp**                               | Comparaciones múltiples para rmanova         | Comparación post-hoc robusta para datos correlacionados                  | `rmcmp(y, groups, blocks, tr, alpha)`  |
+| **Post-hoc pairdepb**                            | Comparaciones múltiples para rmanovab        | Comparación post-hoc con bootstrapping para datos correlacionados        | `pairdepb(y, groups, blocks, tr, nboot)`|

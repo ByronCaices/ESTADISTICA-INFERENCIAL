@@ -1,0 +1,394 @@
+---
+title: "my_ep9"
+author: "Byron Caices"
+date: "2024-12-28"
+output: html_document
+---
+
+
+Un estudio recolectó medidas anatómicas de 247 hombres y 260 mujeres (Heinz et al., 2003). El estudio incluyó nueve mediciones del esqueleto (ocho diámetros y una profundidad de hueso a hueso) y doce mediciones de grosor (diámetros de circunferencias) que incluyen el tejido.
+
+Con estos datos se pide construir un modelo de regresión lineal múltiple para predecir una variable respuesta, de acuerdo con las siguientes instrucciones:
+
+1. Definir la semilla a utilizar, que corresponde a los últimos cuatro dígitos del RUN (sin considerar el dígito verificador) del integrante de menor edad del equipo.
+
+Usare la semilla 1111
+
+2. Seleccionar una muestra de 100 mujeres (si la semilla es un número par) o 100 hombres (si la semilla es impar), y separar 70 casos para trabajar en la construcción de modelos y 30 para su evaluación en datos no vistos.
+
+```{r Definir semilla}
+library(car)
+library(dplyr)
+library(ggpubr)
+library(psych)
+# Definimos semilla
+set.seed(1111)
+
+# Leemos los datos
+datos <- read.csv2("EP09 Datos.csv")
+
+# Filtramos los datos
+
+datos <- datos %>% filter(Gender == 1) %>% select(-Gender) %>% sample_n(100, replace = FALSE)
+# De datos selecciona hombres, descarta la columna Gender y selecciona 100 sin reemplazo
+
+datos_entren <- datos[1:70,] # fila 1 a 70 y todas las columnas
+datos_prueba <- datos[71:100,]
+```
+
+3. Seleccionar de forma aleatoria ocho posibles variables predictoras.
+
+Vamos a definir como variable de respuesta al diametro de la rodilla (Knees.diameter)
+
+```{r seleccionar 8 variables predictoras}
+nombre_respuesta <- "Knees.diameter"
+variables <- colnames(datos_entren)
+
+i_respuesta <- which(variables == nombre_respuesta) # Selecciono el indice de Knees.diameter para quitarlo de los colnames
+predictores <- sample(variables[-i_respuesta], 8, replace = FALSE)
+
+cat("Predictores escogidos:\n")
+cat(paste(predictores, collapse="\n"))
+
+```
+
+
+4. Seleccionar, de las otras variables, una que el equipo considere que podría ser útil para predecir la variable respuesta, justificando bien esta selección.
+
+
+```{r }
+# Quito las variables seleccionadas para escoger mi 9na variable
+datos_resto <- datos_entren %>% select(!all_of(predictores)) # Datos sin las 8 variables seleccionadas
+
+i_respuesta_resto <- which(colnames(datos_resto)==nombre_respuesta) # Indice de la columna de la var de rpta
+
+# Evaluo correlacion entre las 15 vars y la de rpta (quito la de rpta)
+correlacion <- cor(datos_resto[-i_respuesta_resto], y = datos_resto[[nombre_respuesta]])
+
+cat("Correlacion con Knees.diameter:\n")
+print(correlacion)
+```
+Asumiendo que el mejor predictor sería el que tiene la mayor correlacion con la variable de rpta entonces seleccionamos el max
+
+```{r seleccionar maximo}
+i_mejor <- which(correlacion == max(abs(correlacion)))
+
+# Seleccionamos 9no predictor
+#predictor <- colnames(datos_resto)[i_mejor]
+predictor <- rownames(correlacion)[i_mejor]
+cat("La variable seleccionada es: ",predictor)
+```
+En predictores tengo mis 8 variables y en predictor está la 9na
+
+5. Usando el entorno R y paquetes estándares, construir un modelo de regresión lineal simple con el predictor seleccionado en el paso anterior.
+
+```{r filtramos datos 9 predictores 1 rpta}
+datos_entren <- datos_entren %>% select(all_of(c(predictor,predictores,nombre_respuesta)))
+
+# Grafiquemos los datos Knees.diameter ~ Wrist.diameter
+
+p1 <- ggscatter(datos_entren, x = predictor, y = nombre_respuesta,
+                color = "steelblue", fill = "steelblue",
+                add = "reg.line", add.params = list(color = "red"))
+print(p1)
+
+# formula Knees.diameter ~ Wrist.diameter
+fmla <- formula(paste(nombre_respuesta, predictor, sep = " ~ "))
+rls <- lm(fmla, data = datos_entren)
+
+print(summary(rls))
+```
+
+Podemos ver que el modelo planteado explica un 39.18% de la varianza de los datos y que es signficativamente mejor que simplememnte usar la media o modelo nulo
+
+Ahora debemos verificar tambien si este modelo es confiable, para ello llevaremos a cabo las siguientes pruebas:
+
+  1. Prueba de Curvatura
+  2. Prueba de Independencia
+  3. Prueba de Homocedasticidad
+  4. Mostrar casos influyentes
+
+```{r Prueba de curvatura RLS}
+cat("Pruebas de curvatura: \n")
+
+# Desplegar gráficos de residuos y mostrar pruebas de curvatura
+residualPlots(rls, type = "rstandard",
+              id = list(method = "r", n = 3, cex = 0.7, location = "lr"),
+              col = "steelblue", pch = 20, col.quad = "red")
+
+# Verificar independencia de los residuos
+db <- durbinWatsonTest(rls)
+cat("\nPrueba de independencia:\n")
+print(db)
+
+# Desplegar gráficos marginales
+marginalModelPlots(rls, sd = TRUE,
+                   id = list(method = "r", n = 3, cex = 0.7, location = "lr"),
+                   col = "steelblue", pch = 20, col.line = c("steelblue","red"))
+
+# Prueba de la varianza del error no constante
+cat("\nPrueba de homocedasticidad:\n")
+print(ncvTest(rls))
+
+# Desplegar graficos de influencia
+casos_influyentes <- influencePlot(rls, id = list(n = 3))
+cat("\nCasos que podrían ser influyentes:\n")
+print(casos_influyentes)
+```
+
+Notamos que ambos p-valores de la prueba de curvataura son mayores que el nivel de significancia típico (\( \alpha = 0.05 \)), por lo que no hay evidencia suficiente para rechazar \( H_0 \). Esto sugiere que no se detecta curvatura y que el modelo lineal es adecuado.
+
+Por otra parte el p-valor de la prueba de independencia también es mayor a 0.05 lo que indica que no hay evidencia significativa de autocorrelación en los residuos. Esto sugiere que los residuos son independientes.
+
+Y finalmente respecto a la homocedasticidad el p-valor es mayor a 0.05 lo que indica que no se puede descartar que los residuos cumplan con la condicion de homocedasticidad
+
+Notamos que el caso que podría tener mayor influencia atípica es el 66
+
+```{r Verificar si quitar caso influyente}
+crPlots(rls,
+        col = "steelblue", pch = 20, col.lines = c("red", "steelblue"),
+        smooth = list(smoother = loessLine, span = 1),
+        id = list(method = "r", n = 8, cex = 0.7, location = "lr"))
+
+rls2 <- lm(fmla, data = datos_entren[-66, ])
+crPlots(rls2,
+        col = "steelblue", pch = 20, col.lines = c("red", "steelblue"),
+        smooth = list(smoother = loessLine, span = 1),
+        id = list(method = "r", n = 8, cex = 0.7, location = "lr"))
+```
+Podemos ver que el nuevo modelo es prácticamente igual al original, por lo que no parece necesario quitar casos. Hagamos una conclusión entonces.
+
+El modelo obtenido parece confiable, ya que genera residuos aleatorios y no es posible descartar que sigan una distribución normal, usando un predictor que muestra una relación lineal con la variable respuesta. Tampoco se identifican casos que estén ejerciendo demasiada influencia en el modelo.
+
+Por otro lado, el modelo consigue una bondad de ajuste aceptable, pues explica alrededor del 40% de la variabilidad en la variable predicha, que es una reducción significativa (F(1;68)=43,8; p<0,001).
+
+6. Usando herramientas estándares para la exploración de modelos del entorno R, buscar entre dos y cinco predictores de entre las variables seleccionadas al azar en el punto 3, para agregar al modelo de regresión lineal simple obtenido en el paso 5.
+
+Como modelo minimo usaremos nuestro modelo rls
+
+y queda definir nuestro modelo máximo 
+
+```{r}
+rlm_max_text <- paste(c(predictor,predictores), collapse = "+") # var1 + var2 ... + varN
+rlm_max_fmla <- formula(paste(nombre_respuesta,rlm_max_text, sep = "~"))
+
+rlm_max <- lm(rlm_max_fmla, data = datos_entren)
+
+
+rlm <- step(rls, scope = list(lower = rls, upper = rlm_max),
+               direction = "both",
+               test = "F", trace = 1)
+
+
+# Mostrar los coeficientes del modelo conseguido
+cat("\nModelo obtenido:\n")
+print(rlm[["coefficients"]])
+
+
+```
+
+Notamos que se seleccionaron 6 nuevas variables cuando debimos obtener entre 2 y 5 por lo que tendremos que eliminar una de las que ya están agregadas y esto lo haremos mediante una eliminacion hacia atrás a la variable que tenga el menor F-value
+
+En este caso notamos que sucede con Ankle.Minimun.Girth por lo que lo quitaremos del modelo
+
+```{r}
+rlm <- update(rlm, . ~ . - Ankle.Minimum.Girth)
+```
+
+7. Evaluar la bondad de ajuste (incluyendo el análisis de casos atípicos y casos influyentes) y la generalidad (condiciones para RLM) de los modelos y “arreglarlos” en caso de que presenten algún problema.
+
+Evaluando la confiabilidad del modelo conseguido...
+
+  1. Que no existan niveles inaceptables de multicolineadlidad
+  2. Prueba de curvatura
+  3. Normalidad de los residuos
+  4. Prueba de homocedasticidad
+  5. Prueba de independecia de los residuos
+  6. Revisar que relaciones entre predictores y var de rpta sean aproximadamente lineales
+  
+```{r Que no existan niveles inaceptables de multicolineadlidad}
+cat("Factores de inflación de la varianza:\n")
+print(vif(rlm))
+cat("Estadísticos de tolerancia:\n")
+print(1 / vif(rlm))
+```
+
+Vemos que, en general, solo hay indicios de multicolinealidad moderada, pues solo dos predictores presentan valores de inflación de la varianza sobre 4. Probablemente estas dos variables están correlacionadas. Eliminemos la que presenta el mayor valor.
+
+```{r Eliminemos el que presenta multicolinealidad moderada}
+rlm <- update(rlm, . ~ . - Hip.Girth)
+
+cat("Factores de inflación de la varianza:\n")
+print(vif(rlm))
+cat("Estadísticos de tolerancia:\n")
+print(1 / vif(rlm))
+```
+
+Muy bien, hemos eliminado gran parte de la multicolinealidad presente en el modelo anterior manteniendo 4 predictores nuevos agregados al modelo de RLS creado anteriormente.
+
+Revisemos los residuos que genera este modelo.
+
+```{r Prueba de curvatura RLM}
+cat("Prueba de curvatura:\n")
+residualPlots(rlm, type = "rstandard", terms = ~ 1, col = "steelblue", pch = 20, col.quad = "red")
+```
+
+Se ve cierta curvatura, pero que podría deberse a falta de observaciones en la muestra con diámetros de rodillas bajo los 18 o sobre los 21,5 cm. En el rango entre estos valores, no se ve un patrón preocupante, aunque existe cierta tendencia a patrones por sobre la línea de regresión. La prueba de curvatura también apunta en este sentido y segun el p-valor es mayor a 0.05 por lo que se **falla en rechazar en que No existe curvatura en la relación entre los residuos y las variables predictores**
+
+Revisemos la normalidad de estos residuos.
+
+```{r Normalidad de residuos}
+# Grafico qq
+qq_res <- ggqqplot(data.frame(Residuos = resid(rlm)), x = "Residuos", color = "steelblue")
+print(qq_res)
+
+sw_res <- shapiro.test(resid(rlm))
+cat("Test de normalidad de los residuos del modelo de RLM:")
+print(sw_res)
+```
+Como p > 0.05 no hay suficiente evidencia para rechazar que los datos siguen una distribucion normal
+
+Ahora verifiquemos la varianza e independencia de los residuos.
+
+```{r Ahora verifiquemos la varianza e independencia de los residuos}
+cat("Prueba de varianza del error no constante:\n")
+ncvTest(rlm)
+
+cat("\nIndependencia de los residuos\n")
+print(durbinWatsonTest(rlm))
+```
+
+Con esto confirmamos que no es posible descartar que se están cumpliendo las condiciones de homogeneidad de la varianza (χ(1)=0,339; p=0,561) e independencia de los residuos (D-W=1,669; p=0,156).
+
+Revisemos si existen relaciones aproximadamente lineales entre los predictores y la variable de interés.
+
+```{r Linealidad entre predictores y var de rpta}
+crPlots(rlm,
+        col = "steelblue", pch = 20, col.lines=c("red", "steelblue"),
+        smooth = list(smoother=loessLine, span = 1),
+        id = list(method = "r", n = 3, cex = 0.7, location = "lr"))
+```
+
+Observamos que las relaciones parecen aproximadamente lineales, aunque alguna duda puede quedar con cómo se distribuyen los residuos al considerar la variable Waist.Girth (grosor de la cintura). También podemos notar que la recta de regresión parcial para este predictor tiene una pendiente muy baja, abriendo dudas de su aporte. Revisemos su contribución en relación a los otros predictores.
+
+```{r}
+cat("Modelo de RLM obtenido:\n")
+print(summary(rlm))
+```
+
+Notamos que el aporte de waist.girth al modelo no es significativo y siguiendo el principio de parsimonia es mejor quitarlo y hacer una revision de que todo sigue bien
+
+```{r Verificar nuevamente condiciones}
+rlm <- update(rlm, . ~ . - Waist.Girth)
+
+cat("Modelo de RLM obtenido:\n")
+print(summary(rlm))
+
+cat("\nPrueba de curvatura:\n")
+residualPlots(rlm, type = "rstandard", terms = ~ 1, col = "steelblue", pch = 20, col.quad = "red")
+
+cat("\nFactores de inflación de la varianza:\n")
+print(vif(rlm))
+
+cat("\nPrueba de homocedasticidad:\n")
+ncvTest(rlm)
+
+cat("\nIndependencia de los residuos\n")
+print(durbinWatsonTest(rlm))
+```
+
+El nuevo modelo más simple parece mantener el comportamiento del modelo anterior.
+
+Revisemos ahora si existen casos demasiado influyentes utilizando el gráfico de influencia para identificarlos.
+
+```{r Casos influyentes}
+#cat("Rango para 95% de los residuos studentizados: ")
+#cat("[", round(qt(0.05/2, nrow(datos_entren) - length(coef(rls)) - 1), 3), ", ", sep = "")
+#cat(round(qt(1-0.05/2, nrow(datos_entren) - length(coef(rls)) - 1), 3), "]\n", sep = "")
+#cat("Límite del apalancamiento:", round(2 * mean(hatvalues(rlm)), 3), "\n")
+#cat("Límite de la distancia de Cook:", round(3 * mean(cooks.distance(rlm)), 3), "\n")
+
+rlm_inf <- influencePlot(rlm, id = list(n = 3))
+
+cat("\nCasos notorios para el modelo de RLM:\n")
+print(rlm_inf)
+
+# Desplegar gráficos marginales
+marginalModelPlots(rlm, sd = TRUE,
+                   id = list(method = "r", n = 3, cex = 0.7, location = "lr"),
+                   col = "steelblue", pch = 20, col.line = c("steelblue","red"))
+
+```
+
+Vemos que, a pesar que los casos 4 y 66 curvan la tendencia de los datos hacia arriba, el modelo (línea roja segmentada) no parece estar visiblemente modificada por alguno de los casos notorios identificados.
+
+```{r}
+print(summary(rlm))
+```
+
+Finalmente, cometemos la bondad de ajuste que alcanza el modelo. Vemos que consigue una reducción significativa de la variabilidad aleatoria (F(4;65)=29,7; p<0,001), pues explica alrededor del 65% de la varianza de la variable de salida.
+
+Con todo este análisis podemos dar la siguiente conclusión.
+
+> El modelo de RLM obtenido parece ser confiable, puesto que se ajusta bien a los datos observados, incluye predictores que muestran una relación lineal con la variable de respuesta, genera residuos que parecen seguir una distribución normal y sin problemas evidentes de heterocedasticidad o de dependencia entre ellos. Por otro lado, no hay casos que estén dominando el modelo.
+
+8. Evaluar el poder predictivo de los modelos en datos no utilizados para construirlos.
+
+Vimos que el modelo de RLS construido logra explicar alrededor del 40% de la variabilidad en los datos, mientras que el RLM que tenemos logra explicar cerca del 65%. Confirmemos si esta es una mejora significativa en la bondad de ajuste.
+
+```{r Comparar modelos RLS y RLM}
+cat("Comparación de los modelos de RLS y RLM:\n")
+print(anova(rls, rlm))
+```
+
+
+```{r Generalizacion del modelo}
+# Calcular RMSE (Root Mean Square Error) para el modelo de regresión lineal simple (RLS) en entrenamiento
+rls_rmse_entre <- sqrt(mean(resid(rls) ** 2))  # RMSE basado en los residuos del conjunto de entrenamiento
+
+# Generar predicciones del modelo RLS para el conjunto de prueba
+rls_preds <- predict(rls, datos_prueba)
+
+# Calcular los residuos del modelo RLS para el conjunto de prueba
+rls_res_prueba <- datos_prueba[[nombre_respuesta]] - rls_preds
+
+# Calcular el RMSE del modelo RLS para el conjunto de prueba
+rls_rmse_prueba <- sqrt(mean(rls_res_prueba ** 2))
+
+# Calcular el cambio porcentual en el RMSE entre entrenamiento y prueba para el modelo RLS
+rls_pct_cambio <- ((rls_rmse_prueba - rls_rmse_entre) / rls_rmse_entre) * 100
+
+# Calcular RMSE para el modelo de regresión lineal robusta (RLM) en entrenamiento
+rlm_rmse_entre <- sqrt(mean(resid(rlm) ** 2))  # RMSE basado en los residuos del conjunto de entrenamiento
+
+# Generar predicciones del modelo RLM para el conjunto de prueba
+rlm_preds <- predict(rlm, datos_prueba)
+
+# Calcular los residuos del modelo RLM para el conjunto de prueba
+rlm_res_prueba <- datos_prueba[[nombre_respuesta]] - rlm_preds
+
+# Calcular el RMSE del modelo RLM para el conjunto de prueba
+rlm_rmse_prueba <- sqrt(mean(rlm_res_prueba ** 2))
+
+# Calcular el cambio porcentual en el RMSE entre entrenamiento y prueba para el modelo RLM
+rlm_pct_cambio <- ((rlm_rmse_prueba - rlm_rmse_entre) / rlm_rmse_entre) * 100
+
+# Mostrar un resumen de la variable de salida
+cat(sprintf("Resumen de la variable de salida (%s):\n", nombre_respuesta))
+print(describe(datos |> pull(all_of(nombre_respuesta)), skew = FALSE))
+cat("\n")
+
+# Mostrar el rendimiento del modelo RLS
+cat("Rendimiento del modelo de RLS:\n")
+cat(sprintf("RMSE para el conjunto de entrenamiento: %.3f\n", rls_rmse_entre))
+cat(sprintf("RMSE para el conjunto de prueba: %.3f\n", rls_rmse_prueba))
+cat(sprintf("Cambio en el error: %.1f%%\n", rls_pct_cambio))
+cat("\n")
+
+# Mostrar el rendimiento del modelo RLM
+cat("Rendimiento del modelo de RLM:\n")
+cat(sprintf("RMSE para el conjunto de entrenamiento: %.3f\n", rlm_rmse_entre))
+cat(sprintf("RMSE para el conjunto de prueba: %.3f\n", rlm_rmse_prueba))
+cat(sprintf("Cambio en el error: %.1f%%\n", rlm_pct_cambio))
+
+```

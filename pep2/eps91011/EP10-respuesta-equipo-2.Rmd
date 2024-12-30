@@ -1,0 +1,395 @@
+---
+title: "EP10-respuesta-equipo-2"
+output: html_document
+date: "2024-12-11"
+---
+
+```{r setup, include=FALSE}
+options(repos = c(CRAN = "https://cran.rstudio.com/"))
+
+if (!requireNamespace('tidyverse', quietly = TRUE)){
+  install.packages('tidyverse')
+}
+library(tidyverse)
+if (!requireNamespace('ggpubr', quietly = TRUE)){
+  install.packages('ggpubr')
+}
+library(car)
+if (!requireNamespace('car', quietly = TRUE)){
+  install.packages('car')
+}
+library(ggpubr)
+if (!requireNamespace('ez', quietly = TRUE)){
+  install.packages('ez')
+}
+library(ez)
+if (!requireNamespace('RVAideMemoire', quietly = TRUE)){
+  install.packages('RVAideMemoire')
+}
+library(RVAideMemoire)
+if (!requireNamespace('rcompanion', quietly = TRUE)){
+  install.packages('rcompanion')
+}
+library(rcompanion)
+if (!requireNamespace('dplyr', quietly = TRUE)){
+  install.packages('dplyr')
+}
+library(dplyr)
+if (!requireNamespace('WRS2', quietly = TRUE)){
+  install.packages('WRS2')
+}
+library(WRS2)
+```
+
+#### CONTEXTO
+#### Usando los datos de medidas anatómicas recolectados por Heinz et al. (2003) que ya conocimos en el ejercicio práctico anterior:
+
+```{r datos}
+datosGenerales <- read.csv2("EP09 Datos.csv")
+head(datosGenerales)
+```
+
+#### Se nos pide realizar lo siguiente:
+
+#### 1. El equipo crea la variable IMC (índice de masa corporal) como el peso de una persona (en kilogramos) dividida por el cuadrado de su estatura (en metros).
+
+```{r IMC}
+datosGenerales[["IMC"]] = datosGenerales[["Weight"]] / ((datosGenerales[["Height"]]/100)^2)
+```
+
+#### 2. Si bien esta variable se usa para clasificar a las personas en varias clases de estado nutricional (bajo peso, normal, sobrepeso, obesidad, obesidad mórbida), para efectos de este ejercicio, usaremos dos clases: sobrepeso (IMC ≥ 23,2) y no sobrepeso (IMC < 23,2).
+
+#### 3. El equipo crea la variable dicotómica EN (estado nutricional) de acuerdo al valor de IMC de cada persona.
+```{r EN}
+datosSobrepeso = datosGenerales %>% filter(IMC < 23.2)
+datosPesoNormal = datosGenerales %>% filter(IMC >= 23.2)
+datosSobrepeso[["EN"]] = 1
+datosPesoNormal[["EN"]] = 0
+```
+
+#### Ahora podemos construir un modelo de regresión logística para predecir la variable EN, de acuerdo con las siguientes instrucciones:
+
+### 1- Definir la semilla a utilizar, que corresponde a los últimos cuatro dígitos del RUN (sin considerar el dígito verificador) del integrante de mayor edad del equipo.
+
+```{r seed}
+set.seed(4545)  # semilla impar, tomamos muestra de 150 hombres 5795
+```
+
+### 2- Seleccionar una muestra de 150 mujeres (si la semilla es un número par) o 150 hombres (si la semilla es impar), asegurando que la mitad tenga estado nutricional “sobrepeso” y la otra mitad “no sobrepeso” en cada caso. Dividir esta muestra en dos conjuntos: los datos de 100 personas (50 con EN “sobrepeso”) para utilizar en la construcción de los modelos y 50 personas (25 con EN “sobrepeso”) para poder evaluarlos.
+
+```{r conjuntos}
+datosSobrepeso = datosSobrepeso %>% filter(Gender == 1) %>% sample_n(75)
+datosPesoNormal = datosPesoNormal %>% filter(Gender == 1) %>% sample_n(75)
+
+idatosSobre = sample.int(50)
+idatosNormal = sample.int(50)
+
+datosEntrenamiento = rbind(datosSobrepeso[idatosSobre,], datosPesoNormal[idatosNormal,])
+datosPrueba = rbind(datosSobrepeso[-idatosSobre,], datosPesoNormal[-idatosNormal,])
+```
+
+### 3- Recordar las ocho posibles variables predictoras seleccionadas de forma aleatoria en el ejercicio anterior.
+Las variables aleatorias obtenidas del ejercicio anterior fueron las siguientes:
+
+* Knee.Girth
+* Weight
+* Chest.diameter
+* Wrist.Minimum.Girth
+* Thigh.Girth
+* Height
+* Calf.Maximum.Girth
+* Gender
+
+```{r predictores}
+predictores = c("Knee.Girth", "Weight", "Chest.diameter", "Wrist.Minimum.Girth", "Thigh.Girth", "Height", "Calf.Maximum.Girth")
+# Gender no aplica
+```
+
+### 4- Seleccionar, de las otras variables, una que el equipo considere que podría ser útil para predecir la clase EN, justificando bien esta selección (idealmente con literatura).
+
+Con respecto a una variable no listada que podría ser útil para predecir la clase EN, proponemos la variable "Waist.Girth" que corresponde al grosor de la cintura, y relacionamos razonablemente a la circunferencia de la cintura, sobre la que se dice lo siguiente en un artículo de la Universidad Central de Venezuela, Escuela de Nutrición y Dietética; "su comportamiento (de la Circunferencia de Cintura) es sistemático y consistente, se correlaciona con el IMC y con el Peso; la regresión logística revela su alta sensibilidad y especificidad, se recomienda la medición de la CC para evaluar sobrepeso y obesidad."
+
+### 5- Usando el entorno R, construir un modelo de regresión logística con el predictor seleccionado en el paso anterior y utilizando la muestra obtenida.
+
+```{r modelo simple}
+modelo <- glm(EN ~ Waist.Girth, data = datosEntrenamiento, family = binomial(link = "logit"))
+summary(modelo)
+```
+
+### 6- Usando estas herramientas para la exploración de modelos del entorno R, buscar entre dos y cinco predictores de entre las variables seleccionadas al azar, recordadas en el punto 3, para agregar al modelo obtenido en el paso 5.
+
+Para esto usaremos regresión paso a paso hacia adelante
+```{r modelo multiple}
+# Datos con solo predictores:
+datosPredictores <- datosEntrenamiento[, c("EN", predictores, "Waist.Girth")]
+
+modeloNulo <- glm(EN ~ Waist.Girth, data = datosPredictores, family = binomial(link = "logit"))
+modeloMaximo <- glm(EN ~ ., data = datosPredictores, family = binomial(link = "logit"))
+
+# Revisar un paso hacia adelante
+cat("\nPaso 1:\n----------------\n")
+print(add1(modeloNulo, scope = modeloMaximo))
+```
+
+El valor más apto de agregar parece ser "Thigh.Girth", se actualiza y se revisa el modelo
+```{r}
+modelo1 <- update(modeloNulo, . ~ . + Thigh.Girth)
+print(summary(modelo1))
+```
+Notas del modelo:
+
++ p-value de Thigh.Girth: 7.60e-05 (significativo)
+
+AIC: 69.592
+
+Se continúa al siguiente paso
+```{r}
+cat("\nPaso 2:\n----------------\n")
+print(add1(modelo1, scope = modeloMaximo))
+```
+
+El siguiente valor más apto de agregar es "Height",  se actualiza y se revisa el modelo
+```{r}
+modelo2 <- update(modelo1, . ~ . + Height)
+print(summary(modelo2))
+```
+Notas del modelo:
+
++ p-value de Thigh.Girth: 0.000125 (significativo)
++ p-value de Height: 0.003333 (significativo)
+
+AIC: 59.571 (una disminución de 10.021 respecto al modelo sin Height)
+
+Se continúa al siguiente paso
+```{r}
+cat("\nPaso 3:\n----------------\n")
+print(add1(modelo2, scope = modeloMaximo))
+```
+
+El siguiente valor más apto de agregar es "Wrist.Minimum.Girth",  se actualiza y se revisa el modelo
+```{r}
+modelo3 <- update(modelo2, . ~ . + Wrist.Minimum.Girth)
+print(summary(modelo3))
+```
+Notas del modelo:
+
+Se reporta desviación nula en caso de incluir la variable Weight, por lo que no la usaremos.
+
++ p-value de Thigh.Girth: 7.36e-05 (significativo)
++ p-value de Height: 0.00115  (significativo)
++ p-value de Wrist.Minimum.Girth: 0.00705 (significativo)
+
+AIC: 49.842 (una disminución de aproximadamente 10 respecto al modelo sin Wrist.Minimum.Girth)
+
+Se continúa al siguiente paso
+```{r}
+cat("\nPaso 4:\n----------------\n")
+print(add1(modelo3, scope = modeloMaximo))
+```
+Notas del modelo:
+
+Se reporta desviación nula en caso de incluir la variable Weight, por lo que no la usaremos.
+
+Solo Calf.Maximum.Girth ofrece una disminución en AIC, pero una disminución de tan solo 0.340.
+
+Se concluye que el modelo con la variable Waist.Girth más las variables Thigh.Girth, Wrist.Minimum.Girth y Height es el más adecuado.
+
+### 7- Evaluar la confiabilidad de los modelos (i.e. que tengan un buen nivel de ajuste y son generalizables) y “arreglarlos” en caso de que tengan algún problema.
+
+#### Confiabilidad en los modelos
+
+```{r Ajuste}
+# Comparación del modelo univariado con el modelo nulo (para bondad de ajuste del modelo univariado)
+univar_lrt <- anova(modelo, test = "LRT")
+
+# Comparación del modelo multivariado con el modelo univariado (para bondad de ajuste del modelo multivariado)
+multivar_lrt <- anova(modelo, modelo3, test = "LRT")
+
+cat("Bondad de ajuste del modelo univariado (Waist.Girth vs modelo nulo):\n")
+print(univar_lrt)
+cat("\n")
+cat("Bondad de ajuste del modelo multivariado (Thigh.Girth + Wrist.Minimum.Girth + Height vs Waist.Girth):\n")
+print(multivar_lrt)
+
+```
+La comparación entre el modelo nulo y el modelo univariado (con Waist.Girth) muestra un valor p < 0.001, lo que indica que agregar la variable Waist.Girth mejora significativamente el ajuste del modelo respecto al modelo sin predictores.
+
+Asimismo, la comparación entre el modelo univariado y el modelo multivariado (con Thigh.Girth, Wrist.Minimum.Girth y Height) también tiene un valor p < 0.001, indicando que la inclusión de estas variables adicionales produce una mejora estadísticamente significativa en el ajuste del modelo frente al que sólo contenía Waist.Girth.
+
+En conclusión, ambos modelos logran una buena bondad de ajuste bajo el criterio alfa = 0.001. El modelo univariado es significativamente mejor que el nulo, y el modelo multivariado es significativamente mejor que el univariado, demostrando que la inclusión de las variables seleccionadas permite un mejor ajuste para predecir la variable EN.
+
+```{r Prueba de curvatura para el predictor del modelo univariado}
+cat("Prueba de curvatura para el predictor del modelo univariado:\n")
+residualPlots(modelo, type="rstandard", fitted = FALSE,
+              smooth = list(col="red"))
+
+```
+
+```{r Prueba de curvatura para los predictores del modelo multivariado}
+cat("Prueba de curvatura para los predictores del modelo multivariado:\n")
+residualPlots(modelo3, type = "rstandard", smooth = list(col="magenta"))
+
+```
+**Conclusión de las pruebas de curvatura (linealidad) sobre los predictores:**
+
+Modelo univariado (con Waist.Girth):
+El valor p (0.8485) es muy alto, lo que indica que no hay evidencia estadísticamente significativa de curvatura en la relación entre la variable Waist.Girth y el logit de la variable respuesta. En otras palabras, no se detecta una violación del supuesto de linealidad en el logit para este predictor. Esta variable puede considerarse adecuadamente modelada de forma lineal.
+
+Modelo multivariado (con Waist.Girth, Thigh.Girth, Wrist.Minimum.Girth y Height):
+Para cada uno de los predictores (Waist.Girth, Thigh.Girth, Height, Wrist.Minimum.Girth), los valores p (0.8402, 0.6457, 0.4191, 0.1781 respectivamente) también indican ausencia de evidencia significativa de curvatura. Esto sugiere que ninguna de estas variables muestra un patrón curvo o no lineal importante respecto a la respuesta en el modelo. Cada predictor parece adecuadamente capturado mediante una relación lineal en el logit.
+
+#### Casos sobre influyentes
+
+Revisemos los residuos de student, apalancamiento y distancias de cook (representada por las áreas de los círculos)
+
+Modelo univariado:
+
+```{r Casos sobre influyentes}
+modelo_inf_plot <- influencePlot(modelo, id = list(n=3))
+
+cat("Casos influyentes para el modelo simple:\n")
+print(modelo_inf_plot)
+```
+Notamos que el caso 10, 11,61, 71, 131 y 341 podrían considerarse problemáticos por la distancia de Cook que presentan. Para evaluar estos utilizaremos la función `compareCoefs`
+
+```{r Análisis de casos problematicos para el modelo simple}
+modelo_inf_ids <- as.integer(rownames(modelo_inf_plot))
+
+modelo_comp_f <- function(s) {
+  mat <- eval(bquote(compareCoefs(modelo, update(modelo,subset = -.(s)),print=FALSE)))
+  rownames(mat) <- paste(rownames(mat), "Sin el caso", s)
+  invisible(mat)
+}
+
+modelo_comp_list <- lapply(modelo_inf_ids,modelo_comp_f)
+modelo_comp <- do.call(rbind, modelo_comp_list)
+
+# Agrego cambio porcentual
+Cambio <- abs((modelo_comp[, 1]-modelo_comp[, 3])/modelo_comp[,1]) * 100
+modelo_comp <- cbind(modelo_comp, Cambio)
+
+
+cat("Comparación de modelos univariados con y sin el caso problemático:\n")
+printCoefmat(modelo_comp, digits = 8)
+
+```
+
+Podemos ver que ninguno de los casos provoca cambios en los coeficientes mucho mayores que los demás, por lo tanto, no se debería eliminar ningún caso, cabe resaltar que el caso 61 y 71 es el que provoca los mayores cambios, por lo que si bien no es significativo frente a los demás probamos el modelo eliminándolo
+
+```{r Eliminar casos problemáticos}
+
+modelo <- update(modelo, subset = -c(131))
+cat("Modelo de regresión logística simple actualizado\n")
+print(summary(modelo))
+```
+**Ahora repetimos el proceso para el caso del modelo multivariado**
+
+```{r Casos sobre influyentes M}
+modelo3_inf_plot <- influencePlot(modelo3, id = list(m = 3))
+
+cat("Casos notorios para el modelo de RLogitM:\n")
+print(modelo3_inf_plot)
+# 10, 11, 22, 181
+```
+Notamos que el caso 10, 11, 22 y 181 **podrían** considerarse problemáticos por la distancia de Cook que presentan. Para evaluar estos utilizaremos la función `compareCoefs` nuevamente
+
+```{r Análisis de casos problematicos para el modelo multiple}
+modelo3_inf_ids <- as.integer(rownames(modelo3_inf_plot))
+
+modelo3_comp_f <- function(s) {
+  mat <- eval(bquote(compareCoefs(modelo3, update(modelo3,subset = -.(s)),print=FALSE)))
+  rownames(mat) <- paste(rownames(mat), "Sin el caso", s)
+  invisible(mat)
+}
+
+modelo3_comp_list <- lapply(modelo3_inf_ids,modelo3_comp_f)
+modelo3_comp <- do.call(rbind, modelo3_comp_list)
+
+# Agrego cambio porcentual
+Cambio <- abs((modelo3_comp[, 1]-modelo3_comp[, 3])/modelo3_comp[,1]) * 100
+modelo3_comp <- cbind(modelo3_comp, Cambio)
+
+cat("Comparación de modelos multivariados con y sin el caso problemático:\n")
+printCoefmat(modelo3_comp, digits = 2)
+
+```
+La comparación muestra que remover la mayoría de los casos no altera de manera significativa los coeficientes (cambios de 0% a aproximadamente 1%). Sin embargo, eliminar el caso 22 produce los mayores cambios porcentuales, llegando hasta un 2.7% en las estimaciones. Esto indica que el caso 47 es el más influyente y su remoción sería la más conveniente para mejorar el ajuste del modelo.
+
+Los otros casos (10, 11, 181) muestran cambios muy cercanos a cero en los coeficientes al ser removidos, lo que indica que su influencia sobre el modelo es mínima. Por el contrario, el caso 22 genera cambios porcentuales notables (superiores al 0.5%) en varios coeficientes. Esta diferencia de impacto sugiere que el caso 22 es claramente el más influyente y problemático, y por lo tanto, su eliminación es la que más podría beneficiar la mejora del modelo.
+
+```{r Eliminar casos problemáticos M}
+
+modelo3 <- update(modelo3, subset = -c(22))
+cat("Modelo de regresión logística múltiple actualizado\n")
+print(summary(modelo3))
+```
+
+Con estos cambios realizados logramos mejorar los modelos.
+
+### 8- Usando código estándar (es decir, sin usar el paquete `caret`), evaluar el poder predictivo de los modelos con los datos de las 50 personas que no se incluyeron en su construcción en términos de sensibilidad y especificidad.
+
+```{r pruebas}
+
+#### Evaluación Modelo Univariado (modelo) ####
+# Obtener probabilidades predichas
+pred_prob_uni <- predict(modelo, newdata = datosPrueba, type = "response")
+
+# Asignar clase predicha en base al umbral 0.5
+pred_class_uni <- ifelse(pred_prob_uni >= 0.5, 1, 0)
+
+# Matriz de confusión
+cm_uni <- table("Observado" = datosPrueba$EN, "Predicho" = pred_class_uni)
+cat("Matriz de confusión - Modelo Univariado:\n")
+print(cm_uni)
+
+# Cálculo de sensibilidad y especificidad
+TP_uni <- cm_uni["1", "1"]
+FN_uni <- cm_uni["1", "0"]
+TN_uni <- cm_uni["0", "0"]
+FP_uni <- cm_uni["0", "1"]
+
+sensibilidad_uni <- TP_uni / (TP_uni + FN_uni)
+especificidad_uni <- TN_uni / (TN_uni + FP_uni)
+
+cat("\n--- Modelo Univariado ---\n")
+cat("Sensibilidad:", sensibilidad_uni, "\n")
+cat("Especificidad:", especificidad_uni, "\n\n")
+
+
+#### Evaluación Modelo Multivariado (modelo3) ####
+# Obtener probabilidades predichas
+pred_prob_multi <- predict(modelo3, newdata = datosPrueba, type = "response")
+
+# Asignar clase predicha en base al umbral 0.5
+pred_class_multi <- ifelse(pred_prob_multi >= 0.5, 1, 0)
+
+# Matriz de confusión
+cm_multi <- table("Observado" = datosPrueba$EN, "Predicho" = pred_class_multi)
+cat("Matriz de confusión - Modelo Multivariado:\n")
+print(cm_multi)
+
+# Cálculo de sensibilidad y especificidad
+TP_multi <- cm_multi["1", "1"]
+FN_multi <- cm_multi["1", "0"]
+TN_multi <- cm_multi["0", "0"]
+FP_multi <- cm_multi["0", "1"]
+
+sensibilidad_multi <- TP_multi / (TP_multi + FN_multi)
+especificidad_multi <- TN_multi / (TN_multi + FP_multi)
+
+cat("\n--- Modelo Multivariado ---\n")
+cat("Sensibilidad:", sensibilidad_multi, "\n")
+cat("Especificidad:", especificidad_multi, "\n")
+
+```
+A partir de estos resultados se puede concluir que:
+
+- Ambos modelos presentan la misma sensibilidad (0.84), es decir, ambos identifican correctamente el 84% de los casos de sobrepeso (positivos).
+
+- En cuanto a la especificidad, el modelo multivariado supera al univariado. Mientras el modelo univariado tiene una especificidad de 0.80 (fallando en un 20% de los casos negativos), el modelo multivariado alcanza una especificidad de 1.0, lo cual significa que identifica correctamente todos los casos no sobrepeso (no presenta falsos positivos).
+
+En otras palabras, aunque ambos modelos son igualmente buenos detectando a las personas con sobrepeso, el modelo multivariado es más preciso diferenciando a las personas sin sobrepeso. Esto sugiere que el modelo multivariado ofrece un mejor rendimiento global y una mayor confiabilidad al clasificar a los individuos de la muestra.
+
+### Referencias:
+
+*  Bauce G. La circunferencia de cintura: un indicador de sobrepeso y obesidad.Rev. Digit Postgrado.2023;12(2):e365.doi:10.37910/RDP.2023.12.2.e365

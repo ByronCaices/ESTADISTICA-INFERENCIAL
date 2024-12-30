@@ -1,0 +1,732 @@
+---
+title: "EP11-respuesta-equipo-2"
+date: "2024-12-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+options(repos = c(CRAN = "https://cran.rstudio.com/"))
+
+if (!requireNamespace('tidyverse', quietly = TRUE)){
+  install.packages('tidyverse')
+}
+library(tidyverse)
+if (!requireNamespace('ggpubr', quietly = TRUE)){
+  install.packages('ggpubr')
+}
+library(car)
+if (!requireNamespace('car', quietly = TRUE)){
+  install.packages('car')
+}
+library(ggpubr)
+if (!requireNamespace('ez', quietly = TRUE)){
+  install.packages('ez')
+}
+library(ez)
+if (!requireNamespace('RVAideMemoire', quietly = TRUE)){
+  install.packages('RVAideMemoire')
+}
+library(RVAideMemoire)
+if (!requireNamespace('rcompanion', quietly = TRUE)){
+  install.packages('rcompanion')
+}
+library(rcompanion)
+if (!requireNamespace('dplyr', quietly = TRUE)){
+  install.packages('dplyr')
+}
+library(dplyr)
+if (!requireNamespace('WRS2', quietly = TRUE)){
+  install.packages('WRS2')
+}
+library(WRS2)
+if (!requireNamespace('caret', quietly = TRUE)){
+  install.packages('caret')
+}
+library(caret)
+if (!requireNamespace('leaps', quietly = TRUE)){
+  install.packages('leaps')
+}
+library(leaps)
+library(psych)
+```
+
+#### CONTEXTO
+#### Usando los datos de medidas anatómicas recolectados por Heinz et al. (2003) que ya conocimos en el ejercicio práctico anterior:
+
+```{r datos}
+datosGenerales <- read.csv2("EP09 Datos.csv")
+head(datosGenerales)
+```
+
+#### Agregar variable EN e IMC.
+
+```{r IMC}
+datosGenerales[["IMC"]] = datosGenerales[["Weight"]] / ((datosGenerales[["Height"]]/100)^2)
+datosSobrepeso = datosGenerales %>% filter(IMC < 23.2)
+datosPesoNormal = datosGenerales %>% filter(IMC >= 23.2)
+datosSobrepeso[["EN"]] = 1
+datosPesoNormal[["EN"]] = 0
+```
+#### Definir la semilla a utilizar, que corresponde a los primeros cinco dígitos del RUN del integrante de mayor edad del equipo.
+```{r seed}
+set.seed(20915)
+```
+#### Seleccionar una muestra de 100 personas, asegurando que la mitad tenga estado nutricional “sobrepeso” y la otra mitad “no sobrepeso”.
+```{r datos2}
+datosSobrepeso = datosSobrepeso %>% sample_n(50, replace = FALSE)
+datosPesoNormal = datosPesoNormal %>% sample_n(50, replace = FALSE)
+
+datos = rbind(datosSobrepeso, datosPesoNormal)
+```
+#### Usando las herramientas del paquete leaps, realizar una búsqueda exhaustiva para seleccionar entre dos y ocho predictores que ayuden a estimar la variable Peso (Weight), obviamente sin considerar las nuevas variables IMC ni EN, y luego utilizar las funciones del paquete caret para construir un modelo de regresión lineal múltiple con los predictores escogidos y evaluarlo usando bootstrapping.
+```{r modelo}
+variable_a_predecir = "Weight"
+variables_prohibidas = c("EN", "IMC")
+
+modelo_dataframe<- datos %>% select(-(variables_prohibidas))
+modelo_formula <- formula(paste(variable_a_predecir, ".", sep = " ~ "))
+modelo_sets <- regsubsets(modelo_formula, data = modelo_dataframe, nbest = 2, nvmax = 8, method = "exhaustive")
+modelo_sets_resumen <- summary(modelo_sets)
+modelo_sets_i_mejor <- which.min(modelo_sets_resumen[["bic"]])
+modelo_variables <- names(which(modelo_sets_resumen[["which"]][modelo_sets_i_mejor, ])[-1])
+
+plot(modelo_sets)
+
+
+cat("\nMejores predictores para el modelo de RLM 1:\n")
+print(modelo_variables)
+```
+Usamos el paquete car y definimos la cantidad de repeticiones para bootstrap
+```{r modelo 2}
+texto <- paste(modelo_variables, collapse = " + ")
+modelo_formula <- formula(paste(variable_a_predecir, texto, sep = " ~ "))
+
+B = 1000
+modelo_etrenado<- train(modelo_formula, data = modelo_dataframe, method = "lm",
+                    trControl = trainControl(method = "boot", number = B))
+modelo_final <- modelo_etrenado[["finalModel"]]
+
+cat("Modelo de modelo de RLM 1:\n")
+print(summary(modelo_final))
+```
+**Evaluar modelo usando bootstrapping**
+
+Verificar condiciones para la confiabilidad del modelo
+
+1- La variable de respuesta debe ser cuantitativa y continua
+
+Como la variables de respuesta es peso, se cumple esta condición
+
+2- Los predictores deben ser cuantitativos o dicotómicos
+
+Como las variables elegidas fueron Shoulder.Girth, Waist.Girth, Chest.Girth, Hip.Girth, Thigh.Girth, Forearm.Girth, Knee.Girth y Height son medidas, también se cumple esta condición
+
+3- Los predictores deben tener algún grado de variabilidad
+
+Como se puede observar, ningún predictor tiene desviación estándar 0
+
+Multicolinealidad
+Verificamos la multicolinealidad antes de seguir evaluando el modelo
+```{r}
+cat("Multicolinealidad\n")
+print(vif(modelo_final))
+```
+Para evitar problemas eliminamos el predictor Chest.Girth, ya que tiene un VIF muy preocupante y volvemos a generar el modelo y evaluar la multicolinealidad
+```{r}
+modelo_variables = modelo_variables[-2]
+texto <- paste(modelo_variables, collapse = " + ")
+modelo_formula <- formula(paste(variable_a_predecir, texto, sep = " ~ "))
+
+B = 1000
+modelo_etrenado<- train(modelo_formula, data = modelo_dataframe, method = "lm",
+                    trControl = trainControl(method = "boot", number = B))
+modelo_final <- modelo_etrenado[["finalModel"]]
+
+cat("Modelo de modelo de RLM 1:\n")
+print(summary(modelo_final))
+
+print(vif(modelo_final))
+```
+Como se puede ver el predictor Shoulder.Girth  tiene un VIF preocupante por lo que repetimos el procedimiento anterior con esta variable
+```{r}
+modelo_variables = modelo_variables[-1]
+texto <- paste(modelo_variables, collapse = " + ")
+modelo_formula <- formula(paste(variable_a_predecir, texto, sep = " ~ "))
+
+B = 1000
+modelo_etrenado<- train(modelo_formula, data = modelo_dataframe, method = "lm",
+                    trControl = trainControl(method = "boot", number = B))
+modelo_final <- modelo_etrenado[["finalModel"]]
+
+cat("Modelo de modelo de RLM 1:\n")
+print(summary(modelo_final))
+
+print(vif(modelo_final))
+
+```
+Como se puede ver el predictor Hip.Girth  tiene un VIF casi preocupante por lo que repetimos el procedimiento anterior con esta variable
+```{r}
+modelo_variables = modelo_variables[-2]
+texto <- paste(modelo_variables, collapse = " + ")
+modelo_formula <- formula(paste(variable_a_predecir, texto, sep = " ~ "))
+
+B = 1000
+modelo_etrenado<- train(modelo_formula, data = modelo_dataframe, method = "lm",
+                    trControl = trainControl(method = "boot", number = B))
+modelo_final <- modelo_etrenado[["finalModel"]]
+
+cat("Modelo de modelo de RLM 1:\n")
+print(summary(modelo_final))
+
+print(vif(modelo_final))
+
+```
+Ahora los predictores tienen VIF aceptables, además que podemos observar que el modelo reduce la varianza en un 96,5% aproximadamente respecto al modelo nulo
+
+Además procedemos a verificar las demás condiciones a partir del gráfico de residuos
+
+```{r rp}
+modelo_lm = lm(modelo_formula, modelo_dataframe)
+residualPlots(modelo_lm)
+ncvTest(modelo_lm)
+```
+Podemos ver que la variable Waist.Girth y Knee.Girth obtiene un resultado significativo en la prueba de curvatura por lo que procedemos a graficar las relaciones de estas variables para comprobar la linealidad de estas variables respecto a la variable de respuesta
+
+```{r cr}
+crPlots(modelo_lm)
+```
+Se ven dentro de lo normal, considerando que en el gráfico de Knee.Girth la curvatura puede estar producida por los valores extremos influyentes.
+
+Homocedasticidad
+```{r homo}
+cat("\nhomocedasticidad Waist.Girth\n")
+ncvTest(lm(Weight ~ Waist.Girth, modelo_dataframe))
+cat("\nhomocedasticidad Thigh.Girth\n")
+ncvTest(lm(Weight ~ Thigh.Girth, modelo_dataframe))
+cat("\nhomocedasticidad Forearm.Girth\n")
+ncvTest(lm(Weight ~ Forearm.Girth, modelo_dataframe))
+cat("\nhomocedasticidad Knee.Girth\n")
+ncvTest(lm(Weight ~ Knee.Girth, modelo_dataframe))
+cat("\nhomocedasticidad Height\n")
+ncvTest(lm(Weight ~ Height, modelo_dataframe))
+```
+```{r graficos homo}
+marginalModelPlots(modelo_lm, sd = TRUE, 
+                   id = list(method = "r", n = 3, cex = 0.7, location = "lr"),
+                   col = "steelblue", pch = 20, col.line = c("steelblue","red"))
+```
+A partir de los gráficos y del ncvTest podemosobservar que e la mayoría de las variables se obtiene un nivel adecuado de homocedasticidad, a excepcion de la variable Forearm.Girth, pero posiblemente este resultado se ve afectado por lo valores atípicos que se pueden ver en el gráfico de la variable mencionada anteriormente
+```{r atípicos}
+modelo_influencia = influencePlot(modelo_lm, id = list(n = 3))
+print(modelo_influencia)
+
+```
+Como se puede observar las observaciones 92 y 96 están bastante alejados y presentan una distancia de Cook alta, además, las observaciones 69, 71 y 79 poseen un alto hat value por lo que también pueden estar influenciando el modelo, cabe notar que ninguna observación está fuera de las 3 metricas, para evaluar el efecto de estas observaciones usaremos la función compareCoefs().
+
+```{r}
+influencia_ids <- as.integer(rownames(modelo_influencia))
+rlm1_comp_f <- function(s) {
+  mat <- eval(bquote(compareCoefs(modelo_lm, update(modelo_lm, subset = -.(s)), print = FALSE)))
+  rownames(mat) <- paste(rownames(mat), "sin caso", s)
+  invisible(mat)
+}
+comparacion <- lapply(influencia_ids, rlm1_comp_f)
+modelo_comparacion <- do.call(rbind, comparacion)
+
+# Agregamos el cambio porcentual y encontramos el 25% superior
+cambio_coeficiente <- abs((modelo_comparacion[, 1]-modelo_comparacion[, 3])/modelo_comparacion[, 1]) * 100
+rlm1_comp <- cbind(modelo_comparacion, Cambio = cambio_coeficiente)
+rlm1_coef_cambio_umb <- quantile(cambio_coeficiente, 0.75)
+
+cat("Observaciones que generan cambios importantes de los coeficientes del modelo de RLM 1:\n")
+printCoefmat(rlm1_comp[cambio_coeficiente >= rlm1_coef_cambio_umb, ])
+```
+Como podemos observar, el caso 71 es el más influyente debido a que provoca los mayores niveles de cambio, depués es seguido por el caso 96 y luego por el 92 y 100, por lo que los eliminamos de los datos
+
+```{r}
+modelo_dataframe = modelo_dataframe[-c(71,96, 92, 100),]
+modelo_lm = lm(modelo_formula, modelo_dataframe)
+
+modelo_etrenado<- train(modelo_formula, data = modelo_dataframe, method = "lm",
+                    trControl = trainControl(method = "boot", number = B))
+modelo_final <- modelo_etrenado[["finalModel"]]
+
+cat("Modelo de modelo de RLM 1 sin valores influyentes:\n")
+print(summary(modelo_final))
+```
+Ahora toca recomprobar las condiciones para comprobar que el modelo sigue cumpliendo las condiciones de validación.
+
+Linealidad de los predictores con la respuesta
+
+Para comprobar esta condición podemos usar una prueba de curvatura o bien crPlots, comprobemos con los dos.
+```{r}
+residualPlots(modelo_lm)
+crPlots(modelo_lm)
+```
+Con los valores de la prueba de curvatura entregados por la función residualPlots() observamos que la variable Waist.Girth tiene problemas con la curvatura, pero al ver el gráfico de esta variable de la función crPlots(), observamos que esta curvatura puede estar dada por otros valores atípicos que no fueron eliminados, ya que quitando estos valores se puede observar que si se observa una relación aproximadamente lineal.
+
+Homocedasticidad
+
+Para comprobar esta condición podemos usar marginalModelPlots
+```{r homo 2}
+cat("\nhomocedasticidad Waist.Girth\n")
+ncvTest(lm(Weight ~ Waist.Girth, modelo_dataframe))
+cat("\nhomocedasticidad Thigh.Girth\n")
+ncvTest(lm(Weight ~ Thigh.Girth, modelo_dataframe))
+cat("\nhomocedasticidad Forearm.Girth\n")
+ncvTest(lm(Weight ~ Forearm.Girth, modelo_dataframe))
+cat("\nhomocedasticidad Knee.Girth\n")
+ncvTest(lm(Weight ~ Knee.Girth, modelo_dataframe))
+cat("\nhomocedasticidad Height\n")
+ncvTest(lm(Weight ~ Height, modelo_dataframe))
+marginalModelPlots(modelo_lm, sd = TRUE, 
+                   id = list(method = "r", n = 3, cex = 0.7, location = "lr"),
+                   col = "steelblue", pch = 20, col.line = c("steelblue","red"))
+```
+Vemos que en todos los gráficos se ajusta bien la relación observada frente a la brindada por el modelom además de mostrar una varianza relativamente constante en cada caso.
+
+Independencia de los residuos
+
+Para esto usamos la función durbinWatsonTest que entrega el valor de autocorrelación del modelo
+
+```{r auto}
+print(durbinWatsonTest(modelo_lm))
+```
+Obtenemos que no hay evidencia suficiente para sospechar de una posible autocorrelación
+
+Multicolinealidad
+
+Para esta condición utilizamos la función vif
+
+```{r multi}
+print(vif(modelo_final))
+```
+Observamos que ninguna variable presenta un vif preocupante, por lo que no hay evidencia para sospechar de una posible multicolinealidad
+
+Y como las comprobaciones fueron realizadas sobre el modelo sin casos influyentes procedemos a evaluar el desempeño del modelo
+
+##### Desempeño
+Veamos los niveles de error cometidos por el modelo de RLM 1 que hemos conseguido, analizando un histograma de los errores (RMSE) en cada repetición del bootstrapping y el reporte del error promedio generado por la función train().
+
+```{r}
+error_dataframe <- data.frame(RMSE = modelo_etrenado[["resample"]][["RMSE"]])
+error_p <- gghistogram(error_dataframe, x = "RMSE", bins = 30)
+print(error_p)
+
+
+cat("Rendimiento del modelo de RLM 1:\n")
+print(modelo_etrenado[["results"]])
+print(describe(error_dataframe, trim = 0, skew = FALSE, IQR = TRUE), digits = 3)
+```
+Observamos que el modelo posee una bondad de ajuste de 0.954 aproximadamente, lo que es bastante bueno, además vemos que posee un error promedio de 2.5 ± 0.253 y vemos que la distribución de error es aproximadamente simétrica también.
+
+#### Haciendo un poco de investigación sobre el paquete caret, en particular cómo hacer Recursive Feature Elimination (RFE), construir un modelo de regresión lineal múltiple para predecir la variable IMC que incluya entre 10 y 20 predictores, seleccionando el conjunto de variables que maximice R2 y que use cinco repeticiones de validación cruzada de cinco pliegues para evitar el sobreajuste (obviamente no se debe considerar las variables Peso, Estatura ni estado nutricional –Weight, Height, EN respectivamente).
+```{r modelo}
+set.seed(20915)
+variable_a_predecir = "IMC"
+variables_prohibidas = c("EN", "Height", "Weight")
+
+modelo_dataframe <- datos |> select(-all_of(variables_prohibidas))
+modelo_formula <- formula(paste(variable_a_predecir, ".", sep = " ~ "))
+modelo_control <- rfeControl(functions = lmFuncs, method = "repeatedcv",
+                           number = 5, repeats = 5, verbose = FALSE)
+
+modelo_rfe <- rfe(modelo_formula, data = modelo_dataframe, rfeControl = modelo_control, sizes = 10:20, metric = "Rsquared")
+modelo <- modelo_rfe[["fit"]]
+
+#Graficar el proceso
+plot <- ggplot(modelo_rfe) + theme_pubr()
+print(plot)
+```
+Vemos que el modelo con mayor r cuadrado se obtiene con más de 20 predictores, por lo que nos quedamos con el modelo de 18, ya que es el con mayor r cuadrado dentro de las restricciones.
+
+```{r}
+cat("\nModelo obtenido con RFE:")
+print(summary(modelo))
+```
+
+Evaluamos Multicolinealidad para ver que variables es mejor mantener en el modelo
+```{r multi}
+print(vif(modelo))
+```
+Observamos que muchas variables tienen vif mayor a 10, donde Forearm.Girth es la variable con mayor vif por lo que la quitamos del modelo
+```{r}
+variables <- predictors(modelo)[-8]
+variables_texto <- paste(variables, collapse = " + ")
+modelo_formula <- formula(paste(variable_a_predecir, variables_texto, sep = " ~ "))
+
+modelo_etrenado <- train(modelo_formula, data = modelo_dataframe, method = "lm",
+                    trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5))
+modelo<- modelo_etrenado[["finalModel"]]
+
+cat("Nuevos factores de inflación de la varianza:\n")
+print(vif(modelo))
+```
+La variable Chest.Girth tiene vif inaceptable y el más alto por lo que la eliminamos también
+```{r}
+variables <- predictors(modelo)[-12]
+variables_texto <- paste(variables, collapse = " + ")
+modelo_formula <- formula(paste(variable_a_predecir, variables_texto, sep = " ~ "))
+
+modelo_etrenado <- train(modelo_formula, data = modelo_dataframe, method = "lm",
+                    trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5))
+modelo<- modelo_etrenado[["finalModel"]]
+
+cat("Nuevos factores de inflación de la varianza:\n")
+print(vif(modelo))
+```
+La variable Wrist.Minimum.Girth  tiene vif inaceptable y el más alto por lo que la eliminamos también
+```{r}
+variables <- predictors(modelo)[-2]
+variables_texto <- paste(variables, collapse = " + ")
+modelo_formula <- formula(paste(variable_a_predecir, variables_texto, sep = " ~ "))
+
+modelo_etrenado <- train(modelo_formula, data = modelo_dataframe, method = "lm",
+                    trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5))
+modelo<- modelo_etrenado[["finalModel"]]
+
+cat("Nuevos factores de inflación de la varianza:\n")
+print(vif(modelo))
+```
+
+La variable  Hip.Girth   tiene vif preocupante y el más alto por lo que la eliminamos también
+```{r}
+variables <- predictors(modelo)[-14]
+variables_texto <- paste(variables, collapse = " + ")
+modelo_formula <- formula(paste(variable_a_predecir, variables_texto, sep = " ~ "))
+
+modelo_etrenado <- train(modelo_formula, data = modelo_dataframe, method = "lm",
+                    trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5))
+modelo<- modelo_etrenado[["finalModel"]]
+
+cat("Nuevos factores de inflación de la varianza:\n")
+print(vif(modelo))
+```
+La variable   Elbows.diameter   tiene vif preocupante y el más alto por lo que la eliminamos también
+```{r}
+variables <- predictors(modelo)[-7]
+variables_texto <- paste(variables, collapse = " + ")
+modelo_formula <- formula(paste(variable_a_predecir, variables_texto, sep = " ~ "))
+
+modelo_etrenado <- train(modelo_formula, data = modelo_dataframe, method = "lm",
+                    trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5))
+modelo<- modelo_etrenado[["finalModel"]]
+
+cat("Nuevos factores de inflación de la varianza:\n")
+print(vif(modelo))
+```
+La variable   Waist.Girthr   tiene vif preocupante y el más alto por lo que la eliminamos también
+```{r}
+variables <- predictors(modelo)[-8]
+variables_texto <- paste(variables, collapse = " + ")
+modelo_formula <- formula(paste(variable_a_predecir, variables_texto, sep = " ~ "))
+
+modelo_etrenado <- train(modelo_formula, data = modelo_dataframe, method = "lm",
+                    trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5))
+modelo<- modelo_etrenado[["finalModel"]]
+
+cat("Nuevos factores de inflación de la varianza:\n")
+print(vif(modelo))
+```
+Finalmente obtenemos niveles vif relativamente aceptables por lo que dejamos el modelo así, con 12 variables.
+```{r}
+print(summary(modelo))
+```
+Vemos que el modelo reduce un 75,9% la desviación con resoecto al modelo nulo y esta reducción es significativa, debido al valor p obtenido.
+
+Comprobación de condiciones
+
+1- La variable de respuesta debe ser cuantitativa y continua
+
+Como la variables de respuesta es IMC, se cumple esta condición
+
+2- Los predictores deben ser cuantitativos o dicotómicos
+
+Como las variables elegidas fueron son medidas, también se cumple esta condición
+
+3- Los predictores deben tener algún grado de variabilidad
+
+Como se puede observar, ningúnpredictor tiene desviación estándar 0
+
+4- Relaciones lineales
+5- Residuos centrados en cero
+
+Para comprobar estas dos condiciones podemos usar residualPlots y crPlots.
+
+```{r}
+modelo_lm = lm(modelo_formula,modelo_dataframe)
+residualPlots(modelo_lm, linear = TRUE, ask = FALSE)
+
+crPlots(modelo_lm, ask = FALSE)
+```
+Podemos observar que todas las variables tienen ua relación aproximadamente lineal y pasan la prueba de curvatura a excepción de Gender, pero que la ser dicotomica es más común este hecho
+
+6- Homocedasticidad
+
+Usamos marginaModelPlots
+```{r}
+marginalModelPlots(modelo_lm, sd = TRUE, fitted = FALSE, ask = FALSE)
+```
+Los gráficos muestran un ajuste relativamente bueno, por lo que parece haber homocedasticidad
+
+7- Autocorrelación
+
+Usamos durbinWatsonTest.
+
+```{r}
+print(durbinWatsonTest(modelo_lm))
+```
+No parece haber evidencia para afirmar autocorrelación
+
+9- Casos influyentes
+
+```{r}
+casosInfluyentes = influencePlot(modelo_lm, id = list(n = 3))
+```
+Vemos que nuevamente el caso 92 y 96 están alejados y presentan alta distancia de Cook, además de que el caso 71 posee alto Hat.value, procedemos a ver el cambio de coeficientes eliminando estos casos
+
+```{r}
+influencia_ids <- as.integer(rownames(casosInfluyentes))
+rlm1_comp_f <- function(s) {
+  mat <- eval(bquote(compareCoefs(modelo_lm, update(modelo_lm, subset = -.(s)), print = FALSE)))
+  rownames(mat) <- paste(rownames(mat), "sin caso", s)
+  invisible(mat)
+}
+comparacion <- lapply(influencia_ids, rlm1_comp_f)
+modelo_comparacion <- do.call(rbind, comparacion)
+
+# Agregamos el cambio porcentual y encontramos el 25% superior
+cambio_coeficiente <- abs((modelo_comparacion[, 1]-modelo_comparacion[, 3])/modelo_comparacion[, 1]) * 100
+rlm1_comp <- cbind(modelo_comparacion, Cambio = cambio_coeficiente)
+rlm1_coef_cambio_umb <- quantile(cambio_coeficiente, 0.75)
+
+cat("Observaciones que generan cambios importantes de los coeficientes del modelo de RLM 1:\n")
+printCoefmat(rlm1_comp[cambio_coeficiente >= rlm1_coef_cambio_umb, ])
+```
+Observamos que todos los casos listados producen cambios muy grandes por lo que los eliminamos.
+```{r}
+modelo_dataframe = modelo_dataframe[-c(2,67, 71, 92,96),]
+
+
+modelo_etrenado <- train(modelo_formula, data = modelo_dataframe, method = "lm",
+                    trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5))
+modelo<- modelo_etrenado[["finalModel"]]
+
+print(summary(modelo))
+```
+Se vuelve a comrpobar de la condición 4 en adelante
+
+4- Relaciones lineales
+5- Residuos centrados en cero
+
+Para comprobar estas dos condiciones podemos usar  crPlots.
+
+```{r}
+modelo_lm = lm(modelo_formula, modelo_dataframe)
+
+crPlots(modelo_lm, ask = FALSE)
+```
+Podemos observar que todas las variables tienen ua relación aproximadamente lineal y pasan la prueba de curvatura a excepción de Chest.diameter, pero puede deberse a unos valores atípicos no eliminados
+
+6- Homocedasticidad
+
+Usamos marginaModelPlots
+```{r}
+marginalModelPlots(modelo_lm, sd = TRUE, fitted = FALSE, ask = FALSE)
+```
+Los gráficos muestran un ajuste relativamente bueno, por lo que parece haber homocedasticidad
+
+7- Autocorrelación
+
+Usamos durbinWatsonTest.
+
+```{r}
+print(durbinWatsonTest(modelo_lm))
+```
+No parece haber evidencia suficiente para afirmar que hay autocorrelación
+
+8- Multicolinealidad
+
+```{r}
+print(vif(modelo))
+```
+Vemos que la variable Biacromial.diameter posee un vif preocupante, por lo que es mejor eliminarla
+
+```{r}
+variables <- predictors(modelo)[-4]
+variables_texto <- paste(variables, collapse = " + ")
+modelo_formula <- formula(paste(variable_a_predecir, variables_texto, sep = " ~ "))
+
+modelo_etrenado <- train(modelo_formula, data = modelo_dataframe, method = "lm",
+                    trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5))
+modelo<- modelo_etrenado[["finalModel"]]
+
+cat("Nuevos factores de inflación de la varianza:\n")
+print(vif(modelo))
+```
+Ahora poseen niveles aceptables
+
+Pasamos a comprobar el desempeño del modelo
+
+Desempeño
+```{r modelo}
+error_dataframe <- data.frame(RMSE = modelo_etrenado[["resample"]][["RMSE"]])
+error_p <- gghistogram(error_dataframe, x = "RMSE", bins = 5)
+print(error_p)
+
+
+cat("Rendimiento del modelo de RL:\n")
+print(modelo_etrenado[["results"]])
+print(describe(error_dataframe, trim = 0, skew = FALSE, IQR = TRUE), digits = 3)
+```
+
+Observamos que el modelo posee una bondad de ajuste de 0.954 aproximadamente, lo que es bastante bueno, además vemos que posee un error promedio de 1.54 ± 0.194 y vemos que la distribución de error es aproximadamente simétrica también.
+
+#### Usando RFE, construir un modelo de regresión logística múltiple para la variable EN que incluya el conjunto de predictores, entre dos y seis, que entregue la mejor curva ROC y que utilice validación cruzada dejando uno fuera para evitar el sobreajuste (obviamente no se debe considerar las variables Peso, Estatura –Weight y Height respectivamente– ni IMC).
+```{r modelo}
+datos = datos |> mutate(EN = ifelse(IMC < 23.2, "normal", "sobrepeso"))
+datos[["EN"]] <- factor(datos[["EN"]])
+
+variable_a_predecir = "EN"
+variables_prohibidas = c("Weight", "Height", "IMC")
+modeloLogist_dataframe <- datos |> select(-all_of(variables_prohibidas))
+modeloLogist_formula <- formula(paste(variable_a_predecir, ".", sep = " ~ "))
+
+lrFuncs[["summary"]] <- twoClassSummary
+modeloLogist_control <- rfeControl(functions = lrFuncs, method = "LOOCV", saveDetails = TRUE, returnResamp = "all", verbose = FALSE)
+modeloLogist_control_entrenamiento <- trainControl(method = "none", classProbs = TRUE,
+                                      summaryFunction = twoClassSummary)
+
+set.seed(20915)
+modeloLogist_rfe <- suppressWarnings(
+  rfe(modeloLogist_formula, data = modeloLogist_dataframe, sizes = 2:6, metric = "ROC",
+      rfeControl = modeloLogist_control, trControl = modeloLogist_control_entrenamiento)
+)
+modeloLogist <- modeloLogist_rfe[["fit"]]
+
+cat("Modelo de RLogitM obtenido con RFE:\n")
+print(summary(modeloLogist))
+```
+Podemos ver el proceso de búsqueda realizado por RFE.
+
+```{r}
+plot <- ggplot(modeloLogist_rfe) + theme_pubr()
+print(plot)
+```
+Vemos que el modelo con mejor curva de ROC contiene 6 predictores, por lo que nos quedamos con ese
+
+Procedemos a evaluar si el modelo comple con las condiciones para considerarse confiable
+
+Primero comprobamos multicolinealidad, para ver si el modelo está bien con 6 predictores o hay que eliminar alguno
+
+```{r}
+cat("Factores de inflación de la varianza:\n")
+print(vif(modeloLogist))
+```
+La variable Forearm.Girth posee un vif preocupante por lo que la eliminamos
+
+```{r modelo}
+variables <- predictors(modeloLogist)[-1]
+variables_texto <- paste(variables, collapse = " + ")
+modeloLogist_formula <- formula(paste(variable_a_predecir, variables_texto, sep = " ~ "))
+modeloLogist_control_entrenamiento <- trainControl(method = "LOOCV", classProbs = TRUE,
+                                      summaryFunction = twoClassSummary)
+
+modeloLogist_entrenado <- train(modeloLogist_formula, data = modeloLogist_dataframe, method = "glm", metric = "ROC",
+                       trControl = modeloLogist_control_entrenamiento)
+modeloLogist <- modeloLogist_entrenado[["finalModel"]]
+
+cat("Nuevos factores de inflación de la varianza:\n")
+print(vif(modeloLogist))
+
+modeloNulo_formula <- formula(paste(variable_a_predecir, "1", sep = " ~ "))
+modeloNulo <- glm(modeloNulo_formula, data = modeloLogist_dataframe, family = binomial(link = "logit"))
+print(anova(modeloNulo, modelo_glm))
+```
+Observamos que ahora el modelo tiene vifs aceptables, por lo que seguimos evaluando las condiciones
+
+1- Relacion lineal
+
+```{r}
+modelo_glm = glm(modeloLogist_formula, data = modeloLogist_dataframe, family = binomial(link = "logit"))
+residualPlots(modelo_glm, ask = FALSE)
+crPlots(modelo_glm, ask = FALSE)
+```
+Para todas las variables vemos buenos niveles de curvatura y apreciamos relaciones lineales en los gráficos de crPlots
+
+6- Casos influyentes
+
+```{r}
+casos_influyentes = influencePlot(modelo_glm)
+```
+Vemos que el caso 32 y 47 parecen estar alejados y tener una alta distancia de Cook, mientras que el caso 86 y 22 tienen un alto Hat value por lo que vemos su influencia en el modelo
+```{r}
+influencia_ids <- as.integer(rownames(casosInfluyentes))
+rlm1_comp_f <- function(s) {
+  mat <- eval(bquote(compareCoefs(modelo_glm, update(modelo_glm, subset = -.(s)), print = FALSE)))
+  rownames(mat) <- paste(rownames(mat), "sin caso", s)
+  invisible(mat)
+}
+comparacion <- lapply(influencia_ids, rlm1_comp_f)
+modelo_comparacion <- do.call(rbind, comparacion)
+
+# Agregamos el cambio porcentual y encontramos el 25% superior
+cambio_coeficiente <- abs((modelo_comparacion[, 1]-modelo_comparacion[, 3])/modelo_comparacion[, 1]) * 100
+rlm1_comp <- cbind(modelo_comparacion, Cambio = cambio_coeficiente)
+rlm1_coef_cambio_umb <- quantile(cambio_coeficiente, 0.75)
+
+cat("Observaciones que generan cambios importantes de los coeficientes del modelo de RLM 1:\n")
+printCoefmat(rlm1_comp[cambio_coeficiente >= rlm1_coef_cambio_umb, ])
+```
+Observamos que tanto el caso 2 como el 96 producen cambios relativamente altos, por lo que los eliminamos
+
+```{r}
+modeloLogist_dataframe <- modeloLogist_dataframe[-c(2,96), ]
+
+modeloLogist_entrenado <- train(modeloLogist_formula, data = modeloLogist_dataframe, method = "glm", metric = "ROC",
+                       trControl = modeloLogist_control_entrenamiento)
+modeloLogist <- modeloLogist_entrenado[["finalModel"]]
+
+cat("Modelo de \n")
+print(summary(modeloLogist))
+```
+Volvemos a comprobar las condiciones
+
+1- Relacion lineal
+
+```{r}
+modelo_glm = glm(modeloLogist_formula, data = modeloLogist_dataframe, family = binomial(link = "logit"))
+residualPlots(modelo_glm, ask = FALSE)
+crPlots(modelo_glm, ask = FALSE)
+```
+La curvatura sigue bien
+
+2- Autocorrelación
+
+```{r modelo}
+print(durbinWatsonTest(modelo_glm))
+```
+Observamos que lo más probable es que haya autocorrelación por lo que el modelo no es confiable
+
+Desempeño
+vemos el área de la curva de ROC y la matriz de confusión para evaluar el desempeño
+
+```{r}
+cat("Rendimiento del modelo de RLogitM:\n")
+print(modeloLogist_entrenado[["results"]])
+```
+Se ve un alto nivel de área bajo la curva
+
+```{r}
+contMat <- confusionMatrix(modeloLogist_entrenado[["pred"]][["pred"]], modeloLogist_entrenado[["pred"]][["obs"]])
+
+cat("Matriz de confusión del modelo de RLogitM:\n")
+print(contMat)
+```
+Finalmente se observa gracias a la matriz de confución, que en todos los indicadores de calidad del modelo logistico se obtienen valores sobre 80% por lo que se podría decir que el modelo es bueno prediciendo personas con estado nutricional normal
+
+#### Pronunciarse sobre la confiabilidad y el poder predictivo de los modelos obtenidos.
+
+Respecto a la confiabilidad de los modelos múltiples se puede decir que en la segunda iteración faltó volver a ver casos influyentes y su influencia en el modelo, por lo cual no se pueden considerar del todo confiables y respecto a su poder predictivo se observó que ambos tenian buenos niveles de error y desvición de esto por lo que tienen un nivel predictivo aceptable
+
+Con respecto al modelo logístico, este tambien tuvo problemas con los casos influyentes y en especial con la autocorrelación, por lo que el modelo no es nada confiable, a pesar de esto el modelo tiene un buen valor de área bajo la curva de ROC y además tiene buen porcentaje de precisión, sensibilidad, especificidad, etc por lo que de arreglar los problemas de confiabilidad, probablemente el modelo tiene una buena calidad predictiva si estos últimos valores mencionados no varian mucho
