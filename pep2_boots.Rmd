@@ -9,22 +9,21 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+```{r Definir semilla}
+library(car)
+library(dplyr)
+library(ggpubr)
+library(psych)
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+# Definimos semilla
+set.seed(1111)
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+# Leemos los datos
+datos <- read.csv("EI-2024-2-PE2-Datos-Forma-15.csv")
+str(datos)
 
-```{r cars}
-summary(cars)
+datos$macro_zona <- as.factor(datos$macro_zona)
+datos$franja <- as.factor(datos$franja)
+
+str(datos)
 ```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
