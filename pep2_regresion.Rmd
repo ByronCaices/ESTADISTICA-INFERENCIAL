@@ -72,18 +72,50 @@ cat("La variable seleccionada es: ",predictor)
 
 ```{r Ajuste del modelo}
 # Definimos modelo mínimo, en este caso modelo nulo
-modelo_rls <- lm(consumo ~ superf + horas_uso, data = datos_entren)
+modelo_nulo <- lm(consumo ~ 1, data = datos_entren)
 
 # Definimos modelo máximo, en este caso consideramos a todas las variables
-modelo_rlm_max <- lm(consumo ~ temp_ver + temp_inv + superf + 
-                       res_term + n_elec_gr + edad_elec + 
-                       n_ocup + ing_fam + horas_uso + 
-                       macro_zona + franja,
-                    data = datos_entren)
+modelo_rlm_max <- lm(consumo ~ . ,data = datos_entren)
 
-modelo_rlm <- step(modelo_rls, scope = list(lower = modelo_rls, upper = modelo_rlm_max),
+modelo_rlm <- step(modelo_nulo, scope = list(lower = modelo_nulo, upper = modelo_rlm_max),
                direction = "both",
                test = "F", trace = 1)
 
+# Mostrar los coeficientes del modelo conseguido
+cat("\nModelo obtenido:\n")
+print(modelo_rlm[["coefficients"]])
+```
+
+Notamos que se seleccionaron 7 variables cuando debimos obtener entre 2 y 5 por lo que tendremos que eliminar dos de las que ya están agregadas y esto lo haremos mediante una eliminacion hacia atrás a la variable que tenga el menor F-value
+
+En este caso notamos que sucede con res_term por lo que lo quitaremos del modelo
+
+```{r}
+# Actualizamos el modelo quitando res_term
+modelo_rlm <- update(modelo_rlm, . ~ . - res_term)
 print(summary(modelo_rlm))
 ```
+
+Notamos que ahora correspondería quitar n_elec_gr
+
+```{r}
+# Actualizamos el modelo quitando res_term
+modelo_rlm <- update(modelo_rlm, . ~ . - n_elect_gr)
+print(summary(modelo_rlm))
+```
+
+y con esto ya cumplimos con que el modelo posee entre 2 y 5 predictores
+
+---
+
+Evaluando la confiabilidad del modelo conseguido...
+
+  1. Que no existan niveles inaceptables de multicolineadlidad
+  2. Prueba de curvatura
+  3. Normalidad de los residuos
+  4. Prueba de homocedasticidad
+  5. Prueba de independecia de los residuos
+  6. Revisar que relaciones entre predictores y var de rpta sean aproximadamente lineales
+
+
+
