@@ -105,4 +105,12 @@ abline(v = diff_obs, col = "red", lwd = 2, lty = 2)  # Línea para la diferencia
 
 ```
 
+Ahora con las permutaciones realizadas, calculamos el p-value para contrastar las hipótesis:
+```{r}
+p_value <- mean(abs(diff_permuted) >= abs(diff_obs))
+
+cat("P-valor:", p_value, "\n")
+```
+
+Como vemos, obtenemos un p-value de 0.53, como estamos utilizando un intervalo de confianza del 95%, y el p-value es mayor a 0.05, no podemos rechazar la hipótesis nula. Por lo tanto, no hay evidencia suficiente para afirmar que la proporción de viviendas DFL2 que pagan el "cargo por sobreconsumo" en la macrozona centro es diferente a la proporción en la macrozona sur.
 
