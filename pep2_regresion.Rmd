@@ -23,18 +23,37 @@ datos <- read.csv("EI-2024-2-PE2-Datos-Forma-15.csv")
 
 # Con la funcion str verificamos que el tipo de datos esté correcto
 str(datos)
-# Notamos que macro_zona y franja hay que convertirlos a factores puesto que son variables categoricas
 
+# Notamos que macro_zona y franja hay que convertirlos a factores puesto que son variables categoricas
 datos$macro_zona <- as.factor(datos$macro_zona)
 datos$franja <- as.factor(datos$franja)
 str(datos)
-
 
 # Filtramos los datos
 
 #datos <- datos %>% filter(Gender == 1) %>% select(-Gender) %>% sample_n(100, replace = FALSE)
 # De datos selecciona hombres, descarta la columna Gender y selecciona 100 sin reemplazo
 
-#datos_entren <- datos[1:70,] # fila 1 a 70 y todas las columnas
-#datos_prueba <- datos[71:100,]
+datos_entren <- datos[1:70,] # fila 1 a 70 y todas las columnas
+datos_prueba <- datos[71:100,]
+```
+
+Con los datos ya filtrados preparamos la variable de respuesta y los predictores
+
+```{r Ajuste del modelo}
+# Definimos modelo mínimo, en este caso modelo nulo
+modelo_rls <- lm(consumo ~ 1, data = datos_entren)
+
+# Definimos modelo máximo, en este caso consideramos a todas las variables
+modelo_rlm_max <- lm(consumo ~ temp_ver + temp_inv + superf + 
+                       res_term + n_elec_gr + edad_elec + 
+                       n_ocup + ing_fam + horas_uso + 
+                       macro_zona + franja,
+                    data = datos_entren)
+
+modelo_rlm <- step(rls, scope = list(lower = modelo_rls, upper = modelo_rlm_max),
+               direction = "both",
+               test = "F", trace = 1)
+
+print(summary(modelo_rlm))
 ```
