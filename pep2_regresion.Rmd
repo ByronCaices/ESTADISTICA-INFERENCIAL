@@ -204,3 +204,12 @@ crPlots(modelo_rlm,
 ```
 
 Ahora verifiquemos nuevamente
+
+```{r Ahora verifiquemos la varianza e independencia de los residuos}
+cat("Prueba de varianza del error no constante:\n")
+ncvTest(modelo_rlm2)
+
+cat("\nIndependencia de los residuos\n")
+print(durbinWatsonTest(modelo_rlm2))
+```
+
