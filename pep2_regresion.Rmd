@@ -100,7 +100,7 @@ Notamos que ahora correspondería quitar n_elec_gr
 
 ```{r}
 # Actualizamos el modelo quitando res_term
-modelo_rlm <- update(modelo_rlm, . ~ . - n_elect_gr)
+modelo_rlm <- update(modelo_rlm, . ~ . - n_elec_gr)
 print(summary(modelo_rlm))
 ```
 
@@ -117,5 +117,90 @@ Evaluando la confiabilidad del modelo conseguido...
   5. Prueba de independecia de los residuos
   6. Revisar que relaciones entre predictores y var de rpta sean aproximadamente lineales
 
+```{r Que no existan niveles inaceptables de multicolineadlidad}
+cat("Factores de inflación de la varianza:\n")
+print(vif(modelo_rlm))
+cat("Estadísticos de tolerancia:\n")
+print(1 / vif(modelo_rlm))
+```
+Vemos que hay indicios de multicolinealidad problemática en 2 casos:
+
+- horas_uso
+- superf
+
+Eliminemos la que presenta el mayor valor y luego sigamos evaluando.
+
+```{r Eliminemos el que presenta multicolinealidad moderada}
+rlm <- update(modelo_rlm, . ~ . - horas_uso)
+
+cat("Factores de inflación de la varianza:\n")
+print(vif(rlm))
+cat("Estadísticos de tolerancia:\n")
+print(1 / vif(rlm))
+```
+Notamos que ahora todos los predictores presentan un VIF menor a 5, hemos eliminado gran parte de la multicolinealidad presente en el modelo anterior manteniendo 4 predictores.
 
 
+Revisemos la prueba de curvatura para este modelo
+
+```{r Prueba de curvatura RLM}
+cat("Prueba de curvatura:\n")
+residualPlots(modelo_rlm, type = "rstandard", terms = ~ 1, col = "steelblue", pch = 20, col.quad = "red")
+```
+
+Se ve cierta curvatura, pero no se ve un patrón preocupante, aunque existe cierta tendencia a patrones por sobre la línea de regresión. La prueba de curvatura también apunta en este sentido y segun el p-valor es mayor a 0.05 por lo que esto sugiere que no se detecta curvatura.
+
+Revisemos ahora la normalidad de los residuos
+
+```{r Normalidad de residuos}
+# Grafico qq
+qq_res <- ggqqplot(data.frame(Residuos = resid(modelo_rlm)), x = "Residuos", color = "steelblue")
+print(qq_res)
+
+sw_res <- shapiro.test(resid(modelo_rlm))
+cat("Test de normalidad de los residuos del modelo de RLM:")
+print(sw_res)
+```
+
+Como p > 0.05 no hay suficiente evidencia para rechazar que los datos siguen una distribucion normal
+
+Ahora verifiquemos la varianza e independencia de los residuos.
+
+```{r Ahora verifiquemos la varianza e independencia de los residuos}
+cat("Prueba de varianza del error no constante:\n")
+ncvTest(modelo_rlm)
+
+cat("\nIndependencia de los residuos\n")
+print(durbinWatsonTest(modelo_rlm))
+```
+
+Nos damos cuenta de que entonces la homocedasticidad no se está cumpliendo pero que los residuos sí son independientes.
+
+**Verifiquemos entonces la influencia de valores atípicos** que puedan estar generando esto  mediante la **Distancia de Cook** con el gráfico influencePlot
+
+```{r Valores atipicos}
+# Desplegar gráficos de influencia
+casos_influyentes <- influencePlot(modelo_rlm, id = list(n = 3))
+cat("\nCasos que podrían ser influyentes:\n")
+print(casos_influyentes)
+
+```
+
+Notamos que el caso que podría tener mayor influencia atípica es el 66
+
+horas_uso  temp_inv    superf  temp_ver edad_elec 
+
+```{r Verificar si quitar caso influyente}
+crPlots(modelo_rlm,
+        col = "steelblue", pch = 20, col.lines = c("red", "steelblue"),
+        smooth = list(smoother = loessLine, span = 1),
+        id = list(method = "r", n = 8, cex = 0.7, location = "lr"))
+
+modelo_rlm2 <- lm(consumo ~ horas_uso + temp_inv + superf + edad_elec, data = datos_entren[-65, ])
+crPlots(modelo_rlm,
+        col = "steelblue", pch = 20, col.lines = c("red", "steelblue"),
+        smooth = list(smoother = loessLine, span = 1),
+        id = list(method = "r", n = 8, cex = 0.7, location = "lr"))
+```
+
+Ahora verifiquemos nuevamente
