@@ -1,13 +1,17 @@
 ---
 title: "pep2 regresion"
-author: "Byron Caices"
-date: "2024-12-30"
+author: "Forma 6"
+date: "2024-01-02"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
+El gobierno también quiere saber si es posible construir un modelo predictivo del consumo eléctrico d elos hogares chilenos con un error menor a 2 Kwh con la misma muestra proporcionada.
+
+Se pide construir un modelo de regresión adecuado para responder la pregunta asignada que use entre 2 y 5 predictores, asegurando que el modelo obtenido sea confiable (Considere VIF >= 5 como evidencia de multicolinealidad problemática). Determine si la calidad predictiva del modelo satisface los requerimientos del gobierno evalúandolo con 499 iteraciones de bootstrapping (usando la semilla 131)
 
 ```{r Definir semilla}
 library(car)
@@ -16,33 +20,59 @@ library(ggpubr)
 library(psych)
 
 # Definimos semilla
-set.seed(1111)
+set.seed(131)
 
 # Leemos los datos
-datos <- read.csv("EI-2024-2-PE2-Datos-Forma-15.csv")
+datos <- read.csv("EI-2024-2-PE2-Datos-Forma-06.csv")
 
 # Con la funcion str verificamos que el tipo de datos esté correcto
 str(datos)
 
-# Notamos que macro_zona y franja hay que convertirlos a factores puesto que son variables categoricas
+# Notamos que macro_zona, franja y sobre_cons hay que convertirlos a factores puesto que son variables categoricas/dicotómicas
 datos$macro_zona <- as.factor(datos$macro_zona)
 datos$franja <- as.factor(datos$franja)
+datos$sobre_cons <- as.factor(datos$sobre_cons)
+
 str(datos)
 
-# Filtramos los datos
-
-#datos <- datos %>% filter(Gender == 1) %>% select(-Gender) %>% sample_n(100, replace = FALSE)
-# De datos selecciona hombres, descarta la columna Gender y selecciona 100 sin reemplazo
-
+# Seleccionamos datos de entrenamiento y de prueba
 datos_entren <- datos[1:70,] # fila 1 a 70 y todas las columnas
 datos_prueba <- datos[71:100,]
 ```
 
 Con los datos ya filtrados preparamos la variable de respuesta y los predictores
 
+```{r Seleccionar predictor}
+nombre_respuesta <- "consumo"
+
+# Extraer solo las columnas numéricas para revisar correlación
+datos_num <- datos_entren[, sapply(datos_entren, is.numeric)]
+
+i_respuesta_resto <- which(colnames(datos_num)==nombre_respuesta) # Indice de la columna de la var de rpta
+
+# Calcular la matriz de correlación
+correlacion <- cor(datos_num[ , -i_respuesta_resto], y = datos_num[[nombre_respuesta]])
+
+cat("Correlacion con consumo:\n")
+print(correlacion)
+```
+Asumiendo que el mejor predictor sería el que tiene la mayor correlacion con la variable de respuesta entonces seleccionamos el máximo
+
+```{r seleccionar maximo}
+i_mejor <- which(correlacion == max(abs(correlacion)))
+
+# Seleccionamos 9no predictor
+#predictor <- colnames(datos_resto)[i_mejor]
+predictor <- rownames(correlacion)[i_mejor]
+cat("La variable seleccionada es: ",predictor)
+```
+
+
+
+
 ```{r Ajuste del modelo}
 # Definimos modelo mínimo, en este caso modelo nulo
-modelo_rls <- lm(consumo ~ 1, data = datos_entren)
+modelo_rls <- lm(consumo ~ superf + horas_uso, data = datos_entren)
 
 # Definimos modelo máximo, en este caso consideramos a todas las variables
 modelo_rlm_max <- lm(consumo ~ temp_ver + temp_inv + superf + 
@@ -51,7 +81,7 @@ modelo_rlm_max <- lm(consumo ~ temp_ver + temp_inv + superf +
                        macro_zona + franja,
                     data = datos_entren)
 
-modelo_rlm <- step(rls, scope = list(lower = modelo_rls, upper = modelo_rlm_max),
+modelo_rlm <- step(modelo_rls, scope = list(lower = modelo_rls, upper = modelo_rlm_max),
                direction = "both",
                test = "F", trace = 1)
 
