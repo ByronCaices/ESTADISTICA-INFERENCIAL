@@ -1,12 +1,14 @@
 ---
-title: "pep2 boots"
-date: "2024-12-30"
+title: "Forma06"
+authors: "20.915.795-0, 21.081.166-4"
 output: html_document
+date: "2025-01-02"
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
 # Pregunta 1
 
 El Gobierno realizó un estudio para concer el consumo de energía eléctrica promedio  de los hogares chilenos. Con la intención de determinar la cobertura del subsidio de energía eléctrica que se discute en el Congreso, el Gobierno necesita saber si la proporción de viviendas DFL2 (es decir de hasta 120 m2) que pagan el temido "cargo por sobreconsumo" de la macrozona centro es similar al de la macrozona sur. Con este fin, ha proporcionado una muestra aleatoria de 100 hogares estudiados con las siguientes variables:
@@ -102,19 +104,5 @@ hist(diff_permuted, breaks = 20, main = "Distribución de diferencias (perm.)",
 abline(v = diff_obs, col = "red", lwd = 2, lty = 2)  # Línea para la diferencia observada
 
 ```
-
-Ahora con las permutaciones realizadas, calculamos el p-value para contrastar las hipótesis:
-```{r}
-p_value <- mean(abs(diff_permuted) >= abs(diff_obs))
-
-cat("P-valor:", p_value, "\n")
-```
-
-Como vemos, obtenemos un p-value de 0.53, como estamos utilizando un intervalo de confianza del 95%, y el p-value es mayor a 0.05, no podemos rechazar la hipótesis nula. Por lo tanto, no hay evidencia suficiente para afirmar que la proporción de viviendas DFL2 que pagan el "cargo por sobreconsumo" en la macrozona centro es diferente a la proporción en la macrozona sur.
-
-
-
-
-
 
 
