@@ -213,3 +213,13 @@ cat("\nIndependencia de los residuos\n")
 print(durbinWatsonTest(modelo_rlm2))
 ```
 
+quitar el caso 65 nos sirvio para que se cumpla la homocedasticidad
+
+Con esto el modelo cumpliendo con las condiciones antes mencionadas quedaría:
+
+```{r}
+print(summary(modelo_rlm2))
+```
+
+Y notamos que se cumple tener un Residual Standard error como se pide en el enunciado
+
