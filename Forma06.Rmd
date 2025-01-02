@@ -312,39 +312,43 @@ print(durbinWatsonTest(modelo_rlm2))
 Ahora determinamos la calidad predictiva del modelo con bootstrapping:
 
 ```{r}
-# Definir una función para calcular el RMSE con un modelo ya creado
+# Definir una función para calcular el RMSE con remuestreo y ajuste del modelo
 calc_rmse <- function(data, indices) {
-  # Realizar el remuestreo
+  # Crear una muestra remuestreada
   bootstrap_data <- data[indices, ]
   
-  # Predecir sobre los datos de prueba originales usando el modelo ya creado
-  predicciones <- predict(modelo_rlm2, newdata = datos_prueba)
+  # Ajustar el modelo a los datos remuestreados
+  modelo_boot <- lm(consumo ~ horas_uso + temp_inv + superf + edad_elec, data = bootstrap_data)
   
-  # Calcular el RMSE
+  # Predecir sobre los datos de prueba originales
+  predicciones <- predict(modelo_boot, newdata = datos_prueba)
+  
+  # Calcular RMSE
   errores <- datos_prueba$consumo - predicciones
   rmse <- sqrt(mean(errores^2, na.rm = TRUE))
-
   
   return(rmse)
 }
 
-# Evaluar el modelo con bootstrapping
+# Realizar el bootstrapping
+set.seed(131)  # Fijar semilla para reproducibilidad
 boot_results <- boot(data = datos_entren, statistic = calc_rmse, R = 499)
 
-# Mostrar el resumen de los resultados del bootstrapping
+# Mostrar los resultados del bootstrapping
 cat("Estimación del RMSE mediante bootstrapping:\n")
 print(boot_results)
 
-# Calcular un intervalo de confianza del 95% para el RMSE
+# Calcular el intervalo de confianza del 95% para el RMSE
 ci <- boot.ci(boot_results, type = "perc")
 cat("Intervalo de confianza del 95% para el RMSE:\n")
 print(ci)
 
-# Evaluar si el modelo cumple con el requerimiento del gobierno
-if (ci$percent[4] < 2) {
+# Evaluar si el modelo cumple con los requerimientos del gobierno
+if (!is.null(ci$percent) && ci$percent[5] < 2) {
   cat("El modelo satisface los requerimientos del gobierno (error menor a 2 Kwh).\n")
 } else {
   cat("El modelo NO satisface los requerimientos del gobierno (error mayor a 2 Kwh).\n")
 }
+
 ```
 
