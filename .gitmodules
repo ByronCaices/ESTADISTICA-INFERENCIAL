@@ -1,0 +1,9 @@
+[submodule "EST-INF-EPS03-05"]
+	path = EST-INF-EPS03-05
+	url = https://github.com/ByronCaices/EST-INF-EPS03-05
+[submodule "EST-INF-EPS06-08"]
+	path = EST-INF-EPS06-08
+	url = https://github.com/ByronCaices/EST-INF-EPS06-08
+[submodule "EST-INF-EPS09-11"]
+	path = EST-INF-EPS09-11
+	url = https://github.com/ByronCaices/EST-INF-EPS09-11
