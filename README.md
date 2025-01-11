@@ -18,4 +18,4 @@ These materials are intended for students and data enthusiasts who want to under
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/your-repo.git](https://github.com/ByronCaices/ESTADISTICA-INFERENCIAL
+   git clone https://github.com/ByronCaices/ESTADISTICA-INFERENCIAL
