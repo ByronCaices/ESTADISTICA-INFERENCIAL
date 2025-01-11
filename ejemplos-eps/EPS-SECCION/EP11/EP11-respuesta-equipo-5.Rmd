@@ -1,0 +1,502 @@
+---
+title: "EP11-respuesta-equipo-5"
+output: pdf_document
+date: "2024-12-16"
+---
+
+Primero, cargamos las librerías necesarias y asignamos una semilla. Hecho esto, hay que importar los datos, calcular el IMC y sacar las muestras en base al estado nutricional.
+```{r}
+library(ggpubr)
+library(dplyr)
+library(leaps)
+library(caret)
+library(pROC)
+library(psych)
+library(car)
+library(ggplot2)
+set.seed(22594)
+
+datos = read.csv2("EP09 Datos.csv")
+datos_filtrados = datos %>% mutate(IMC = Weight / ((Height/100) ^2)) %>% mutate(EN = ifelse(IMC < 23.2, 0, 1))
+
+datos_Sobrepeso = datos_filtrados %>% filter(EN == 1) %>% sample_n(50)
+datos_SinSobrepeso = datos_filtrados %>% filter(EN == 0) %>% sample_n(50)
+
+datos = rbind(datos_Sobrepeso, datos_SinSobrepeso)
+datos = datos %>% select(-c(EN, IMC))
+```
+
+Ahora, nos centraremos en la selección de predictores. Generamos todas las combinaciones para evaluar BIC y R2 ajustado. Tras esto, hacemos un resumen de las combinaciones y seleccionamos las mejores.
+
+```{r}
+combinaciones = regsubsets(Weight ~ ., datos, nvmax = 8, method = "exhaustive")
+plot(combinaciones)
+
+comb_summary = summary(combinaciones)
+i_min_bic = which.min(comb_summary[["bic"]])
+i_max_r2a = which.min(comb_summary[["adjr2"]])
+mejor_comb_bic = comb_summary[["which"]][i_min_bic,]
+mejor_comb_r2a = comb_summary[["which"]][i_max_r2a,]
+
+comb_mejor_bic = names(mejor_comb_bic[mejor_comb_bic == TRUE])
+comb_mejor_bic
+```
+Vemos que la mejor combinación de predictores es "Knees.diameter" "Chest.Girth"    "Waist.Girth"    "Hip.Girth"      "Thigh.Girth"    "Forearm.Girth".
+
+Ahora vamos con el entrenamiento del modelo utilizando esa combinación de predictores. Definimos la fórmula y entrenamos un modelo lineal con validación bootstrap.
+
+```{r}
+mejores_predictores = comb_mejor_bic[-1]
+formula_mejor = as.formula(paste("Weight ~", paste(mejores_predictores, collapse = " + ")))
+
+modelo_tr = train(formula_mejor, data = datos, method = "lm", trControl = trainControl(method = "boot", number = 1000))
+
+modelo_tr_final = modelo_tr[["finalModel"]]
+print(modelo_tr_final)
+summary(modelo_tr_final)
+```
+Ahora, vamos a evaluar el modelo. Analizamos la multicolinealidad con factores de inflación de la varianza (VIF), eliminando valores con alta colinealidad.
+```{r}
+print(vif(modelo_tr_final))
+modelo_tr_final = update(modelo_tr_final, Weight ~ . - Chest.Girth - Waist.Girth - Hip.Girth - Forearm.Girth, data = datos)
+vif(modelo_tr_final)
+```
+
+Vemos la evaluación gráfica de la linealidad y la distribución de residuos.
+```{r}
+residualPlots(modelo_tr_final, linear = TRUE)
+```
+Análisis de la relación marginal entre predictores y la variable dependiente.
+```{r}
+marginalModelPlots(modelo_tr_final, sd = TRUE, fitted = FALSE)
+```
+Procedemos a ver las observaciones con mayor influencia y a calcular los límites estadísticos para apalancamiento y distancia de Cook.
+```{r}
+influencia = influencePlot(modelo_tr_final,id = list(n=3))
+
+print(influencia)
+
+cat("[", round(qt(0.05/2, nrow(datos) - length(predictors(modelo_tr_final)) - 2), 3), ", ", sep = "")
+cat(round(qt(1-0.05/2, nrow(datos) - length(predictors(modelo_tr_final)) - 2), 3), "]\n", sep = "")
+
+cat("Límite del apalancamiento:", round(2 * mean(hatvalues(modelo_tr_final)), 3), "\n")
+cat("Límite de la distancia de Cook:", round(3 * mean(cooks.distance(modelo_tr_final)), 3), "\n")
+```
+Debemos ver cómo los casos influyentes afectan a los coeficientes del modelo.
+```{r}
+ids_influencia <- as.integer(rownames(influencia))
+funcion_comparar <- function(s) {
+  mat <- eval(bquote(compareCoefs(modelo_tr_final, update(modelo_tr_final, subset = -.(s)), print = FALSE)))
+  rownames(mat) <- paste(rownames(mat), "sin caso", s)
+  invisible(mat)
+}
+lista_comparar <- lapply(ids_influencia, funcion_comparar)
+modelo_comparar <- do.call(rbind, lista_comparar)
+
+# Agregamos el cambio porcentual y encontramos el 25% superior
+coeficientes_cambio <- abs((modelo_comparar[, 1]-modelo_comparar[, 3])/modelo_comparar[, 1]) * 100
+modelo_comparar <- cbind(modelo_comparar, Cambio = coeficientes_cambio)
+coeficientes_cambio_umb <- quantile(coeficientes_cambio, 0.75)
+
+cat("Observaciones que generan cambios importantes de los coeficientes del modelo de RLM 1:\n")
+printCoefmat(modelo_comparar[coeficientes_cambio >= coeficientes_cambio_umb, ])
+```
+
+Quitamos del modelo los casos 1, 8, 47 y 58, que son los más influyentes en el modelo.
+
+```{r}
+datos = datos[-c(1, 8, 47, 58),]
+modelo_tr_final = train(formula_mejor, data = datos, method = "lm", trControl = trainControl(method = "boot", number = 1000))
+print(summary(modelo_tr_final))
+```
+Aplicamos la prueba de independencia de errores con Durbin-Watson
+```{r}
+final = modelo_tr_final[["finalModel"]]
+durbinWatsonTest(final)
+```
+
+Pasamos a evaluar el desempeño del modelo.
+```{r}
+error_df = data.frame(RMSE = modelo_tr_final[["resample"]][["RMSE"]])
+histograma <- gghistogram(error_df, x = "RMSE", bins = 30)
+print(histograma)
+print(modelo_tr_final[["results"]])
+print(describe(error_df, trim = 0, skew = FALSE, IQR = TRUE), digits = 3)
+```
+
+Vemos que el gráfico muestra una distribución que, si bien no es normal, es parecida.
+```{r}
+
+
+set.seed(22594)
+
+datos = read.csv2("EP09 Datos.csv")
+datos_filtrados = datos %>% 
+  mutate(IMC = Weight / ((Height/100) ^2)) %>% 
+  mutate(EN = ifelse(IMC < 23.2, 0, 1))
+
+datos_Sobrepeso = datos_filtrados %>% filter(EN == 1) %>% sample_n(50)
+datos_SinSobrepeso = datos_filtrados %>% filter(EN == 0) %>% sample_n(50)
+
+datos = rbind(datos_Sobrepeso, datos_SinSobrepeso)
+datos = datos %>% select(-c(Weight, Height, EN))
+
+control_rfe <- rfeControl(functions = lmFuncs, 
+                          method = "repeatedcv", 
+                          number = 5, 
+                          repeats = 5, 
+                          verbose = FALSE)
+
+modelo_rfe <- rfe(x = datos %>% select(-IMC), y = datos$IMC, sizes = 10:20, rfeControl = control_rfe, metric = "Rsquared")
+
+modelo_final_2 <- modelo_rfe[["fit"]]
+
+graficoRFE <- ggplot(modelo_rfe) + theme_pubr()
+print(graficoRFE)
+
+print(summary(modelo_final_2))
+
+
+```
+
+
+MULTICOLINEALIDAD
+
+
+```{r}
+cat("Factores de inflación de la varianza:\n")
+print(vif(modelo_final_2))
+cat("\n")
+cat("Valores de tolerancia:\n")
+print(1 / vif(modelo_final_2))
+```
+Hay varios factores de inflación mayores que 5, por lo que se eliminará Biacromial.diameter y Elbows.diameter al presentar el valor más alto.
+
+
+```{r}
+mejores_predictores <- predictors(modelo_rfe)
+mejores_predictores <- mejores_predictores[mejores_predictores != "Forearm.Girth"]
+
+nueva_formula <- as.formula(paste("IMC ~", paste(mejores_predictores, collapse = " + ")))
+
+modelo_final_2_tr <- train(nueva_formula, data = datos, method = "lm", trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5))
+
+modelo_final_2 <- modelo_final_2_tr[["finalModel"]]
+
+cat("Nuevos factores de inflación de la varianza:\n")
+print(vif(modelo_final_2))
+cat("\n")
+cat("Nuevos valores de tolerancia:\n")
+print(1 / vif(modelo_final_2))
+
+mejores_predictores <- predictors(modelo_final_2)
+mejores_predictores <- mejores_predictores[mejores_predictores != "Wrist.Minimum.Girth"]
+
+nueva_formula <- as.formula(paste("IMC ~", paste(mejores_predictores, collapse = " + ")))
+
+modelo_final_2_tr <- train(nueva_formula, data = datos, method = "lm", trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5))
+
+modelo_final_2 <- modelo_final_2_tr[["finalModel"]]
+
+cat("Nuevos factores de inflación de la varianza:\n")
+print(vif(modelo_final_2))
+cat("\n")
+cat("Nuevos valores de tolerancia:\n")
+print(1 / vif(modelo_final_2))
+
+mejores_predictores <- predictors(modelo_final_2)
+mejores_predictores <- mejores_predictores[mejores_predictores != "Gender"]
+
+nueva_formula <- as.formula(paste("IMC ~", paste(mejores_predictores, collapse = " + ")))
+
+modelo_final_2_tr <- train(nueva_formula, data = datos, method = "lm", trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5))
+
+modelo_final_2 <- modelo_final_2_tr[["finalModel"]]
+
+cat("Nuevos factores de inflación de la varianza:\n")
+print(vif(modelo_final_2))
+cat("\n")
+cat("Nuevos valores de tolerancia:\n")
+print(1 / vif(modelo_final_2))
+
+mejores_predictores <- predictors(modelo_final_2)
+mejores_predictores <- mejores_predictores[mejores_predictores != "Elbows.diameter"]
+
+nueva_formula <- as.formula(paste("IMC ~", paste(mejores_predictores, collapse = " + ")))
+
+modelo_final_2_tr <- train(nueva_formula, data = datos, method = "lm", trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5))
+
+modelo_final_2 <- modelo_final_2_tr[["finalModel"]]
+
+cat("Nuevos factores de inflación de la varianza:\n")
+print(vif(modelo_final_2))
+cat("\n")
+cat("Nuevos valores de tolerancia:\n")
+print(1 / vif(modelo_final_2))
+
+mejores_predictores <- predictors(modelo_final_2)
+mejores_predictores <- mejores_predictores[mejores_predictores != "Knee.Girth"]
+
+nueva_formula <- as.formula(paste("IMC ~", paste(mejores_predictores, collapse = " + ")))
+
+modelo_final_2_tr <- train(nueva_formula, data = datos, method = "lm", trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5))
+
+modelo_final_2 <- modelo_final_2_tr[["finalModel"]]
+
+cat("Nuevos factores de inflación de la varianza:\n")
+print(vif(modelo_final_2))
+cat("\n")
+cat("Nuevos valores de tolerancia:\n")
+print(1 / vif(modelo_final_2))
+
+mejores_predictores <- predictors(modelo_final_2)
+mejores_predictores <- mejores_predictores[mejores_predictores != "Wrists.diameter"]
+
+nueva_formula <- as.formula(paste("IMC ~", paste(mejores_predictores, collapse = " + ")))
+
+modelo_final_2_tr <- train(nueva_formula, data = datos, method = "lm", trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5))
+
+modelo_final_2 <- modelo_final_2_tr[["finalModel"]]
+
+cat("Nuevos factores de inflación de la varianza:\n")
+print(vif(modelo_final_2))
+cat("\n")
+cat("Nuevos valores de tolerancia:\n")
+print(1 / vif(modelo_final_2))
+
+```
+
+Ahora que se tienen valores que estan acorde a lo esperado, es decir, entre 1 y 5.
+
+```{r}
+datos_frame <- as.data.frame(datos)
+modelo_final_2_equiv <- lm(nueva_formula, datos_frame)
+
+residualPlots(modelo_final_2_equiv, linear = TRUE, ask = FALSE)
+
+
+```
+
+```{r}
+marginalModelPlots(modelo_final_2_equiv, sd = TRUE, fitted = FALSE, ask= FALSE)
+```
+
+
+
+```{r}
+influencia <- influencePlot(modelo_final_2_equiv, id = list(n = 3))
+print(influencia)
+cat("Rango para 95% de los residuos studentizados: ")
+cat("[", round(qt(0.05/2, nrow(datos_frame) - length(predictors(modelo_final_2)) - 2), 3), ", ", sep = "")
+cat(round(qt(1-0.05/2, nrow(datos_frame) - length(predictors(modelo_final_2)) - 2), 3), "]\n", sep = "")
+cat("Límite del apalancamiento:", round(2 * mean(hatvalues(modelo_final_2)), 3), "\n")
+cat("Límite de la distancia de Cook:", round(3 * mean(cooks.distance(modelo_final_2)), 3), "\n")
+```
+
+```{r}
+ids_influencia <- as.integer(rownames(influencia))
+funcion_comparar <- function(s) {
+  mat <- eval(bquote(compareCoefs(modelo_final_2_equiv, update(modelo_final_2_equiv, subset = -.(s)), print = FALSE)))
+  rownames(mat) <- paste(rownames(mat), "sin caso", s)
+  invisible(mat)
+}
+lista_comparar <- lapply(ids_influencia, funcion_comparar)
+modelo_comparar <- do.call(rbind, lista_comparar)
+
+coeficientes_cambio <- abs((modelo_comparar[, 1]-modelo_comparar[, 3])/modelo_comparar[, 1]) * 100
+modelo_comparar <- cbind(modelo_comparar, Cambio = coeficientes_cambio)
+coeficientes_cambio_umb <- quantile(coeficientes_cambio, 0.75)
+
+cat("Observaciones que generan cambios importantes de los coeficientes del modelo de RLM 1:\n")
+printCoefmat(modelo_comparar[coeficientes_cambio >= coeficientes_cambio_umb, ])
+```
+Hay que realizar el analisis de cual borrar y actualizar los datos (similiar al proceso que se encuentra más arriba)
+
+```{r}
+print(durbinWatsonTest(modelo_final_2))
+```
+
+```{r}
+modelo_2_error <- data.frame(RMSE = modelo_final_2_tr[["resample"]][["RMSE"]])
+histograma <- gghistogram(modelo_2_error, x = "RMSE", bins = 5)
+
+print(histograma)
+print(modelo_final_2_tr[["results"]])
+print(describe(modelo_2_error, trim = 0, skew = FALSE, IQR = TRUE), digits = 3)
+```
+Usando RFE, construir un modelo de regresión logística múltiple para la variable EN que incluya el conjunto de predictores, entre dos y seis, que entregue la mejor curva ROC y que utilice validación cruzada dejando uno fuera para evitar el sobreajuste (obviamente no se debe considerar las variables Peso, Estatura –Weight y Height respectivamente– ni IMC).
+
+```{r}
+
+set.seed(22594)
+datos <- read.csv2("EP09 Datos.csv")
+datos_filtrados <- datos %>%
+  mutate(IMC = Weight / ((Height / 100)^2)) %>%
+  mutate(EN = ifelse(IMC < 23.2, 0, 1))
+
+datos_filtrados$EN <- as.factor(datos_filtrados$EN)
+
+
+datos_Sobrepeso <- datos_filtrados %>% filter(EN == 1) %>% sample_n(50)
+datos_SinSobrepeso <- datos_filtrados %>% filter(EN == 0) %>% sample_n(50)
+
+datos <- rbind(datos_Sobrepeso, datos_SinSobrepeso)
+
+datos_modelo_3 <- datos %>%
+  select(-Weight, -Height, -IMC)
+
+respuesta_binaria <- "EN"
+formula_modelo_3 <- formula(paste(respuesta_binaria, ".", sep = " ~ "))
+
+lrFuncs[["summary"]] <- twoClassSummary
+modelo_rfe_control <- rfeControl(
+  functions = lrFuncs,
+  method = "LOOCV",
+  saveDetails = TRUE,
+  returnResamp = "all",
+  verbose = FALSE
+)
+
+modelo_tr_rfe <- trainControl(
+  method = "none",
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary
+)
+
+
+modelo_rfe <- suppressWarnings(
+  rfe(
+    formula_modelo_3,
+    data = datos_modelo_3,
+    sizes = 2:6,  
+    metric = "ROC",
+    rfeControl = modelo_rfe_control,
+    trControl = modelo_tr_rfe
+  )
+)
+
+modelo_final_3 <- modelo_rfe[["fit"]]
+cat("Modelo de modelo_final_3 obtenido con RFE:\n")
+print(summary(modelo_final_3))
+
+
+```
+
+```{r}
+graficoRFE <- ggplot(modelo_rfe) + theme_pubr()
+print(graficoRFE)
+```
+Multicolinealidad
+
+```{r}
+cat("Factores de inflación de la varianza:\n")
+print(vif(modelo_final_3))
+cat("\n")
+cat("Valores de tolerancia:\n")
+print(1 / vif(modelo_final_3))
+```
+
+Todos los valores se encuentran dentro de lo esperado, por lo que no se eliminará ningún predictor.
+
+Ajuste.
+
+```{r}
+predictores <- predictors(modelo_rfe)
+nueva_formula <- as.formula(paste("EN ~", paste(predictores, collapse = " + ")))
+
+modelo_final_3_equiv <- glm(nueva_formula, datos_modelo_3, family = binomial)
+nueva_formula_nulo <- as.formula("EN ~ 1")
+
+modelo_nulo <- glm(nueva_formula_nulo, datos_modelo_3, family = binomial)
+
+print(summary(modelo_final_3_equiv))
+
+print(anova(modelo_nulo, modelo_final_3_equiv, test = "Chisq"))
+```
+
+```{r}
+residualPlots(modelo_final_3_equiv, linear = TRUE, ask = FALSE)
+```
+
+```{r}
+marginalModelPlots(modelo_final_3_equiv,fitted = TRUE, sd = TRUE)
+
+```
+Vemos que las relaciones entre cada predictor y la variable de respuesta son aproximadamente logísticas, algunas variables parecen más logísticas que otras. Por ejemplo la variable "Calf.Maximum.Girth" parece ser más logística que "Knee.Girth".
+
+Casos sobreinfluyentes
+
+
+```{r}
+influencia <- influencePlot(modelo_final_3_equiv, id = list(n = 3))
+```
+
+```{r}
+print(influencia)
+cat("Rango para 95% de los residuos studentizados: ")
+cat("[", round(qt(0.05 / 2, nrow(datos_modelo_3) - length(predictors(modelo_final_3_equiv)) - 2), 3), ", ", sep = "")
+cat(round(qt(1 - 0.05 / 2, nrow(datos_modelo_3) - length(predictors(modelo_final_3_equiv)) - 2), 3), "]\n", sep = "")
+cat("Límite del apalancamiento:", round(2 * mean(hatvalues(modelo_final_3_equiv)), 3), "\n")
+cat("Límite de la distancia de Cook:", round(3 * mean(cooks.distance(modelo_final_3_equiv)), 3), "\n")
+```
+
+```{r}
+ids_influencia <- as.integer(rownames(influencia))
+funcion_comparar <- function(s) {
+  mat <- eval(bquote(compareCoefs(modelo_final_3_equiv, update(modelo_final_3_equiv, subset = -.(s)), print = FALSE)))
+  rownames(mat) <- paste(rownames(mat), "sin caso", s)
+  invisible(mat)
+}
+lista_comparar <- lapply(ids_influencia, funcion_comparar)
+modelo_comparar <- do.call(rbind, lista_comparar)
+
+coeficientes_cambio <- abs((modelo_comparar[, 1]-modelo_comparar[, 3])/modelo_comparar[, 1]) * 100
+modelo_comparar <- cbind(modelo_comparar, Cambio = coeficientes_cambio)
+coeficientes_cambio_umb <- quantile(coeficientes_cambio, 0.75)
+
+cat("Observaciones que generan cambios importantes de los coeficientes del modelo de RLM 1:\n")
+printCoefmat(modelo_comparar[coeficientes_cambio >= coeficientes_cambio_umb, ])
+```
+borramos los datos contenidos en ids_influencia ya que generan cambios impeortantes en los coeficientes del modelo.
+
+```{r}
+datos_modelo_3 <- datos_modelo_3[-ids_influencia, ]
+modelo_final_3_equiv <- glm(nueva_formula, datos_modelo_3, family = binomial)
+influencia <- influencePlot(modelo_final_3_equiv, id = list(n = 3))
+print(influencia)
+```
+
+
+Independencia de los residuos
+
+```{r}
+print(durbinWatsonTest(modelo_final_3_equiv))
+```
+Como podemos ver, el test de Durbin-Watson nos indica que existe autocorrelación, como no tenemos herramientas para solucionar este problema en este momento, continuaremos con la evaluación del modelo.
+
+Desempeño
+
+```{r}
+print(modelo_rfe$results)
+
+
+predicciones <- predict(modelo_final_3_equiv, newdata = datos_modelo_3, type = "response")
+predicciones_clase <- ifelse(predicciones > 0.5, 1, 0)
+modelo_final_3_mat_conf <- confusionMatrix(as.factor(predicciones_clase), datos_modelo_3$EN)
+cat("Matriz de confusión del modelo de modelo_final_3:\n")
+print(modelo_final_3_mat_conf)
+
+# Curva ROC
+library(pROC)
+modelo_final_3_roc <- roc(datos_modelo_3$EN, as.numeric(predicciones), 
+                   direction = "<", levels = c("0", "1"))
+plot(modelo_final_3_roc, print.auc = TRUE)
+```
+
+Como se logra ver, el gráfico de la curva ROC muestra un buen desempeño del modelo.
+
+
+# Conclusión:
+
+Los dos primeros modelos presentan una mayor confiabilidad, pero el último, el modelo logístico no cumple con la condición de autocorrelación, por lo que se debe trabajar en mejorar este aspecto. 
+

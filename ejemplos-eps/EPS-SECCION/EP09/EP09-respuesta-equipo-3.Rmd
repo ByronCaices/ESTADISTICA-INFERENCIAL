@@ -1,0 +1,454 @@
+---
+title: "EP09-respuesta-equipo-3"
+output: html_document
+date: "2024-12-03"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r, echo =FALSE, warning=FALSE, message=FALSE}
+if (!requireNamespace('ggpubr', quietly = TRUE)){
+  install.packages('ggpubr')
+}
+library(ggpubr)
+if (!requireNamespace('ggplot2', quietly = TRUE)){
+  install.packages('ggplot2')
+}
+library(ggplot2)
+if (!requireNamespace('tidyverse', quietly = TRUE)){
+  install.packages('tidyverse')
+}
+library(tidyverse)
+if (!requireNamespace('car', quietly = TRUE)){
+  install.packages('car')
+}
+library(car)
+if (!requireNamespace('ggfortify', quietly = TRUE)){
+  install.packages('ggfortify')
+}
+library(ggfortify)
+```
+
+Enunciado
+Un estudio recolectó medidas anatómicas de 247 hombres y
+260 mujeres (Heinz et al., 2003). El estudio incluyó nueve mediciones
+del esqueleto (ocho diámetros y una profundidad de hueso a hueso) y doce
+mediciones de grosor (diámetros de circunferencias) que incluyen el
+tejido.
+
+Preguntas
+(Todos los equipos)
+1.- Definir la semilla a utilizar, que corresponde a los últimos cuatro dígitos del RUN (sin considerar el dígito verificador) del integrante de menor edad del equipo.
+2.- Seleccionar una muestra aleatoria de 100 mujeres (si la semilla es un número par) o 100 hombres (si la semilla es impar), y separar 70 casos para trabajar en la construcción de modelos y 30 para su evaluación en datos no vistos.
+3.- Seleccionar de forma aleatoria ocho posibles variables predictoras.
+4.- Seleccionar, de las otras variables, una que el equipo considere que podría ser útil para predecir la variable Peso (sin considerar la estatura), justificando bien esta selección.
+5.- Usando el entorno R y paquetes estándares1, construir un modelo de regresión lineal simple con el predictor seleccionado en el paso anterior.
+6.- Usando herramientas estándares1 para la exploración de modelos del entorno R, buscar entre dos y cinco predictores de entre las variables seleccionadas al azar en el punto 3, para agregar al modelo de regresión lineal simple obtenido en el paso 5.
+7.- Evaluar la bondad de ajuste (incluyendo el análisis de casos atípicos y casos influyentes) y la generalidad (condiciones para RLM) de los modelos y “arreglarlos” en caso de que presenten algún problema.
+8.- Evaluar el poder predictivo del modelo con los datos no utilizados para construirlo.
+
+Desarrollo:
+
+Definimos la semilla.
+```{r}
+# Definir semilla (Punto 1)
+set.seed(8571)
+```
+
+Obtenemos los datos y la muestra, junto con separar los conjuntos de entrenamiento y prueba.
+```{r}
+# Lectura de datos
+datos <- read.csv2("EP09 Datos.csv")
+
+# Seleccionar muestra de 100 hombres (Punto 2)
+datosP1 <- datos %>% filter(Gender == 1) %>% sample_n(100)
+
+# Selección de casos de prueba
+datosP1Prueba <- datosP1 %>% sample_n(30)
+
+# Selección de casos para la construcción de modelo
+datosP1Entrenamiento <- datosP1 %>% setdiff(datosP1Prueba)
+```
+
+Como en este caso la variable de respuesta es el Peso ("Weight"), el siguiente paso consiste en seleccionar al azar 8 posibles variables predictoras del conjunto de columnas, sin seleccionar la variable de respuesta.
+
+```{r}
+# Obtenemos el nombre de las columnas de los datos
+variables_predictoras <- colnames(datosP1)
+
+# Se excluye la variable de respuesta (Peso o Weight)
+variables_predictoras <- setdiff(variables_predictoras,"Weight")
+variables_predictoras <- setdiff(variables_predictoras,"Height")
+
+# Se seleccionan 8 predictores aleatoriamente (Punto 3)
+variables_predictoras8 <- sample(variables_predictoras, 8)
+
+# Se obtiene el resto para el punto 4
+variables_predictorasResto <- setdiff(variables_predictoras, 
+                                      variables_predictoras8)
+
+# Mostrar predictores obtenidos
+cat("Predictores seleccionados para el punto 3:\n")
+print(variables_predictoras8)
+
+cat("Predictores seleccionados para el punto 4:\n")
+print(variables_predictorasResto)
+```
+
+Para seleccionar una de las otras variables restantes para construir un modelo de regresión lineal simple, solicitado por el punto 4, se va a evaluar su correlación con la variable respuesta.
+```{r}
+# Obtener matriz de correlación para responder al punto 4
+print(cor(datosP1Entrenamiento[, variables_predictorasResto], datosP1Entrenamiento$Weight))
+```
+
+Escogemos la variable Hip.Girth debido a que tiene la correlación mas
+fuerte con el peso.
+
+```{r}
+# Construcción del modelo con el predictor seleccionado (Punto 5)
+rls <- lm(Weight ~ Hip.Girth, datosP1Entrenamiento)
+cat("\n\n")
+cat("Modelo directo 'Peso' --> 'Grosor de las caderas'\n")
+cat("--------------------------------------------\n")
+print(summary(rls))
+```
+Se observa que el modelo obtenido explica un 74% de la varianza en los datos, junto con que es significativamente mejor que simplemente usar la media 
+(p-value: <2e-16 => p <0,001).
+
+```{r}
+# Revisión de graficos del modelo construido
+graficosRls <- autoplot(rls, which = 1:2) + theme_pubr()
+print(graficosRls)
+```
+Se observa que no hay un patrón identificable y que los residuos parecen repartirse de forma aleatoria. El gráfico Q-Q muestra algunas desviaciones que no parecen ser severas a plena vista. Se procede a confirmar con un histograma y usando una prueba de normalidad.
+
+```{r}
+histogramaRls <- gghistogram(data.frame(Residuos = resid(rls)), x = "Residuos", bins = 9)
+print(histogramaRls)
+
+shapiroRls <- shapiro.test(resid(rls))
+cat("Test de Shapiro Wilk de los residuos de la RLS:")
+print(shapiroRls)
+```
+Según lo obtenido anteriormente en el test de Shapiro, no existe evidencia suficiente para descartar que los residuos siguen un comportamiento normal, junto con que el histograma no presenta asimetrías notables.
+
+Se procede a evaluar ahora las estadísticas de influencia del modelo obtenido.
+
+```{r}
+eval_rls <- data.frame(predictions = fitted(rls))
+eval_rls[["standardized_res"]] <- rstandard(rls)
+eval_rls[["studentized_res"]] <-rstudent(rls)
+eval_rls[["cooks_distance"]] <- cooks.distance(rls)
+eval_rls[["dfbeta"]] <- dfbeta(rls)
+eval_rls[["dffit"]] <- dffits(rls)
+eval_rls[["leverage"]] <- hatvalues(rls)
+eval_rls[["covariance_ratios"]] <- covratio(rls)
+
+# 95% de los residuos estandarizados deben estar entre −1,96 y +1,96
+influyentes1 <- which(abs(eval_rls[["standardized_res"]]) > 1.96)
+
+# Se buscan observaciones con distancia de Cook mayor a uno.
+
+influyentes2 <- which(eval_rls[["cooks_distance"]] > 1)
+
+# Junto con revisar observaciones con apalancamiento superior al apalancamiento promedio
+
+k <- 1
+n <- nrow(datosP1)
+apalancamiento_promedio <- (k + 1) / n
+
+influyentes3 <- which(eval_rls[["leverage"]] > 2 * apalancamiento_promedio)
+
+# Se revisan los casos anteriores obtenidos del apalancamiento mayor al promedio
+
+influyentes4 <- which(apply(eval_rls[["dfbeta"]] >= 1, 1, any))
+names(influyentes4) <- NULL
+
+
+# Revisamos si los casos no se desvían significativamente de los límites recomendados para la razón de covarianza.
+
+CVRi_lower <- 1 - 3 * apalancamiento_promedio
+CVRi_upper <- 1 + 3 * apalancamiento_promedio
+
+influyentes5 <- which(eval_rls[["covariance_ratios"]] < CVRi_lower |
+                      eval_rls[["covariance_ratios"]] > CVRi_upper)
+
+
+
+# Finalmente se revisa si existen datos atípicos con indicadores de influencia consistentes
+
+# Crear una lista de índices influyentes para cada criterio
+listas_influyentes <- list(influyentes1, influyentes2, influyentes3, influyentes4, influyentes5)
+
+# Encontrar la intersección de todos los conjuntos
+influyentes <- Reduce(intersect, listas_influyentes)
+
+# Imprimir los índices influyentes
+if (length(influyentes) == 0) {
+  cat("No existen índices influyentes consistentes")
+} else {
+  cat("Índices influyentes comunes a todos los criterios:", influyentes, "\n")
+}
+```
+
+
+Si bien hay algunas observaciones que podrían considerarse atípicas, ninguna tiene indicadores de influencia altos de forma consistente. Luego podemos decir que el modelo obtenido es confiable debido a los resultados obtenidos en las pruebas realizadas.
+
+Ahora se procede a realizar la regresión lineal múltiple para el punto  6.
+
+```{r}
+
+# Se hacen ajustes para usar step, con el fin de agregar variables al rls
+# Definimos lower y upper, usando en lower el mejor predictor del punto 4
+# y luego en upper las 8 variables aleatorias del punto 3
+
+lower <- rls
+predictor <- "Hip.Girth"
+respuesta <- "Weight"
+rlm_max_text <- paste(c(predictor, variables_predictoras8), collapse = " + ")
+rlm_max_fmla <- formula(paste(respuesta, rlm_max_text, sep = " ~ "))
+rlm_max <- lm(rlm_max_fmla, data = datosP1Entrenamiento)
+
+
+# Se realiza regresión escalonada usando el menor AIC
+rlm <- step(rls, scope = list(lower = rls, upper = rlm_max), direction = "both")
+
+# Mostrar los coeficientes del modelo conseguido
+cat("\nModelo obtenido:\n")
+print(rlm[["coefficients"]])
+
+```
+
+Se observa que el modelo obtenido con step() cumple lo requerido por el punto 6 (2 a 5 variables del conjunto de 8 del punto 3).
+
+Luego se procede a desarrollar el punto 7 para evaluar la bondad de ajuste.
+
+Verificación de condiciones para el modelo de rlm:
+
+1. La variable de respuesta debe ser cuantitativa y continua, sin restricciones para su variabilidad.
+
+Al revisar los datos originales y ver el tipo de dato de la variable de respuesta Weight, se puede observar que es de tipo numérico y que además como la medición está en kilogramos, se puede decir que debido a la naturaleza de la medición esta es cuantitativa. Luego debido a que el peso en realidad puede tomar cualquier valor y que no tiene una variabilidad extremadamente baja se puede considerar continua en este caso.
+
+2. Los predictores deben ser cuantitativos o dicotómicos
+
+Se tiene que todos los predictores son cuantitativos, ya que todos miden ya sea diámetro o grosor y estas mediciones son de ese tipo.
+
+3. Los predictores deben tener algún grado de variabilidad, es decir, no ser constantes.
+
+Usamos el siguiente script para ver la variabilidad de cada predictor.
+```{r}
+apply(datosP1Entrenamiento[, c("Hip.Girth", "Forearm.Girth", "Biiliac.diameter", "Wrist.Minimum.Girth", "Bicep.Girth")], 2, var)
+```
+Observamos que los predictores dan una varianza distinta 0, por lo que se cumple esta condición.
+
+
+4. Cada predictor debe estar relacionado linealmente con la respuesta.
+
+Se evalua la linealidad de los predictores usando residualPlots como indica el apunte.
+
+```{r}
+modelo_mejor <- lm(Weight ~ Hip.Girth + Forearm.Girth + Biiliac.diameter + Wrist.Minimum.Girth + Bicep.Girth , datosP1Entrenamiento)
+print(residualPlots(modelo_mejor))
+```
+
+Podemos ver que todos los predictores presentan un p-value mayor a 0.05 y por lo tanto no hay suficiente evidencia para descartar linealidad.
+
+```{r}
+print(marginalModelPlots(modelo_mejor))
+```
+Se puede observar que los fitted values y los datos observados presentan gráficos casi idénticos por lo que no hay problemas en esta sección.
+
+```{r}
+p_res <- autoplot(rlm, which = 1:2) + theme_pubr()
+print(p_res)
+```
+En el gráfico de los residuos v/s fitted values se ve que los residuos no siguen un patrón sistemático a simple vista y el Q-Q plot no presenta datos atípicos problemáticos a simple vista, pero lo anterior se va a poner a prueba en las demás condiciones.
+
+5. La distribución de los residuos debe ser cercana a la normal centrada en el cero.
+
+Para descartar la posibilidad de que la distribución de los residuos no sea cercana a la normal va a usar un test de Shapiro Wilk.
+
+```{r}
+print(shapiro.test(resid(modelo_mejor)))
+```
+Luego según el test de Shapiro Wilk se puede ver que existe suficiente evidencia para descartar la distribución cercana a la normal de los residuos con un nivel de significancia del 0.05, por lo que no cumple este punto, por lo cual el modelo obtenido no es confiable, pero de todas maneras se van a revisar las demás condiciones por fines académicos.
+
+6. La variabilidad de los residuos deber ser aproximadamente constante (homocedasticidad).
+
+Para esta condición se puede usar ncvTest como se indica en el apunte.
+
+```{r}
+print(ncvTest(modelo_mejor))
+```
+Vemos que el p-value obtenido es mucho menor al nivel de significancia de 0.05, por lo que se procede a revisar por cada predictor.
+
+```{r}
+rls1 <- lm(Weight ~ Forearm.Girth, datosP1Entrenamiento)
+print(ncvTest(rls1))
+```
+
+```{r}
+rls2 <- lm(Weight ~ Biiliac.diameter, datosP1Entrenamiento)
+print(ncvTest(rls2))
+```
+
+```{r}
+rls3 <- lm(Weight ~ Wrist.Minimum.Girth, datosP1Entrenamiento)
+print(ncvTest(rls3))
+```
+
+```{r}
+rls4 <- lm(Weight ~ Bicep.Girth, datosP1Entrenamiento)
+print(ncvTest(rls4))
+```
+
+Notamos que Bicep.Girth, Wrist.Minimum.Girth, Forearm.Girth presentan p-values muy por debajo de un nivel de significancia del 0.05, lo cual es preocupante. Luego se procede a revisar los gráficos residuales para cada predictor.
+
+```{r}
+predictores_rlm <- attr(modelo_mejor$terms, "term.labels")
+datos_rlm_largo <- datosP1Entrenamiento |>
+  select(all_of(c("Weight", predictores_rlm))) |>
+  pivot_longer(!all_of("Weight"), names_to = "predictores", values_to = "valores")
+
+p_linealidad <- ggscatter(datos_rlm_largo, x = "valores", y = "Weight",
+                          color = "predictores", add = "reg.line")
+p_linealidad <- p_linealidad + facet_wrap(~ predictores, scales = "free_x")
+
+print(p_linealidad)
+```
+Al ver el grafico se puede apreciar que los predictores mencionados anteriormente aumentan su variabilidad notablemente a medida que aumentan los valores respectivos a su predictor. Podemos concluir que no se cumple este punto y podemos descartar que la relación entre la variable de respuesta y los predictores sea lineal, ni que la varianza de los residuos producida por el modelo es constante y de esta manera no cumple la condición de homocedasticidad.
+
+
+7. Los residuos deben ser independientes entre sí.
+
+Para la condición de independencia tenemos que verificar con el test de Durbin-watson.
+```{r}
+print(durbinWatsonTest(modelo_mejor))
+```
+Como podemos observar, no es significativo, entonces podemos descartar que exista autocorrelación entre los residuos, por lo tanto no hay suficiente evidencia de que no se cumpla esta condición de independencia.
+
+8. No debe existir multiconlinealidad. Esto significa que no deben darse relaciones lineales fuertes entre dos o más predictores.
+
+Para la condición de multicolinealidad utilizaremos el factor de inflación de varianza y el estadístico de tolerancia.
+```{r}
+cat("Factores de inflación de la varianza:\n")
+print(vif(modelo_mejor))
+cat("Estadísticos de tolerancia:\n")
+print(1 / vif(modelo_mejor))
+```
+Como podemos ver todos los predictores poseen un VIF < 5, por lo tanto no es motivo de preocupación, y ningún estadístico de tolerancia esta por debajo de 0,2. Aunque hay dos valores que son menores a 0.4, que deben ser revisados.
+
+Vemos que, en general, solo hay indicios de multicolinealidad moderada, pues solo dos predictores presentan estadísticos de tolerancia menores a 0.4.
+
+9. Las estimaciones de los coeficientes del modelo no debe estar alterados por unas pocas observaciones influyentes.
+
+```{r}
+p_cook <- autoplot(modelo_mejor, which = 4) + theme_pubr()
+print(p_cook)
+```
+```{r}
+eval_rls <- data.frame(predictions = fitted(modelo_mejor))
+eval_rls[["standardized_res"]] <- rstandard(modelo_mejor)
+eval_rls[["studentized_res"]] <-rstudent(modelo_mejor)
+eval_rls[["cooks_distance"]] <- cooks.distance(modelo_mejor)
+eval_rls[["dfbeta"]] <- dfbeta(modelo_mejor)
+eval_rls[["dffit"]] <- dffits(modelo_mejor)
+eval_rls[["leverage"]] <- hatvalues(modelo_mejor)
+eval_rls[["covariance_ratios"]] <- covratio(modelo_mejor)
+
+# 95% de los residuos estandarizados deben estar entre −1,96 y +1,96
+influyentes1 <- which(abs(eval_rls[["standardized_res"]]) > 1.96)
+cat("Residuos Estandarizados:\n")
+cat(influyentes1)
+
+# Se buscan observaciones con distancia de Cook mayor a uno.
+
+influyentes2 <- which(eval_rls[["cooks_distance"]] > 1)
+cat("\n\nObservaciones con distancia mayor a uno:\n")
+cat(influyentes2)
+
+# Junto con revisar observaciones con apalancamiento superior al apalancamiento promedio
+
+k <- 1
+n <- nrow(datosP1)
+apalancamiento_promedio <- (k + 1) / n
+
+influyentes3 <- which(eval_rls[["leverage"]] > 2 * apalancamiento_promedio)
+cat("\n\nObservaciones con apalancamiento superior al promedio:\n")
+cat(influyentes3)
+
+# Se revisan los casos anteriores obtenidos del apalancamiento mayor al promedio
+
+influyentes4 <- which(apply(eval_rls[["dfbeta"]] >= 1, 1, any))
+names(influyentes4) <- NULL
+cat("\n\nSe revisa caso por caso:\n")
+cat(influyentes4)
+
+
+# Revisamos si los casos no se desvían significativamente de los límites recomendados para la razón de covarianza.
+
+CVRi_lower <- 1 - 3 * apalancamiento_promedio
+
+CVRi_upper <- 1 + 3 * apalancamiento_promedio
+
+influyentes5 <- which(eval_rls[["covariance_ratios"]] < CVRi_lower |
+                      eval_rls[["covariance_ratios"]] > CVRi_upper)
+
+cat("\n\nRevision de casos desviados significativamente:\n")
+cat(influyentes5)
+
+
+
+# Finalmente se revisa si existen datos atípicos con indicadores de influencia consistentes
+
+# Crear una lista de índices influyentes para cada criterio
+listas_influyentes <- list(influyentes1, influyentes2, influyentes3, influyentes4, influyentes5)
+
+# Encontrar la intersección de todos los conjuntos
+influyentes <- Reduce(intersect, listas_influyentes)
+
+# Imprimir los índices influyentes
+if (length(influyentes) == 0) {
+  cat("\n\nNo existen índices influyentes consistentes")
+} else {
+  cat("\n\nÍndices influyentes comunes a todos los criterios:", influyentes, "\n")
+}
+```
+Si bien hay algunas observaciones que podrían considerarse atípicas, ninguna tiene indicadores de influencia altos de forma consistente. Luego podemos decir que el modelo obtenido cumple este punto debido a los resultados obtenidos en las pruebas realizadas.
+
+
+
+Ahora para el punto 8 se evaluara el poder predictivo del modelo generado:
+
+
+Como se solicitó en el enunciado, se realizaran las pruebas comparando los resultados de los modelos con los conjuntos de prueba y entrenamiento.
+```{r}
+rls_rmse_entrenam <- sqrt(mean(resid(rls) ** 2))
+rls_predict <- predict(rls, datosP1Prueba)
+rls_res_prueba <- datosP1Prueba[["Weight"]] - rls_predict
+rls_rmse_prueba <- sqrt(mean(rls_res_prueba ** 2))
+rls_porc_dif <- ((rls_rmse_prueba - rls_rmse_entrenam) / rls_rmse_entrenam) * 100
+
+rlm_rmse_entrenam <- sqrt(mean(resid(modelo_mejor) ** 2))
+rlm_predict <- predict(modelo_mejor, datosP1Prueba)
+rlm_res_prueba <- datosP1Prueba[["Weight"]] - rlm_predict
+rlm_rmse_prueba <- sqrt(mean(rlm_res_prueba ** 2))
+rlm_porc_dif <- ((rlm_rmse_prueba - rlm_rmse_entrenam) / rlm_rmse_entrenam) * 100
+
+cat("Rendimiento Modelo rls:\n")
+cat("RMSE conjunto entrenamiento:", round(rls_rmse_entrenam, 4), "\n")
+cat("RMSE conjunto prueba:", rls_rmse_prueba, "\n")
+cat("Cambio en el error:", rls_porc_dif, "\n")
+cat("\n")
+cat("Rendimiento Modelo de rlm:\n")
+cat("RMSE conjunto entrenamiento:", rlm_rmse_entrenam, "\n")
+cat("RMSE conjunto prueba:", rlm_rmse_prueba, "\n")
+cat("Cambio en el error:", rlm_porc_dif, "\n")
+```
+Según los resultados obtenidos, observamos que el modelo rlm tiene una tasa de error menor que el modelo rls, esto se puede observar tanto en el conjunto de entrenamiento el de prueba.
+
+El modelo de rlm logra mejorar efectivamente el rendimiento respecto al modelo de rls, sin tener indicios de sobreajuste, dado que el error disminuye en el conjunto de prueba. 
+
+Finalmente el modelo de rlm resulto ser poco confiable, pero con una buena generalización según lo obtenido en las pruebas de calidad predictiva. Para mejorar la confiabilidad, se podría intentar eliminar alguna de las variables predictoras que presentaron problemas en las condiciones de confiabilidad y luego evaluar el nuevo modelo.
+

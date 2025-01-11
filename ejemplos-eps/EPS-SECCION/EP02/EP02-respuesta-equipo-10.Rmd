@@ -1,0 +1,151 @@
+---
+title: "EP02-respuesta-equipo-10"
+author: "Javier Villegas G, Duvan Vergara, Martin Salinas"
+date: "2024-10-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+if (!require(dplyr)) {
+  install.packages("dplyr", dependencies = TRUE)
+  require(dplyr)
+}
+if (!require(TeachingDemos)) {
+  install.packages("TeachingDemos", dependencies = TRUE)
+  require(TeachingDemos)
+}
+
+datos <- read.csv2("EP02 Datos.csv")
+```
+
+## Equipo 10:
+
+### El Comité Olímpico cree que el mejor tiempo medio de los atletas de raza negra antes de ingresar al programa de entrenamiento era inferior a 14,3 segundos. ¿Soportan los datos esta afirmación?
+
+- la hipotesis nula es: el tiempo medio de los atletas de raza negra antes de ingresar al programa de entrenamiento es igual que 14,3 segundos
+- la hipotesis alternativa es: el tiempo medio de los atletas de raza negra antes de ingresar al programa de entrenamiento era inferior que 14,3 segundos
+
+```{r}
+#separacion de datos
+medio_R_negra = subset(datos, datos$Raza=="Negra", select = -c(Id, Posterior, Raza))
+
+# t test
+```
+Independencia
+#### Normalidad :
+- H0: La muestra proviene de una distribución normal.
+- Ha: La muestra no proviene de una distribución normal.
+se usara la prueba de Shapiro debido al tamaño reducido de la muestra necesaria, usando las antes mensionadas hipotesis nula e hipotesis alternativa
+
+```{r}
+###Prueba de Shapiro-Wilk###
+shapiro.test(medio_R_negra$Previo)
+```
+
+No existe evidencia estadística para rechazar Ho. 
+Es decir, podemos seguir bajo el supuesto de normalidad de la variable previo. Esto se cumple para la prueba de Shapiro
+
+```{r}
+##Aplicacion de la prueba t-student
+t.test(medio_R_negra$Previo, alternative = "less", mu = 14.3)
+```
+
+no hay suficiente evidencia para afirmar que el tiempo medio de los atletas de raza negra antes de ingresar al programa de entrenamiento era inferior que 14,3 segundos y por lo tanto los datos no soportan la afirmación hecha.
+
+### ¿Sugieren los datos que la mejor marca de los atletas de raza blanca se reduce en promedio 3,4 segundos tras el entrenamiento?
+
+
+```{r}
+# filtrar raza blanca, hacer vector de (previo - posterior), sacar media
+R_blanca <- datos %>% filter(Raza == "Blanca")
+Reduccion_tiempo <- R_blanca$Previo - R_blanca$Posterior
+
+# H0 = udif = 3,4
+# Ha = udif != 3,4
+
+# observaciones son independientes?
+# confirmar distribucion normal
+shapiro.test(R_blanca$Previo)
+shapiro.test(R_blanca$Posterior)
+
+shapiro.test(Reduccion_tiempo)
+# p-value > 0,05, no hay suficiente evidencia para rechazar la hipotesis nula en favor de la alternativa: poblacion de muestras se aproxima a la distribucion normal
+
+
+# datos son pareados, ambas muestras refieren a la misma persona
+t.test(x = R_blanca$Previo, y = R_blanca$Posterior, alternative = "two.sided", mu = 3.4, paired = TRUE, conf.level = 0.95)
+
+# p-value < 0,05, se rechaza la hipotesis nula, en pos de Ha siendo que la diferencia entre las medias es distinta de 3.4
+
+```
+
+
+### ¿Es posible afirmar que, en promedio, los atletas de raza blanca superaban a los de raza oriental por 2,9 segundos antes del entrenamiento?
+
+```{r}
+#Sacando los previos por razas
+raza_Blanca = subset(datos, datos$Raza=="Blanca", select = -c(Id, Posterior, Raza))
+raza_Oriental = subset(datos, datos$Raza=="Oriental", select = -c(Id, Posterior, Raza))
+
+
+#Normalidad :
+
+#H0: La muestra proviene de una distribución normal.
+
+#Ha: La muestra no proviene de una distribución normal.
+#se usara la prueba de Shapiro debido al tamaño reducido de la muestra necesaria, usando las antes mencionadas hipotesis nula e hipotesis alternativa
+
+###Prueba de Shapiro-Wilk para la variable previo para ambas razas###
+#raza blanca
+shapiro.test(raza_Blanca$Previo)
+#raza oriental
+shapiro.test(raza_Oriental$Previo)
+
+#No existe evidencia estadística para rechazar Ho en ninguna de las dos razas. 
+#Es decir, podemos seguir bajo el supuesto de que la variable previo tiene una distribución normal en ambas razas. Esto se cumple para la prueba de Shapiro
+
+ 
+#la hipotesis nula es: en promedio, los atletas de raza blanca tardaban menos o igual que los de raza oriental antes del entrenamiento
+#la hipotesis alternativa es: en promedio, los atletas de raza blanca superaban a los de raza oriental antes del entrenamiento
+
+##Aplicacion de la prueba t-student
+t.test(x = raza_Oriental, y = raza_Blanca, alternative = "two.sided", mu = 2.9, paired = FALSE)
+
+#No existe evidencia estadística para rechazar Ho. 
+#Es decir, no se puede asegurar que en promedio los atletas de raza blanca superaban a los de raza oriental antes del entrenamiento
+```
+
+### ¿Será cierto que hay menos atletas de raza oriental que redujeron sus mejores marcas en al menos 5,3 segundos que atletas de raza negra que lo hicieron en al menos 1,4 segundos?
+
+```{r}
+n <- length(datos$Id)
+
+nuevo_datos = mutate(datos, Reduccion = Previo-Posterior)
+
+raza_Negra = subset(nuevo_datos, nuevo_datos$Raza=="Negra", select = -c(Id, Posterior, Previo, Raza))
+raza_Negra_time = subset(raza_Negra, raza_Negra$Reduccion >= 1.4)
+raza_Oriental = subset(nuevo_datos, nuevo_datos$Raza=="Oriental", select = -c(Id, Posterior, Previo, Raza))
+raza_Oriental_time = subset(raza_Oriental, raza_Oriental$Reduccion >= 5.3)
+
+
+
+# Ambas muestras siguen el modelo normal?
+
+# Raza negra reduccion 1,4
+# - observaciones independientes
+# - +10 exitos y +10 fracasos:
+length(raza_Negra_time$Reduccion)                                     # N° de exitos
+n - length(raza_Negra_time$Reduccion)     # N° de fracasos
+
+# Raza oriental reduccion 5,3
+# - observaciones independientes
+# - +10 exitos y +10 fracasos:
+length(raza_Oriental_time$Reduccion)                                  # N° de exitos
+n - length(raza_Oriental_time$Reduccion)  # N° de fracasos
+
+# no hay suficientes exitos de raza oriental con una reduccion menor o igual a 5.3 segundos en la muestra para cumplir con los requisitos de normalidad
+# no es posible realizar una prueba de proporciones
+
+```

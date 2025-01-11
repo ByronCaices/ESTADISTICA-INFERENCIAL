@@ -1,0 +1,348 @@
+---
+title: "EP08 métodos con remuestreo"
+author: "Equipo 5"
+date: "2024-11-19"
+output: html_document
+---
+
+#### Importante
+
+En primer lugar, se hará una importación de las siguientes librerías útiles para la realización del ejercicio, donde estas son: *dplyr*, *ez* y *boot*.
+
+```{r, echo = F, warning = F, message = F}
+library(dplyr)
+library(boot)
+library(ez)
+```
+
+
+Antes de comenzar con la respuesta de los ejercicios, se hará la lectura del dataset a través de la función nativa de R, \*read.csv\*.
+
+Así, un pequeño vistazo a los datos viene dado por la siguiente tabla:
+
+```{r, echo = F}
+data <- read.csv("EP08 Datos CASEN 2017.csv")
+head(data)
+```
+
+#### Pregunta 1.- Propongan una pregunta de investigación original, que involucre la comparación de una frecuencia de un evento o característica en dos grupos independientes (más abajo se dan unos ejemplos). Fijando una semilla propia, seleccionen una muestra aleatoria de hogares (100 \< n \< 150) y respondan la pregunta propuesta utilizando una prueba de permutaciones Monte Carlo. Indicación: creen su propio código, específicamente para este problema, no usen directamente el script del apunte.
+
+Solución:
+
+En particular, sujeto a la información brindada del dataset, se propone la siguiente pregunta de investigación:
+El gobierno de Chile quiere conocer la estructura familiar entre las zonas rurales y urbanas, para poder crear bonos que ayuden al fomento del matrimonio entre estas zonas de la región Metropolitana. Por lo anterior el ministerio se planteo la siguiente pregunta: ¿Existen diferencias en las proporciones de estado civil (ecivil) casado/a en la Región Metropolitana (region) para las zonas Urbanas y Rurales?.
+
+En base a esta respuesta se desprenden las siguientes hipótesis:
+
+**Hipótesis Nula (**$H_0$): La proporción de personas casadas en las zonas urbanas y rurales pertenecientes a la Región Metropolitana son la misma.
+
+**Hipótesis Alternativa (**$H_A$): La proporción de personas casadas en las zonas urbanas y rurales pertenecientes a la Región Metropolitana son distintas.
+
+Matemáticamente hablando, vienen dadas por:
+
+**Hipótesis Nula (**$H_0$): $P_{Urbano}$ = $P_{Rural}$
+
+**Hipótesis Alternativa (**$H_A$): $P_{Urbano}$ != $P_{Rural}$
+
+
+```{r}
+# Establecemos semilla y número de repeticiones
+R = 3000
+set.seed(70)
+
+# Filtramos los datos para obtener los subconjunto establecidos en nuestro pregunta de investigación
+
+#le saque lo de casado porque lo necesito para saber la proporcion, por lo que si ya tengo todos los casados no tiene sentido sacarla
+#ecivil=="Casado(a)" &
+
+urbano <- data %>% filter( region=="Región Metropolitana de Santiago" & zona == "Urbano")
+rural <- data %>% filter( region=="Región Metropolitana de Santiago" & zona == "Rural")
+
+# Generamos indices aleatorios para crear el tamaño de la muestra que se extraerá del subconjunto obtenido anteriormente
+n_urbano <- sample(100:150, 1)
+n_rural <- sample(100:150, 1)
+
+# Realizamos una selección aleatoria de filas de los datos creando un nuevo subconjunto con n_x filas seleccionadas al azar
+muestra_urbana <- urbano[sample(nrow(urbano), n_urbano), ]
+muestra_rural <- rural[sample(nrow(rural), n_rural), ]
+
+# Calculamos las proporciones de casados en cada subconjunto
+mean_urbano <- mean(muestra_urbana$ecivil == "Casado(a)")
+mean_rural <- mean(muestra_rural$ecivil == "Casado(a)")
+
+# Sacamos la diferencia entre las proporciones
+diff_proporciones <- mean_urbano - mean_rural
+
+# Funcion para las permutaciones/Monte Carlo
+permutaciones_monte_carlo <- function(muestra_urbana, muestra_rural, n_permutaciones) {
+    # Concatenamos los estados civiles de ambas muestras
+    todas_las_respuestas <- c(muestra_urbana$ecivil, muestra_rural$ecivil)
+    
+    # Contador para diferencias extremas
+    contador_extremos <- 0
+    
+    for (i in 1:n_permutaciones) {
+        # Mezclamos las respuestas
+        respuestas_mezcladas <- sample(todas_las_respuestas)
+        
+        # Reasignamos a grupos
+        nuevo_urbano <- respuestas_mezcladas[1:length(muestra_urbana$ecivil)]
+        nuevo_rural <- respuestas_mezcladas[(length(muestra_urbana$ecivil) + 1):length(respuestas_mezcladas)]
+        
+        # Calculamos las nuevas proporciones
+        p_nuevo_urbano <- mean(nuevo_urbano == "Casado(a)")
+        p_nuevo_rural <- mean(nuevo_rural == "Casado(a)")
+        
+        # Calcular la diferencia
+        diff_nueva <- p_nuevo_urbano - p_nuevo_rural
+        
+        # Contamos si la diferencia entre proporciones es más extrema que la observada
+        if (abs(diff_nueva) >= abs(diff_proporciones)) {
+            contador_extremos <- contador_extremos + 1
+        }
+    }
+    
+    # Calculamos el valor p
+    valor_p <- contador_extremos / n_permutaciones
+    return(valor_p)
+}
+
+# Ejecutamos la prueba de Monte Carlo
+valor_p <- permutaciones_monte_carlo(muestra_urbana, muestra_rural, R)
+
+# Mostramos los resultados
+cat("Diferencia en proporciones:", diff_proporciones, "\n")
+cat("Valor p:", valor_p, "\n")
+
+```
+
+Este resultado nos indica que la proporción de personas casadas en zona urbana es un 1.93% mayor que en zona rural.
+Además que con un valor p de 0.88 que es mayor al nivel de significancia de 95% por lo tanto aceptamos la hipótesis nula que nos indica que las proporciones de personas casadas en zona rural y en zona urbana son iguales, por lo tanto la implementación de bonos podría aplicarse a ambas zonas.
+
+
+#### Pregunta 2.- Propongan una pregunta de investigación original, que involucre la comparación de las medias de más de dos grupos independientes (más abajo se dan unos ejemplos). Fijando una semilla distinta a la anterior, seleccionen una muestra aleatoria de hogares (200 \< n \< 300) y respondan la pregunta propuesta utilizando bootstrapping. Solo por ejercicio académico, aplique un análisis post-hoc con bootstrapping aunque este no fuera necesario. Indicación: consideren que el análisis post-hoc debe hacerse con las mismas remuestras usadas para la prueba ómnibus.
+
+Solución:
+
+En particular, sujeto a la información brindada por el dataset, se propone la siguiente pregunta de investigación:
+
+Actualmente la tienda de calzado masculino "Cardinales" busca abrir una nueva sucursal en alguna de las siguientes comunas: Estación Central, Las Condes y Maipú, pero necesita saber el ingreso medio por hogar de estas comunas, con el fin de tener un factor para elegir en cual de estas seria más rentable realizar el proyecto. Por lo anterior se plantea la siguiente pregunta: 
+¿Existe diferencias entre las medias de los ingresos totales (ytot) en la Región Metropolitana (region) para los grupos de hombres (sexo) entre los 18 y 25 años (edad) pertenecientes a las comuna de Las Condes, Maipú y Estación Central?
+
+En base a esta respuesta se desprenden las siguientes hipótesis:
+
+**Hipótesis Nula (**$H_0$): Las medias del ingreso total para los grupos de hombres entre los 18 y 25 años de edad pertenecientes a las comuna de Las Condes, Maipú y Estación Central son iguales.
+
+**Hipótesis Alternativa (**$H_A$): Existe al menos una media del ingreso total distinta para los grupos de hombres entre los 18 y 25 años de edad pertenecientes a las comuna de Las Condes, Maipú y Estación Central son iguales.
+
+Matemáticamente hablando, vienen dadas por:
+
+**Hipótesis Nula (**$H_0$): $\mu_{LasCondes}$ = $\mu_{Maipú}$ = $\mu_{EstaciónCentral}$
+
+**Hipótesis Alternativa (**$H_A$): ∃ i,j ∈ {(Las Condes, Maipú, Estación Central), i≠j | $\mu_{i}$ = $\mu_{j}$
+
+En base a lo anterior, se obtendrá una muestra de 250 con la semilla 99, para así, aplicar la ténica de Bootstrapping a cada grupo para obtener  10.000 remuestras.
+
+```{r, echo = F}
+set.seed(99) # Seteo de semilla para obtener iguales resultados en cada ejecución
+
+# Filtros para obtener los grupos
+filteredData <- data %>%
+  filter(
+    comuna == "Las Condes" | comuna == "Maipú" | comuna == "Estación Central" & # Selección de las comunas
+    sexo == "Hombre" &                                                         # Solo hombres
+    edad >= 18                                                                 # Solo mayores o iguales a 18 años
+  ) %>%
+  sample_n(250) %>%  # Selección aleatoria de 250 observaciones
+  select(comuna, ytot) # Selección de las columnas relevantes
+
+# Separación de datos por comuna
+dataMaipu <- filteredData %>% filter(comuna == "Maipú")                     # Datos de Maipú
+dataEstacionCentral <- filteredData %>% filter(comuna == "Estación Central") # Datos de Estación Central
+dataLasCondes <- filteredData %>% filter(comuna == "Las Condes")             # Datos de Las Condes
+
+# Cálculo de las medias para cada grupo
+lasCondesMean <- mean(dataLasCondes$ytot)               # Media de Las Condes
+maipuMean <- mean(dataMaipu$ytot)                       # Media de Maipú
+estacionCentralMean <- mean(dataEstacionCentral$ytot)   # Media de Estación Central
+
+# Cálculo de las desviaciones estándar para cada grupo
+lasCondesSd <- sd(dataLasCondes$ytot)                   # Desviación estándar de Las Condes
+maipuSd <- sd(dataMaipu$ytot)                           # Desviación estándar de Maipú
+estacionCentralSd <- sd(dataEstacionCentral$ytot)       # Desviación estándar de Estación Central
+
+# Obtención de tamaños muestrales para cada grupo
+lengthLasCondes <- nrow(dataLasCondes)                  # Tamaño muestral de Las Condes
+lengthDataMaipu <- nrow(dataMaipu)                      # Tamaño muestral de Maipú
+lengthEstacionCentral <- nrow(dataEstacionCentral)      # Tamaño muestral de Estación Central
+
+# Función para calcular el valor F (ANOVA)
+getF <- function(df, iA, iC, iM, verbose = FALSE) {
+  # Armamos la matriz de datos con los índices recibidos
+  i <- c(iA, iC, iM)
+  ids <- factor(1:length(i))
+  datos <- cbind(id = ids, df[i, ]) # Matriz con los datos seleccionados
+  dd <<- datos                      # Asignación para debugging
+
+  # Cálculo del ANOVA usando ezANOVA
+  ez <- ezANOVA(datos, ytot, id, between = comuna, type = 2)
+  
+  if(verbose) # Si verbose es TRUE, imprimir el ANOVA completo
+    print(ez)
+    
+  return(ez[["ANOVA"]][["F"]]) # Devolver el valor F
+}
+
+# Calcular el valor F observado para los datos originales
+Fvalue <- getF(filteredData, lengthDataMaipu, lengthEstacionCentral, lengthLasCondes, TRUE)
+
+# Cálculo de la media y desviación estándar general
+generalMean <- mean(filteredData$ytot) # Media general
+generalSd <- sd(filteredData$ytot)     # Desviación estándar general
+
+# Normalización de los datos para las comunas
+grupos <- filteredData %>%
+  group_by(comuna) %>%
+  summarise(media = mean(ytot), sd = sd(ytot)) %>% # Media y desviación estándar por comuna
+  as.data.frame()
+
+# Ajuste de los valores en la muestra usando las medias y desviaciones estándar generales
+copySample <- filteredData
+copySample[lengthLasCondes, "ytot"] <- generalMean + 
+  (copySample[lengthLasCondes, "ytot"] - grupos[1, "media"]) * (generalSd / grupos[1, "sd"])
+copySample[lengthDataMaipu, "ytot"] <- generalMean + 
+  (copySample[lengthDataMaipu, "ytot"] - grupos[1, "media"]) * (generalSd / grupos[1, "sd"])
+copySample[lengthEstacionCentral, "ytot"] <- generalMean + 
+  (copySample[lengthEstacionCentral, "ytot"] - grupos[1, "media"]) * (generalSd / grupos[1, "sd"])
+
+# Fijación del valor de B (cantidad de remuestras para bootstrapping)
+B <- 1999
+
+# Definición de funciones para calcular la media de cada grupo
+mediaLasCondes <- function(data, i) {
+  mean(dataLasCondes$ytot[i]) # Media de Las Condes para una muestra específica
+}
+mediaMaipu <- function(data, i) {
+  mean(dataMaipu$ytot[i]) # Media de Maipú para una muestra específica
+}
+mediaEstacionCentral <- function(data, i) {
+  mean(dataEstacionCentral$ytot[i]) # Media de Estación Central para una muestra específica
+}
+
+# Generar remuestras para cada grupo
+reSampleMaipu <- lapply(1:B, function(i) sample(lengthDataMaipu, replace = TRUE)) # Remuestras para Maipú
+reSampleLasCondes <- lapply(1:B, function(i) sample(lengthLasCondes, replace = TRUE)) # Remuestras para Las Condes
+reSampleEstacionCentral <- lapply(1:B, function(i) sample(lengthEstacionCentral, replace = TRUE)) # Remuestras para Estación Central
+
+# Función para calcular el valor F con remuestras
+get.F.boot <- function(i, df, verbose = FALSE) 
+  getF(df, reSampleMaipu[[i]], reSampleLasCondes[[i]], reSampleEstacionCentral[[i]], verbose = F)
+
+# Generación de la distribución del valor F usando bootstrapping
+distribucion <- suppressMessages(suppressWarnings(
+  sapply(1:B, function(i) get.F.boot(i, filteredData, verbose = F)) # Calcular F para cada remuestra
+))
+
+# Cálculo del valor F crítico (percentil 95%)
+F_crit <- quantile(distribucion, 0.95)
+cat("F crítico con 95% de confianza:", round(F_crit, 3), "\n")
+
+# Cálculo del p-valor
+numerador2 <- sum(distribucion > Fvalue) # Número de remuestras con F mayor que F observado
+valor_p2 <- (numerador2 + 1) / (B + 1) # Cálculo del p-valor
+cat("P-valor:", valor_p2) # Imprimir el p-valor
+
+```
+
+Así, como el valor-p obtenido es mayor a nuestro nivel de significancia, No hay evidencia suficiente para rechazar la hipótesis nula. Aún así, se hará un análisis post-hoc para motivos de estudio, que viene dado por la diferencia de las medias.
+
+```{r, echo = F, warning = F}
+get.dif.medias <- function(df, i1, i2)
+{
+  media1 <- mean(df[i1, "ytot"]) 
+  media2 <- mean(df[i2, "ytot"])
+  return(media1 - media2)
+}
+
+dif.obs.A.C <- get.dif.medias(filteredData, lengthLasCondes, lengthDataMaipu)
+dif.obs.A.M <- get.dif.medias(filteredData, lengthLasCondes, lengthEstacionCentral)
+dif.obs.C.M <- get.dif.medias(filteredData, lengthDataMaipu, lengthEstacionCentral)
+
+cat("Las Condes - Maipu:", round(dif.obs.A.C), "\n")
+cat("Las Condes - Estación Central:", round(dif.obs.A.M), "\n")
+cat("Maipú - Estación Central:", round(dif.obs.C.M), "\n")
+
+
+dist.boot.dif.A.C <- sapply(1:B,
+                            function(i) get.dif.medias(copySample,
+                                                       reSampleLasCondes[[i]],
+                                                       reSampleMaipu[[i]]))
+dist.boot.dif.A.M <- sapply(1:B,
+                            function(i) get.dif.medias(copySample,
+                                                       reSampleLasCondes[[i]],
+                                                       reSampleEstacionCentral[[i]]))
+dist.boot.dif.C.M <- sapply(1:B,
+                            function(i) get.dif.medias(copySample,
+                                                       reSampleMaipu[[i]],
+                                                       reSampleEstacionCentral[[i]]))
+
+valor_p.A.C <- (sum(abs(dist.boot.dif.A.C) > abs(dif.obs.A.C)) + 1) / (B + 1)
+valor_p.A.M <- (sum(abs(dist.boot.dif.A.M) > abs(dif.obs.A.M)) + 1) / (B + 1)
+valor_p.C.M <- (sum(abs(dist.boot.dif.C.M) > abs(dif.obs.C.M)) + 1) / (B + 1)
+valores_p.adj <- p.adjust(c(valor_p.A.C, valor_p.A.M, valor_p.C.M), method = "BH")
+
+cat("Valores p de pruebas bilaterales:\n")
+cat("Las Condes - Maipu:", round(valores_p.adj[1], 3), "\n")
+cat("Las Condes - Estación Central:", round(valores_p.adj[2],3), "\n")
+cat("Maipú - Estación Central:", round(valores_p.adj[3], 3), "\n")
+
+dist.boot.dif.obs.A.C <- sapply(1:B,
+                                function(i) get.dif.medias(copySample,
+                                                          reSampleLasCondes[[i]],
+                                                          reSampleMaipu[[i]]))
+dist.boot.dif.obs.A.M <- sapply(1:B,
+                                function(i) get.dif.medias(copySample,
+                                                          reSampleLasCondes[[i]],
+                                                          reSampleEstacionCentral[[i]]))
+dist.boot.dif.obs.C.M <- sapply(1:B,
+                                function(i) get.dif.medias(copySample,
+                                                          reSampleMaipu[[i]],
+                                                          reSampleEstacionCentral[[i]]))
+
+ci.dif.obs.A.C <- quantile(dist.boot.dif.obs.A.C, c(0.025, 0.975), na.rm = T)
+ci.dif.obs.A.M <- quantile(dist.boot.dif.obs.A.M, c(0.025, 0.975), na.rm = T)
+ci.dif.obs.C.M <- quantile(dist.boot.dif.obs.C.M, c(0.025, 0.975), na.rm = T)
+
+cat("Intervalos de 95% confianza:\n")
+cat("Las Condes - Maipu: [", round(ci.dif.obs.A.C[1], 3), ", ",
+                             round(ci.dif.obs.A.C[2], 3), "]\n", sep = "")
+cat("Las Condes - Estación Central   : [", round(ci.dif.obs.A.M[1], 3), ", ",
+                             round(ci.dif.obs.A.M[2], 3), "]\n", sep = "")
+cat("Maipú - Estación Central  : [", round(ci.dif.obs.C.M[1], 3), ", ",
+                             round(ci.dif.obs.C.M[2], 3), "]\n", sep = "")
+```
+
+Como todos los p-valores obtenidos son mayores que el nivel de significancia establecido nos indica que no hay evidencia suficiente para rechazar la hipótesis nula en ninguna de las comparaciones, por lo tanto: No hay diferencias significativas entre Las Condes y Maipú, no hay diferencias signifcativas entre Las Condes y Estación central y tampoco hay diferencias significativas entre Maipú y Estación central. Por lo tanto podría escogerse cualquiera de estas zonas para establecer la nueva tienda.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

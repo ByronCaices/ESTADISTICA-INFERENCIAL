@@ -1,0 +1,270 @@
+---
+title: ""
+author: "Grupo 4"
+date: "2024-10-08"
+output: html_document
+---
+
+```{r}
+# Importación de librerias utilizadas
+library(ggpattern)
+library(ggplot2)
+library(ggpubr)
+library(pwr)
+library(tidyr)
+```
+
+# Pregunta 1
+
+## Si la ingeniera piensa rechazar la hipótesis nula cuando la muestra presente una media menor a 9,82 litros o mayor a 10,25 litros, ¿cuál es la probabilidad de que cometa un error de tipo I? Para responder, generen un gráfico de la distribución muestral de las medias hipotetizada en donde se marquen las zonas correspondientes a la probabilidad solicitada, para luego, basándose en este gráfico, calcular el área correspondiente. Tome como ejemplo los scripts presentados en la lectura sobre poder estadístico.
+
+```{r}
+# Valores conocidos.
+n <- 100
+media_nula <- 10
+sigma <- 1
+
+# Calcular el error estándar.
+SE <- sigma / sqrt(n)
+
+# Graficar la distribución muestral de las medias si la hipótesis nula fuera verdadera.
+g_x_limites <- media_nula + c(-6, 5) * SE
+g <- ggplot() + xlim(g_x_limites)
+g <- g + labs(x = "Litros", y = "Densidad")
+g <- g + labs(title = "Distribución muestral de las medias")
+g <- g + theme_pubr()
+
+# Agregamos la hipótesis nula
+dist_0 <- stat_function(fun = dnorm,
+                        args = list(mean = media_nula, sd = SE),
+                        geom = "area",
+                        colour = "red", fill = "red", alpha = 0.1)
+
+g1 <- g + dist_0
+g1 <- g1 + geom_vline(xintercept = media_nula, colour = "red")
+
+# Calcular las regiones críticas de la hipótesis nula.
+z_critico_inferior <- 9.82
+z_critico_superior <- 10.25
+
+# Colorear regiones de rechazo en el gráfico y el valor nulo.
+g2 <- g1 + stat_function(fun = dnorm,
+                         args = list(mean = media_nula, sd = SE),
+                         geom = "area",
+                         xlim = c(g_x_limites[1], z_critico_inferior),
+                         fill = "red", alpha = 0.6)
+
+g2 <- g2 + stat_function(fun = dnorm,
+                         args = list(mean = media_nula, sd = SE),
+                         geom = "area",
+                         xlim = c(z_critico_superior, g_x_limites[2]),
+                         fill = "red", alpha = 0.6)
+
+print(g2)
+```
+
+```{r}
+#calculo del área
+p_izquierda <- pnorm(z_critico_inferior, mean = media_nula, sd = SE)
+p_derecha <- pnorm(z_critico_superior, mean = media_nula, sd = SE, lower.tail = FALSE)
+
+p_izquierda
+p_derecha
+probabilidad_error_tipo1 <- p_izquierda + p_derecha
+probabilidad_error_tipo1
+
+#Grafico con el valor de alfa (Probabilidad de error tipo I)
+g03 <- g2 + annotate("text", 
+                    x = 9.5, 
+                    y = 0.2, 
+                    label = paste0("Alfa = ", round(probabilidad_error_tipo1, 4)), 
+                    color = "red")
+
+
+print(g03)
+```
+
+
+Finalmente gracias al uso de graficos, donde las esquinas rojas representan la zona de rechazo de la hipótesis nula (cuando la media es menor a 9.82 o mayor a 10.25 litros). Al realizar la suma del área izquierda (0.03593032) y el área derecha (0.006209665) se determinó que la probabilidad de cometer un error tipo I es de 0.04213998, lo cual equivale a 4,21% aproximadamente.
+
+
+# Pregunta 2
+
+## Si el verdadero volumen medio de los bidones fuera de 10,3 litros, ¿cuál sería la probabilidad de que la ingeniera, que obviamente no conoce este dato, cometa un error de tipo II? Para responder, agregue al gráfico anterior la verdadera distribución muestral de las medias y marquen (con otro color) la zona correspondiente a la probabilidad solicitada, para luego, basándose en este gráfico, calcular el área correspondiente. También hay ejemplos de este procedimiento en la lectura sobre poder estadístico.
+
+```{r}
+# Valores desconocidos
+media_verdadera = 10.3
+delta = media_nula - media_verdadera
+
+# Agregar la verdadera distribución muestral de las medias.
+dist_v <- stat_function(fun = dnorm,
+                        args = list(mean = media_verdadera, sd = SE),
+                        geom = "area",
+                        colour = "blue",
+                        fill = "blue", alpha = 0.1)
+
+g3 <- g2 + dist_v + geom_vline(xintercept = media_verdadera, colour = "blue")
+
+# Agrega anotación del tamaño del efecto
+x_ann <- c(media_verdadera, media_nula)
+y_ann <- c(dnorm(media_verdadera, mean = media_verdadera, sd = SE),
+           dnorm(media_nula, mean = media_nula, sd = SE))
+y_ann <- y_ann + 0.01
+g3 <- g3 + annotate("segment", x = x_ann[1], y = y_ann[1],
+                    xend = x_ann[2], yend = y_ann[2],
+                    arrow = arrow(angle = 10, length = unit(0.03, "npc"),
+                                  ends = "both", type = "open"))
+g3 <- g3 + annotate("text", x = sum(x_ann) / 2, y = y_ann[1] - 0.001,
+                    label = "delta", vjust = "top", parse = TRUE)
+print(g3)
+```
+
+```{r}
+# Traspasar las regiones críticas a la verdadera distribución muestral de las medias.
+g4 <- g + dist_0 + dist_v
+g4 <- g4 + stat_function(fun = dnorm,
+                         args = list(mean = media_verdadera, sd = SE),
+                         geom = "area",
+                         xlim = c(g_x_limites[1], z_critico_inferior),
+                         fill = "blue", alpha = 0.6)
+g4 <- g4 + stat_function(fun = dnorm,
+                         args = list(mean = media_verdadera, sd = SE),
+                         geom = "area",
+                         xlim = c(z_critico_superior, g_x_limites[2]),
+                         fill = "blue", alpha = 0.6)
+g4 <- g4 + stat_function(fun = dnorm,
+                         args = list(mean = media_verdadera, sd = SE),
+                         geom = "area_pattern",
+                         xlim = c(z_critico_inferior, z_critico_superior),
+                         fill = "white", colour = "blue", alpha = 0.3,
+                         pattern_spacing = 0.15, pattern_density = 0.4,
+                         pattern_fill = "blue", pattern_colour = "blue",
+                         pattern_angle = 45, pattern_alpha = 0.3)
+print(g4)
+```
+
+
+```{r}
+# Calcular el poder.
+poder_inf <- pnorm(z_critico_inferior, mean = media_verdadera, sd = SE,
+                   lower.tail = TRUE)
+cat("poder inf = ", poder_inf, "\n")
+poder_sup <- pnorm(z_critico_superior, mean = media_verdadera, sd = SE,
+                   lower.tail = FALSE)
+cat("poder sup = ", poder_sup, "\n")
+# Suma de las areas
+poder <- poder_inf + poder_sup
+cat("Poder = ", poder, "\n")
+
+# Calcular la probabilidad de cometer un error tipo II.
+beta <- 1 - poder
+cat("Beta = ", beta, "\n")
+```
+
+
+Al agregar el verdadero volumen medio de 10,3 litros (azul) se obtuvo que la probabilidad de que la ingeniera cometa un error de tipo 2 es de 0.3085367, equivalente a un 30% aproximadamente. El cual obtuvimos luego de sumar las áreas del poder inferior (7.933282e-07) y superior (0.6914625), para después despejar beta de la siguiente ecuación: Poder = 1 - beta.
+
+# Pregunta 3
+
+## Como no se conoce el verdadero volumen medio, genere un gráfico del poder estadístico con las condiciones anteriores, pero suponiendo que el verdadero volumen medio podría variar de 9,4 a 10,4 litros. Hay un ejemplo de este tipo de gráfico en la lectura sobre poder estadístico.
+
+```{r}
+#Valores hipótesis
+alfa <- 0.04213998
+n <- 100
+sigma <- 1
+
+# Tamaños del efecto.
+medias_verdaderas <- seq(9.4, 10.4, 0.01)
+deltas <- medias_verdaderas - media_nula
+deltas_norm <- deltas / sigma
+
+# Calcular poder de la prueba Z bilateral.
+f_b <- function(x) pwr.norm.test(x, n = n, sig.level = alfa,
+                 alternative = "two.sided")[["power"]]
+poder_bilat <- sapply(deltas_norm, f_b)
+
+# Calcular poder de la prueba Z con hipótesis
+# alternativa unilateral tipo "less".
+f_u <- function(x) pwr.norm.test(x, n = n, sig.level = alfa,
+                 alternative = "less")[["power"]]
+poder_unilat <- sapply(deltas_norm, f_u)
+
+# Graficar estas curvas
+datos_anchos <- data.frame(deltas, poder_bilat, poder_unilat)
+datos_largos <- datos_anchos %>%
+  pivot_longer(-deltas, names_to = "Tipo", values_to = "Poder")
+datos_largos[["Tipo"]] <- factor(datos_largos[["Tipo"]],
+                                 labels = c("Bilateral", "Unilateral"))
+g <- ggline(datos_largos, x = "deltas", y = "Poder",
+            color = "Tipo",
+            numeric.x.axis = TRUE, plot_type = "l")
+g <- g + labs(x = "Delta [s]",
+              y = "Poder",
+              title = "Relación entre poder y tamaño del efecto")
+g <- ggpar(g, legend = c(.85, .35))
+print(g)
+```
+
+
+Considerando las condiciones de las preguntas anteriores, y un volumen medio que varía entre 9,4 y 10,4 litros, el gráfico entre la relación del poder y el tamaño del efecto se comporta según la teoría: a medida que el delta se reduce, también el poder se reduce, lo que deriva en una mayor probabilidad de cometer un error de tipo 2.
+
+# Pregunta 4
+
+## Considerando un volumen medio de 10 litros, ¿cuántos bidones deberían revisarse para conseguir un poder estadístico de 0,8 y un nivel de significación de 0,05?
+
+Hipótesis nula (Ho): La cantidad de bidones es igual a 100. (n = 100)
+
+Hipótesis alternativa (Ha): La cantidad de bidones es distinta de 100. (n != 100)
+
+```{r}
+# Datos conocidos
+alfa = 0.05
+poder_p4 = 0.8
+delta = (10.3 - 10)/sigma
+
+# Determinar tamaño de la muestra
+bidones = pwr.norm.test(d = delta, n = NULL, sig.level = alfa, power = poder_p4, alternative = "two.side")
+print(bidones)
+round(bidones$n, 0.1)
+```
+Se deben revisar aproximadamente 87 bidones para obtener un poder de 0.8 con un nivel de significación de 0.05.
+
+# Pregunta 5
+
+## ¿Alcanzaría esta muestra para detectar la diferencia que la ingeniera sospecha que existe entre las dos máquinas de la planta con al menos las mismas probabilidades de cometer errores?
+
+Hipótesis nula (Ho): No hay diferencia en el llenado correcto de los bidones entre las 2 maquinas, es decir, (P1 = P2)
+Hipótesis alternativa (Ha): Hay diferencia en el llenado correcto de los bidones entre las 2 maquinas, es decir, (P1 != P2)
+
+```{r}
+# Datos conocidos
+P1 = 0.9
+P2 = 0.96
+
+# calculo h_cohen
+h_cohen = ES.h(p1 = P1, p2 = P2)
+
+# Determinar tamaño de la muestra
+cantidad = pwr.2p.test(h = h_cohen, n = NULL, sig.level = alfa, power = poder_p4, alternative = "two.sided")
+
+print(cantidad)
+round(cantidad$n, 0.1)
+```
+Utilizando el poder y el nivel de significancia de la pregunta anterior, además de una prueba de dos muestras independientes de igual tamaño, concluimos que la ingeniera no cuenta con el tamaño de muestra necesario para determinar si hay diferencia entre el cumplimiento entre las 2 máquinas ya que necesita 271 muestras de cada máquina para corroborar su creencia.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

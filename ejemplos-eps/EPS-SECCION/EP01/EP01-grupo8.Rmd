@@ -1,0 +1,108 @@
+---
+title: "E01"
+author: "César Rodríguez y Mohamed Al-Marzuk."
+date: "2024-09-24"
+output: html_document
+---
+
+*Importante:*
+Es clave mencionar que antes de hacer el estudio que se requiere, se hará una importación de librerías, las cuales son las siguientes: dplyr, ggpubr, kableExtra, ggpubr y plotly.
+    
+```{r setup, echo = FALSE, message = FALSE}
+library(dplyr)
+library(ggpubr)
+library(kableExtra)
+library(ggpubr)
+library(plotly)
+```
+
+Una vez realizado esto se procederá.
+
+#### P8.- ¿Cómo diría que es el ingreso de las mujeres de la RM? (simétrico/asimétrico, concentrado/disperso, unimodal/multimodal, etc.)
+
+#### Respuesta:
+En primer lugar se hará lectura la carga de los datos y una verificación de cada variable + su detalle en una tabla, siendo así:
+
+```{r, echo = FALSE}
+datos <- read.csv2("EP01 Datos Casen 2017.csv")
+head(datos) ## Por hacer sacar una observacion de cada
+```
+
+Se puede apreciar que en el dataframe están presentes las variables necesarias, que ahora serán analizadas en la siguiente tabla:
+
+```{r, echo = FALSE}
+dataframe_tabla <- data.frame("Variables" = c("folio", "o",
+                                  "id.vivienda", "hogar",
+                                  "region", "provincia",
+                                  "comuna", "ing.comuna",
+                                  "zona", "sexo", 
+                                  "edad", "ecivil", 
+                                  "ch1", "ytot"),
+                    "Descripción" = c("Identificador hogar", "Nro. persona del hogar",
+                                  "Identificador vivienda", "Identificador hogar en vivienda",
+                                  "Region", "Provincia",
+                                  "Comuna", "Ranking histórico del ingreso de la comuna",
+                                  "Área geográfica", "Sexo de la persona",
+                                  "Edad de la persona", "Estado civil de la persona",
+                                  "Situacion ocupacional", "Ingreso total"),
+                    "Clasificación" = c("Numérica", "Numérica",
+                                  "Numérica", "Numérica",
+                                  "Categórica", "Categórica",
+                                  "Categórica", "Numérica",
+                                  "Categórica", "Categórica",
+                                  "Categórica", "Categórica",
+                                  "Categórica", "Numérica"))
+dataframe_tabla %>%
+  kbl(caption = "Tabla 1. Descripción general de las variables") %>%
+  kable_styling()
+```
+
+Una vez realizado en análisis de las variables, se graficará la variable ingresos de las mujeres con un Histograma que es bastante útil para el análisis gráfico de una sola variable numérica, permitiendo obtener su simetría, modas, etc. También, se hará una tabla resumen de las medidas de tendencia más importantes.
+
+Así, el gráfico resultante:
+
+```{r, echo = FALSE, warning = FALSE}
+datos_mujeres <- datos %>% filter(sexo == "Mujer")
+
+grafico <- gghistogram(datos_mujeres, 
+                       x = "ytot", 
+                       xlab = "Ingresos", 
+                       ylab = "Frecuencia", 
+                       color = "blue", 
+                       fill = "blue", 
+                       alpha = 0.6) +  # Ajuste de transparencia
+  labs(title = "Distribución de Ingresos de Mujeres", 
+       caption = "Fuente: Datos Casen 2017") + 
+  scale_x_continuous(labels = scales::comma) + 
+  theme_minimal() + 
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+        plot.subtitle = element_text(hjust = 0.5, size = 12),
+        axis.title = element_text(face = "bold", size = 12))
+
+ggplotly(grafico)
+```
+
+Y la tabla resumen resultante:
+
+```{r, echo = FALSE}
+options(scipen = 999)
+
+tabla_resumen <- data.frame("Medida" = c("Media",
+                                         "Desviación",
+                                         "Varianza"),
+                            "Valores" = c(mean(datos_mujeres$ytot),
+                                           sd(datos_mujeres$ytot),
+                                           var(datos_mujeres$ytot)))
+
+tabla_resumen %>% 
+  kbl(caption = "Tabla 2. Resumen medidas de tendencia central") %>%
+  kable_styling()
+
+```
+Del gráfico presente y la tabla resumen, se pueden rescatar la siguiente información: 
+
+Existe una gran cantidad de mujeres que *no* recibe altos ingresos, siendo este grupo el que más observaciones tiene por sobre las mujeres que *sí* recibe altos ingresos, además, se mencionar que al ser el valor mayor de observaciones para un intervalo de ingresos este será la moda del conjunto de datos, gracias a esto podemos clasificar al conjunto de datos como unimodal, debido a que solo existe una moda.
+
+Como las medidas de tendencia, varianza y desviación son valores altos, se puede concluir que el conjunto de datos en el cual estamos trabajando es mayoritariamente disperso.
+
+Por último, el gráfico presenta una asimetría desviada a la izquierda.

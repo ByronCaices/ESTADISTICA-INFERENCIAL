@@ -1,0 +1,459 @@
+---
+title: "EP08-respuesta-equipo-6"
+date: "2024-11-18"
+output: pdf_document
+---
+# Pregunta 1: ¿Existe una diferencia significativa en la frecuencia de mujeres asalariadas entre zonas rurales y Urbanos?
+
+Hipótesis:
+$H_0$: No existe diferencia en la proporción de mujeres asalariadas entre zonas rurales y urbanas.
+
+$H_1$: Existe diferencia en la proporción de mujeres asalariadas entre zonas rurales y urbanas.
+
+Matemáticamente:
+$H_0: p_{rural} - p_{urbana} = 0$
+
+$H_1: p_{rural} - p_{urbana} \neq 0$
+
+```{r}
+# Cargar librerías
+library(tidyverse)
+library(ggpubr)
+```
+
+# Cargar datos
+
+```{r}
+set.seed(123)
+data <- read.csv2("EP08 Datos CASEN 2017.csv", sep = ",")
+data <- data %>% 
+  filter(sexo == "Mujer") %>% select(zona, ch1) %>% 
+  mutate(ch1 = ifelse(ch1 == "Asalariado", "Asalariado", "No asalariado"))
+```
+
+# Función para obtener la diferencia observada de proporciones
+```{r}
+get.prop.dif <- function(df, verbose = FALSE) {
+  # Crear tabla de contingencia
+  tabla <- table(df)
+  
+  if (verbose) {
+    print(tabla)
+  }
+  
+  # Calcular proporciones
+  p_urbano <- tabla["Urbano", "Asalariado"] / sum(tabla["Urbano", ])
+  p_rural <- tabla["Rural", "Asalariado"] / sum(tabla["Rural", ])
+  
+  if (verbose) {
+    cat("\nProporción de mujeres asalariadas en zonas:\n")
+    cat("Urbano:", round(p_urbano, 4), "\n")
+    cat("Rural:", round(p_rural, 4), "\n")
+  }
+  
+  # Retornar la diferencia de proporciones
+  return(p_urbano - p_rural)
+}
+```
+
+# Diferencia observada
+
+```{r}
+dif.obs = get.prop.dif(data, verbose = TRUE)
+```
+
+# Parámetros de permutación
+
+```{r}
+R = 2999
+show = FALSE
+if(R < 10) {
+  show = TRUE
+}
+```
+
+# Generar índices permutados
+
+```{r}
+
+permutaciones = lapply(1:R, function(i) sample(1:nrow(data)))
+```
+
+# Función para calcular diferencias permutadas
+
+```{r}
+get.prop.dif.perm <- function(indices, df, verbose = FALSE) {
+  df.permutado <- data.frame(zona = df[indices, "zona"], ch1 = df["ch1"])
+  get.prop.dif(df.permutado, verbose)
+}
+```
+
+# Generar distribución de diferencias permutadas
+
+```{r}
+permutaciones = lapply(1:R, function(i) sample(1:length(data$zona)))
+```
+
+
+# Generar distribución de diferencias permutadas
+
+```{r}
+distribucion <- sapply(permutaciones, get.prop.dif.perm, data, verbose = FALSE)
+```
+
+# Histograma de la distribución permutada
+
+```{r}
+library(ggpubr)
+
+p1 <- gghistogram(data.frame(distribucion), "distribucion", bins = 30, fill = "blue",
+                  title = "Distribución permutada",
+                  xlab = "Diferencia entre proporciones de mujeres asalariadas",
+                  ylab = "Frecuencia") +
+      geom_vline(xintercept = dif.obs, colour = "red", linetype = "dashed") +
+      theme_minimal()
+print(p1)
+```
+
+# Cálculo del intervalo de confianza y valor p
+
+```{r}
+intervalo = quantile(distribucion, c(0.025, 0.975))
+numerador = sum(distribucion > abs(dif.obs))
+valor_p = (numerador + 1) / (R + 1)
+
+cat("Intervalo de confianza al 95%:", intervalo, "\n")
+cat("Valor p:", valor_p, "\n")
+```
+
+# Conclusión:
+
+Dado que $p<0.05$, se rechaza la hipótesis nula. Por lo tanto, se concluye, con un 95% de confianza, que existe una diferencia significativa en la proporción de mujeres asalariadas entre zonas rurales y urbanas.
+
+# Pregunta 2
+
+¿Hay diferencias significativas en el ingreso promedio (ytot) entre los diferentes estados civiles?
+
+# Hipótesis
+
+$H_0: $ No hay diferencias significativas en el ingreso promedio entre los diferentes estados civiles.
+
+$H_1: $ Existen diferencias significativas en el ingreso promedio entre los diferentes estados civiles.
+
+# Cargar Datos
+
+```{r}
+library(tidyverse)
+library(ggpubr)
+set.seed(126)
+datos = read.csv2("EP08 Datos CASEN 2017.csv", sep = ",")
+estados = c("Casado(a)", "Soltero(a)", "Viudo(a)", "Divorciado (a)", "Separado(a)")
+datos = datos %>% filter(ecivil %in% estados) %>% 
+        select(folio,ecivil, ytot) %>%
+        sample_n(300)
+print(table(datos$ecivil))
+```
+
+Generamos los índices de los grupos
+
+```{r}
+iCasado = which(datos[["ecivil"]] == "Casado(a)")
+iSoltero = which(datos[["ecivil"]] == "Soltero(a)")
+iViudo = which(datos[["ecivil"]] == "Viudo(a)")
+iDivorciado = which(datos[["ecivil"]] == "Divorciado (a)")
+iSeparado = which(datos[["ecivil"]] == "Separado(a)")
+```
+
+Gráfico de cajas
+
+```{r}
+p2 = ggboxplot(datos, x = "ecivil", y = "ytot", fill = "ecivil")
+p2 = p2 + xlab("Estado Civil") + ylab("Ingreso Total")
+print(p2)
+```
+
+
+Como los datos no cumplen con la condición de homocedasticidad, se usó el estadístico H de la prueba de Kruskal-Wallis para comparar los grupos.
+
+```{r}
+get.H = function(df, iCasado, iSoltero, iViudo, iDivorciado, iSeparado, verbose = FALSE) {
+  # Indices de las filas de cada grupo
+  i = c(iCasado, iSoltero, iViudo, iDivorciado, iSeparado)
+  
+  # Factor de estado civil correspondiente
+  estados_civiles = c(rep("Casado", length(iCasado)),
+                      rep("Soltero", length(iSoltero)),
+                      rep("Viudo", length(iViudo)),
+                      rep("Divorciado", length(iDivorciado)),
+                      rep("Separado", length(iSeparado)))
+  
+  # Crear data frame para análisis
+  datos = data.frame(
+    ytot = df[i, "ytot"],
+    ecivil = factor(estados_civiles)
+  )
+  
+  # Realizar la prueba de Kruskal-Wallis
+  resultado = kruskal.test(ytot ~ ecivil, data = datos)
+  
+  if (verbose) {
+    print(resultado)
+  }
+  
+  # Retornar el estadístico H de Kruskal-Wallis
+  return(resultado$statistic)
+}
+
+```
+
+Obtenemos el estadístico H observado
+```{r}
+H.obs = get.H(datos, iCasado, iSoltero, iViudo, iDivorciado, iSeparado, verbose = TRUE)
+```
+
+Calculamos el estadístico H permutado
+```{r}
+media.gral = mean(datos[["ytot"]])
+sd.gral = sd(datos[["ytot"]])
+```
+
+```{r}
+grupos = datos %>%
+  group_by(ecivil) %>%
+  summarise(media = mean(ytot), sd = sd(ytot)) %>%
+  as.data.frame()
+```
+
+Desplazamos los datos
+```{r}
+datosb = datos
+datosb[iCasado, "ecivil"] = media.gral + 
+  (datosb[iCasado, "ytot"] - grupos[1, "media"]) * 
+  (sd.gral/grupos[1, "sd"])
+datosb[iSoltero, "ecivil"] = media.gral +
+  (datosb[iSoltero, "ytot"] - grupos[2, "media"]) * 
+  (sd.gral/grupos[2, "sd"])
+datosb[iViudo, "ecivil"] = media.gral +
+  (datosb[iViudo, "ytot"] - grupos[3, "media"]) * 
+  (sd.gral/grupos[3, "sd"])
+datosb[iDivorciado, "ecivil"] = media.gral +
+  (datosb[iDivorciado, "ytot"] - grupos[4, "media"]) * 
+  (sd.gral/grupos[4, "sd"])
+datosb[iSeparado, "ecivil"] = media.gral +
+  (datosb[iSeparado, "ytot"] - grupos[5, "media"]) * 
+  (sd.gral/grupos[5, "sd"])
+```
+
+Parámetros de bootstrap
+```{r}
+B = 2999
+verbose = FALSE
+if(B < 10) {
+  verbose = TRUE
+}
+```
+
+Remuestreamos los indices
+```{r}
+re.iCasado = lapply(1:B, function(i) sample(iCasado, replace = TRUE))
+re.iSoltero = lapply(1:B, function(i) sample(iSoltero, replace = TRUE))
+re.iViudo = lapply(1:B, function(i) sample(iViudo, replace = TRUE))
+re.iDivorciado = lapply(1:B, function(i) sample(iDivorciado, replace = TRUE))
+re.iSeparado = lapply(1:B, function(i) sample(iSeparado, replace = TRUE))
+```
+
+Remuestreamos los datos
+```{r}
+cat("Remuestreando...\n")
+get.H.boot = function(i, df, verbose = FALSE)
+  get.H(df, re.iCasado[[i]], re.iSoltero[[i]], re.iViudo[[i]], re.iDivorciado[[i]], re.iSeparado[[i]], verbose)
+
+distribucion = suppressMessages(suppressWarnings(
+  sapply(1:B, function(i) get.H.boot(i, datosb, verbose))
+  ))
+```
+
+Graficamos la distribución permutada
+
+```{r}
+p2 = gghistogram(data.frame(distribucion), x = "distribucion",
+                 title = "Distribución permutada",
+                 xlab = "Estadístico H", ylab = "Frecuencia",
+                 bins = 30, fill = "blue")
+p2 = p2 + geom_vline(xintercept = H.obs, color = "red")
+p2
+```
+
+```{r}
+H_crit <- quantile(distribucion, 0.95)
+cat("H crítico con 95% de confianza:", round(H_crit, 3), "\n")
+
+numerador2 <- sum(distribucion > H.obs)
+valor_p2 <- (numerador2 + 1) / (B + 1)
+cat("P-valor:", round(valor_p2, 3))
+```
+
+Conclusión: 
+
+Como $p \geq 0.05$ se falla en rechazar la hipótesis nula. Por lo tanto, con un 95% de confianza, no hay evidencia suficiente para afirmar que existen diferencias significativas en el ingreso promedio entre los diferentes estados civiles.
+
+Como ejercicio académico haremos un análisis post-hoc para determinar si existen diferencias significativas entre los grupos.
+
+Obtenemos la diferencia de medias observadas
+
+```{r}
+get.dif.medias <- function(df, i1, i2)
+{
+  media1 <- mean(df[i1, "ytot"]) 
+  media2 <- mean(df[i2, "ytot"])
+  return(media1 - media2)
+}
+```
+
+```{r}
+diH.obs.C.S <- get.dif.medias(datos, iCasado, iSoltero)
+diH.obs.C.V <- get.dif.medias(datos, iCasado, iViudo)
+diH.obs.C.D <- get.dif.medias(datos, iCasado, iDivorciado)
+diH.obs.C.SP <- get.dif.medias(datos, iCasado, iSeparado)
+diH.obs.S.V <- get.dif.medias(datos, iSoltero, iViudo)
+diH.obs.S.D <- get.dif.medias(datos, iSoltero, iDivorciado)
+diH.obs.S.SP <- get.dif.medias(datos, iSoltero, iSeparado)
+diH.obs.V.D <- get.dif.medias(datos, iViudo, iDivorciado)
+diH.obs.V.SP <- get.dif.medias(datos, iViudo, iSeparado)
+diH.obs.D.SP <- get.dif.medias(datos, iDivorciado, iSeparado)
+
+cat("Diferencia de medias entre Casado y Soltero:", round(diH.obs.C.S, 3), "\n")
+cat("Diferencia de medias entre Casado y Viudo:", round(diH.obs.C.V, 3), "\n")
+cat("Diferencia de medias entre Casado y Divorciado:", round(diH.obs.C.D, 3), "\n")
+cat("Diferencia de medias entre Casado y Separado:", round(diH.obs.C.SP, 3), "\n")
+cat("Diferencia de medias entre Soltero y Viudo:", round(diH.obs.S.V, 3), "\n")
+cat("Diferencia de medias entre Soltero y Divorciado:", round(diH.obs.S.D, 3), "\n")
+cat("Diferencia de medias entre Soltero y Separado:", round(diH.obs.S.SP, 3), "\n")
+cat("Diferencia de medias entre Viudo y Divorciado:", round(diH.obs.V.D, 3), "\n")
+cat("Diferencia de medias entre Viudo y Separado:", round(diH.obs.V.SP, 3), "\n")
+cat("Diferencia de medias entre Divorciado y Separado:", round(diH.obs.D.SP, 3), "\n")
+```
+
+Obtenemos la distribucion bootstrap para cada media
+
+```{r}
+dist.boot.dif.C.S <- sapply(1:B,
+                            function(i) get.dif.medias(datosb,
+                                                       re.iCasado[[i]],
+                                                       re.iSoltero[[i]]))
+dist.boot.dif.C.V <- sapply(1:B,
+                            function(i) get.dif.medias(datosb,
+                                                       re.iCasado[[i]],
+                                                       re.iViudo[[i]]))
+dist.boot.dif.C.D <- sapply(1:B,
+                            function(i) get.dif.medias(datosb,
+                                                       re.iCasado[[i]],
+                                                       re.iDivorciado[[i]]))
+dist.boot.dif.C.SP <- sapply(1:B,
+                            function(i) get.dif.medias(datosb,
+                                                       re.iCasado[[i]],
+                                                       re.iSeparado[[i]]))
+dist.boot.dif.S.V <- sapply(1:B,
+                            function(i) get.dif.medias(datosb,
+                                                       re.iSoltero[[i]],
+                                                       re.iViudo[[i]]))
+dist.boot.dif.S.D <- sapply(1:B,
+                            function(i) get.dif.medias(datosb,
+                                                       re.iSoltero[[i]],
+                                                       re.iDivorciado[[i]]))
+dist.boot.dif.S.SP <- sapply(1:B,
+                            function(i) get.dif.medias(datosb,
+                                                       re.iSoltero[[i]],
+                                                       re.iSeparado[[i]]))
+dist.boot.dif.V.D <- sapply(1:B,
+                            function(i) get.dif.medias(datosb,
+                                                       re.iViudo[[i]],
+                                                       re.iDivorciado[[i]]))
+dist.boot.dif.V.SP <- sapply(1:B,
+                            function(i) get.dif.medias(datosb,
+                                                       re.iViudo[[i]],
+                                                       re.iSeparado[[i]]))
+dist.boot.dif.D.SP <- sapply(1:B,
+                            function(i) get.dif.medias(datosb,
+                                                       re.iDivorciado[[i]],
+                                                       re.iSeparado[[i]]))
+```
+
+Y graficamos los histogramas
+```{r}
+# Lista de comparaciones y sus datos asociados
+comparaciones <- list(
+  "Casado-Soltero" = list(data = dist.boot.dif.C.S, obs = diH.obs.C.S),
+  "Casado-Viudo" = list(data = dist.boot.dif.C.V, obs = diH.obs.C.V),
+  "Casado-Divorciado" = list(data = dist.boot.dif.C.D, obs = diH.obs.C.D),
+  "Casado-Separado" = list(data = dist.boot.dif.C.SP, obs = diH.obs.C.SP),
+  "Soltero-Viudo" = list(data = dist.boot.dif.S.V, obs = diH.obs.S.V),
+  "Soltero-Divorciado" = list(data = dist.boot.dif.S.D, obs = diH.obs.S.D),
+  "Soltero-Separado" = list(data = dist.boot.dif.S.SP, obs = diH.obs.S.SP),
+  "Viudo-Divorciado" = list(data = dist.boot.dif.V.D, obs = diH.obs.V.D),
+  "Viudo-Separado" = list(data = dist.boot.dif.V.SP, obs = diH.obs.V.SP),
+  "Divorciado-Separado" = list(data = dist.boot.dif.D.SP, obs = diH.obs.D.SP)
+)
+
+# Crear los histogramas dinámicamente
+graficos <- lapply(names(comparaciones), function(comp) {
+  datos_comp <- comparaciones[[comp]]
+  gghistogram(data.frame(Diferencia = datos_comp$data / 1000), x = "Diferencia",
+              title = comp,
+              xlab = "Diferencia (miles de pesos)", ylab = "Frecuencia",
+              bins = 30, fill = "blue") +
+    geom_vline(xintercept = datos_comp$obs / 1000, colour = "red")
+})
+
+# Organizar los gráficos en un arreglo
+p3 <- do.call(ggarrange, c(graficos, list(nrow = 3, ncol = 4))) # Ajusta las filas y columnas según necesites
+
+# Mostrar el gráfico
+print(p3)
+```
+
+Ahora calculamos los valores p
+```{r}
+# Lista de comparaciones de estados civiles con sus datos bootstrap y observados
+comparaciones <- list(
+  "Casado-Soltero" = list(boot = dist.boot.dif.C.S, obs = diH.obs.C.S),
+  "Casado-Viudo" = list(boot = dist.boot.dif.C.V, obs = diH.obs.C.V),
+  "Casado-Divorciado" = list(boot = dist.boot.dif.C.D, obs = diH.obs.C.D),
+  "Casado-Separado" = list(boot = dist.boot.dif.C.SP, obs = diH.obs.C.SP),
+  "Soltero-Viudo" = list(boot = dist.boot.dif.S.V, obs = diH.obs.S.V),
+  "Soltero-Divorciado" = list(boot = dist.boot.dif.S.D, obs = diH.obs.S.D),
+  "Soltero-Separado" = list(boot = dist.boot.dif.S.SP, obs = diH.obs.S.SP),
+  "Viudo-Divorciado" = list(boot = dist.boot.dif.V.D, obs = diH.obs.V.D),
+  "Viudo-Separado" = list(boot = dist.boot.dif.V.SP, obs = diH.obs.V.SP),
+  "Divorciado-Separado" = list(boot = dist.boot.dif.D.SP, obs = diH.obs.D.SP)
+)
+
+# Calcular valores p para cada comparación
+valores_p <- sapply(comparaciones, function(comp) {
+  (sum(abs(comp$boot) > abs(comp$obs)) + 1) / (B + 1)
+})
+
+valores_p_adj <- p.adjust(valores_p, method = "BH")
+
+# Mostrar resultados
+cat("Valores p de pruebas bilaterales (ajustados):\n")
+for (i in seq_along(comparaciones)) {
+  cat(names(comparaciones)[i], ":", round(valores_p_adj[i], 3), "\n")
+}
+```
+```{r}
+
+# Calcular intervalos de confianza al 95% para cada comparación
+intervalos <- lapply(comparaciones, function(comp) {
+  quantile(comp$boot, c(0.025, 0.975))
+})
+
+# Mostrar resultados
+cat("Intervalos de confianza al 95%:\n")
+for (i in seq_along(comparaciones)) {
+  ci <- intervalos[[i]]
+  cat(names(comparaciones)[i], ": [", round(ci[1], 3), ", ", round(ci[2], 3), "]\n", sep = "")
+}
+```
+
+Como ningún par de comparaciones tiene un valor p menor a 0.05, con un 95% de confianza, que no hay evidencia suficiente para afirmar que existen diferencias significativas en el ingreso promedio entre los diferentes estados civiles.

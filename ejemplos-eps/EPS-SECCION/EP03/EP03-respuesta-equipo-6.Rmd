@@ -1,0 +1,206 @@
+---
+title: "EP03 Grupo 6"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(repos = c(CRAN = "https://cran.rstudio.com/"))
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(tidyr)) install.packages("tidyr")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(ggpubr)) install.packages("ggpubr")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(ggmosaic)) install.packages("ggmosaic")
+if(!require(kableExtra)) install.packages("kableExtra")
+if(!require(ggpattern)) install.packages("ggpattern")
+if(!require(pwr)) install.packages("pwr")
+```
+
+```{=html}
+<style>
+body {
+text-align: justify}
+</style>
+```
+### Contexto del problema
+
+En una planta química hay dos máquinas que envasan detergentes industriales en bidones con un volumen de producto que sigue una distribución normal con desviación estándar de 1 litro. La ingeniera a cargo de la planta debe asegurar que los bidones se están llenando con una media de 10 litros. Pero ella tiene la sospecha de que hay desviaciones en esta media, lo que piensa confirmar usando una muestra aleatoria de 100 envases (50 de cada una de las máquinas). También cree que hay diferencia en el cumplimiento del volumen requerido entre la máquina más antigua y la más moderna, que han de andar por el 90% y 96% de los bidones, respectivamente.
+
+### Pregunta 1: Si la ingeniera está seguro de que el verdadero volumen medio no puede ser superior a 10 litros y piensa rechazar la hipótesis nula cuando la muestra presente una media menor a 9,82 litros, ¿cuál es la probabilidad de que cometa un error de tipo I? Para responder, generen un gráfico de la distribución muestral de las medias hipotetizada en donde se marque la zona correspondiente a la probabilidad solicitada, para luego, basándose en este gráfico, calcular el área correspondiente. Tome como ejemplo los scripts presentados en la lectura sobre poder estadístico.
+
+* Datos
+    - $\mu = 10$ litros
+    - $\sigma = 1$ litro
+    - $n = 100$
+    - $\mu_0 = 9.82$ litros
+
+    ```{r pregunta1}
+    # Datos
+    mu <- 10
+    sigma <- 1
+    n <- 100
+
+    # Valor supuesto
+    mu0 <- 9.82
+
+    # Calcular error estándar
+    SE <- sigma / sqrt(n)
+
+    # Hago el gráfico base
+    g_x_limites <- mu + c(-5, 4) * SE
+    g <- ggplot() + xlim(g_x_limites) + labs(x = "Litros por bidón", y = "Densidad") + labs(title = "Distribución muestral de las medias") + theme_pubr()
+
+    # Agrego la distribución normal
+    g <- g + stat_function(fun = dnorm,
+                           args = list(mean = mu, sd = SE),
+                           geom = "area", 
+                           colour = "red", 
+                           fill = "red", 
+                           alpha = 0.1)
+
+    # Calculo Zinf
+    alfa <- pnorm(mu0, mean = mu, sd = SE)
+    Zinf <- qnorm(alfa, mean = mu, sd = SE)
+
+    # Coloreo la región de rechazo en el gráfico
+    g1 <- g + stat_function(fun = dnorm,
+                            args = list(mean = mu, sd = SE),
+                            xlim = c(g_x_limites[1], Zinf),
+                            geom = "area", 
+                            colour = "red", 
+                            fill = "red", 
+                            alpha = 0.5)
+
+    # Muestro el gráfico
+    print(g1)
+
+    ```
+
+Por ende, luego de los cáculos realizados, se puede concluir que la probabilidad de cometer un error de tipo I es de 0.03593032 o 3.59%. Esto se puede interpretar como que la probabilidad de que la ingeniera cometa un error de tipo I es del 3.59%. Es decir que tiene un 3.59% de probabilidad de rechazar la hipótesis nula cuando en realidad está es verdadera
+
+### Pregunta 2: Si el verdadero volumen medio de los bidones fuera de 9,7 litros, ¿cuál sería la probabilidad de que la ingeniera, que obviamente no conoce este dato, cometa un error de tipo II? Para responder, agregue al gráfico anterior la verdadera distribución muestral de las medias y marquen (con otro color) la zona correspondiente a la probabilidad solicitada, para luego, basándose en este gráfico, calcular el área correspondiente. También hay ejemplos de este procedimiento en la lectura sobre poder estadístico.
+
+```{r pregunta2_1}
+# Datos
+media_verdadera <- 9.7
+delta <- mu - media_verdadera
+
+dist_v <- stat_function(fun = dnorm,
+                        args = list(mean = media_verdadera, sd = SE),
+                        geom = "area",
+                        colour = "blue",
+                        fill = "blue",
+                        alpha = 0.1)
+
+g3 <- g1 + dist_v + geom_vline(xintercept = media_verdadera, colour = "blue")
+
+g3 <- g3 + stat_function(fun = dnorm,
+                        args = list(mean = media_verdadera, sd = SE),
+                        xlim = c(g_x_limites[2], Zinf),
+                         aes(fill = "Probabilidad Cometer Error Tipo II (Beta)"),
+                        geom = "area", 
+                        colour = "blue", 
+                        fill = "blue", 
+                        alpha = 0.5)
+print(g3)
+```
+
+Finalmente, con los cálculos necesarios, se puede ver que la probabilidad de cometer un error de tipo II es de 0.1150697. Esto se puede interpretar como que la probabilidad de que la ingeniera cometa un error de tipo II es del 11.51%. Es decir que tiene un 11.51% de probabilidad de no rechazar la hipótesis nula cuando en realidad la hipótesis alternativa es verdadera.
+
+### Pregunta 3: Como no se conoce el verdadero volumen medio, genere un gráfico del poder estadístico con las condiciones anteriores, pero suponiendo que el verdadero volumen medio podría variar de 9,3 a 10 litros. Hay un ejemplo de este tipo de gráfico en la lectura sobre poder estadístico.
+
+```{r pregunta3_1}
+alfa <- alfa
+n <- 100
+media_nula <- 9.7
+sigma <- 1
+
+medias_verdaderas <- seq(9.3,10,0.001)
+deltas <- medias_verdaderas-media_nula
+deltas_norm <- deltas / sigma
+
+f_u <- function(x) pwr.norm.test(x,n=n, sig.level = alfa, alternative = "less")[["power"]]
+
+poder_u <- sapply(deltas_norm, f_u)
+
+datos_a<- data.frame(deltas,poder_u)
+datos_l<- datos_a %>% pivot_longer(-deltas, names_to = "Tipo", values_to = "Poder")
+datos_l[["Tipo"]]<- factor(datos_l[["Tipo"]],labels = c("Unilateral"))
+
+g <- ggline(datos_l, x = "deltas", y = "Poder",
+            color = "Tipo", numeric.x.axis = TRUE, plot_type = "l")
+
+g <- ggpar(g,legend = c(.85, .35))
+print(g)
+
+```
+
+Con el gráfico generado, poder ver como el poder disminuye a medida que el tamaño del efecto aumenta. Lo cual tiene sentido, ya que al tratarse de un tipo de prueba unilateral, el poder estadístico disminuye a medida que el tamaño del efecto se aleja de la media nula porque no va en favor de la hipótesis alternativa.
+
+### Pregunta 4: Considerando un volumen medio de 10 litros, ¿cuántos bidones deberían revisarse para conseguir un poder estadístico de 0,8 y un nivel de significación de 0,05?
+
+A partir del enunciado y la pregunta propuesta se obtienen los siguientes datos:
+
+```{r pregunta4}
+library(pwr)
+alfa <- 0.05
+poder <- 0.8
+
+mediaReal <- 9.7
+mediaObservada <- 10
+
+sd <- 1
+```
+
+Las hipótesis planteadas son las siguientes:
+
+* H0: la media poblacional es igual a 10 litros.(mu = 10)
+* HA: la media poblacional es distinta de 10 litros.(mu != 10)
+
+Lo que se busca responder es "cuantos bidones deberian revisarse para cumplir con cierto poder estadístico y nivel de significancia". Para ello, se busca el tamaño de una muestra mínima,y para conseguirla se puede utilizar la función del paquete pwr: pwr.norm.test(d,n,sig.level,power,alternative)
+
+Del enunciado se pueden extraer todos los argumentos, exceptuando la d y la n, la n es la muestra, que es lo que se está buscando y la d puede ser calculada como la (media real - media observada) / desviacion estandar.
+
+```{r pregunta4_1}
+d <- (mediaReal - mediaObservada) / sd
+```
+
+Finalmente, con todos los datos, se utiliza el test, dejando el tamaño n con el valor NULL. De esta manera, la función reconoce que n es el parámetro que se busca despejar u obtener a partir de la prueba.
+
+```{r pregunta4_2}
+# Calcular el tamaño de muestra necesario
+resultado <- pwr.t.test(n = NULL,d = d, sig.level = alfa, power = poder, alternative = "two.sided", type = "one.sample")
+
+# Ver el resultado
+print(resultado)
+```
+
+De esta manera se concluye que, para tener un nivel de significancia de 0.05 y un poder de 0.8, es necesaria una muestra que posea, como mínimo, 90 elementos o instancias
+
+
+### Pregunta 5: ¿Alcanzaría esta muestra para detectar la diferencia que la ingeniera sospecha entre las dos máquinas de la planta con al menos las mismas probabilidades de cometer errores?
+
+La muestra teorica es de 10 litros, pero hay una sospecha de que hay una diferencia en la dos maquinas, que la más antigua llena un 90% y que la nueva llena un 96%.
+
+Para lo anterior se plantean las siguientes hipótesis:
+
+* H0: la proporción de bidones llenados por la máquina antigua es igual a la proporción de bidones llenados por la máquina nueva. (p1 = p2)
+* HA: la proporción de bidones llenados por la máquina antigua es distinta a la proporción de bidones llenados por la máquina nueva. (p1 != p2)
+
+
+se utilizan los siguientes datos:
+```{r pregunta5}
+alpha <- 0.05
+power <- 0.80
+```
+
+```{r pregunta5_1}
+h <- ES.h(0.04, 0.1)
+n <- pwr.2p.test(h = h, sig.level = alpha, power = power)$n
+print(ceiling(n))
+```
+
+Por lo tanto se concluye que, para poder detectar la diferencia que la ingeniera sospecha entre las dos máquinas de la planta con al menos las mismas probabilidades de cometer errores, se necesitaría una muestra de 271 muestras. Esto considerando un nivel de significancia de 0.05 y un poder de 0.8.

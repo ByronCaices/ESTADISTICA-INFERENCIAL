@@ -1,0 +1,64 @@
+---
+title: "EP01-respuesta-equipo-5 "
+author: "Braulio Bravo, Stephan Paul y Álvaro Zamorano"
+date: "2024-09-25"
+output: pdf_document
+---
+
+¿Van los ingresos de las mujeres de la RM incrementándose con la edad?
+
+```{r}
+# Importacion de librerias
+library(dplyr)
+library(ggplot2)
+
+# Leer datos
+datos = read.csv2("EP01 Datos Casen 2017.csv")
+```
+
+Las variables que son relevantes para la resolución de la pregunta planteada son:
+  
+sexo: Categórica Nominal
+  
+Edad: Numérica Discreta
+  
+Ingreso total: Numérica Discreta
+  
+```{r}
+# Filtar por sexo
+mujeres_rm = datos %>%
+  filter(sexo == "Mujer")
+
+# Crear grupos de edad y se agrega al conjunto de datos
+mujeres_rm = mujeres_rm %>% mutate(grupo_edad = cut(edad, breaks = seq(0, 110, by = 10), right = FALSE))
+
+# Calcular el ingreso promedio por grupo de edad
+ingresos_por_edad = mujeres_rm %>% group_by(grupo_edad) %>% summarise(ingreso_promedio = mean(ytot))
+
+# Convertir grupo_edad a un formato adecuado para ggplot
+ingresos_por_edad$grupo_edad = as.character(ingresos_por_edad$grupo_edad)
+
+# Graficar Histograma
+ggplot(ingresos_por_edad, aes(x = grupo_edad, y = ingreso_promedio)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Ingreso Promedio de Mujeres en la RM por Grupo de Edad",
+       x = "Grupo de Edad",
+       y = "Ingreso Promedio") +
+  theme_minimal() +
+  geom_text(aes(label = round(ingreso_promedio, 2)), vjust = -0.5)
+```
+
+```{r}
+# Ingresos por edad
+ingresos = mujeres_rm %>% group_by(edad) %>%summarise(ingreso_promedio_2 = mean(ytot))
+
+# Graficar Grafico de barra
+ggplot(ingresos, aes(x = edad, y = ingreso_promedio_2)) +
+  geom_bar(stat = "identity", fill = "pink") +
+  labs(title = "Ingreso Promedio de Mujeres en la RM por de Edad",
+       x = "Edad",
+       y = "Ingreso Promedio") +
+  theme_minimal()
+```
+
+A través de los graficos realizados podemos determinar que efectivamente hay un incremento en el promedio de los ingresos hasta la edad de 39 años para después disminuir conforme al aumento de la edad. Es importante destacar que hay valores significativemente mayores en determinadas edades, pero que al analizarlas según intervalos no afectan en gran medida al promedio.

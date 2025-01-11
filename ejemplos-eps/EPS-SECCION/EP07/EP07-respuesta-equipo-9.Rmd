@@ -1,0 +1,316 @@
+---
+title: "EP07 Grupo 9"
+date: "`r Sys.Date()`"
+output: html_document 
+---
+
+```{r setup, include=FALSE}
+if(!require(dplyr)) install.packages("dplyr")
+```
+
+### Contexto:
+#### En el trabajo de título de una estudiante del DIINF se reportan tiempos de ejecución (en milisegundos) y la cercanía con la solución óptima (en por ciento) de la mejor solución encontrada con tres versiones de un algoritmo genético para resolver instancias del problema del vendedor viajero disponibles en repositorios públicos. Ahora debe enfrentar el análisis de estos datos, para lo que está solicitando ayuda de las y los estudiantes de Estadística Inferencial.
+
+```{=html}
+<style>
+body {
+text-align: justify}
+</style>
+```
+
+```{r a}
+# Se leen los datos del archivo EP07 Datos.csv.
+datos <- read.csv("EP07 Datos.csv")
+
+# Se muestran las primeras 6 filas de los datos,
+# para verificar si han sido leídos.
+head(datos)
+```
+
+### Pregunta 1: 
+#### Observando los datos, la memorista sospecha que hay diferencias significativas en el tiempo de ejecución entre las versiones A y B del algoritmo cuando las instancias tienen 45 o más nodos. ¿Los datos respaldan la intuición de la memorista? Para responder, filtren los datos para tener las instancias con 45 o más nodos y seleccionen las columnas de los tiempos de ejecución de las versiones A y B en formato ancho. Usando como semilla el valor 71, obtenga muestras aleatorias independientes de 23 tiempos registrados por la versión A y 22 tiempos registrados por la versión B del algoritmo. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+#### Solución:
+
+Para ver si hay diferencias significativas, realizamos el procedimiento solicitado en el enunciado. Con esto, procederemos a plantear las hipótesis nulas y alternativas, y a realizar el análisis estadístico pertinente.
+
+```{r b}
+# Se filtran los datos que contienen una instancia mayor a 45 nodos.
+datos_mayor_45 <- datos %>% filter(n.nodos >= 45)
+```
+
+Para realizar el análisis estadístico, planteamos las hipótesis nulas y alternativas:
+
+* Hipótesis nula: No hay diferencias significativas en el tiempo de ejecución entre las versiones A y B del algoritmo cuando las instancias tienen 45 o más nodos.
+* Hipótesis alternativa: Si hay diferencias significativas en el tiempo de ejecución entre las versiones A y B del algoritmo cuando las instancias tienen 45 o más nodos.
+
+Además, se define un valor de significancia alfa de 0.05.
+
+Se ve la normalidad en los datos:
+
+```{r c}
+# Se define la semilla de 71 para garantizar reproducibilidad en la muestra,
+# y así no tener sesgo en la selección de datos.
+set.seed(71)
+
+# Normalidad con Shapiro-Wilk.
+muestra_A <- datos_mayor_45 %>% select(tiempo.A) %>% sample_n(23)
+muestra_B <- datos_mayor_45 %>% select(tiempo.B) %>% sample_n(22)
+
+normA <- shapiro.test(muestra_A$tiempo.A)
+normB <- shapiro.test(muestra_B$tiempo.B)
+
+# Se imprimen los resultados de la normalidad de los tiempos de los algoritmos 
+# A y B obtenida con prueba Shapiro-Wilk.
+print(normA)
+print(normB)
+```
+
+* Notemos que con un nivel de significancia de 0.05, los datos no siguen una distribución normal, por lo que debemos realizar pruebas no paramétricas.
+
+* Es por lo anterior que usaremos la prueba de suma de rangos de Wilcoxon, específicamente para muestras grandes dado que se cuenta con más de 5 observaciones.
+
+La anterior prueba debe cumplir ciertos requisitos, los cuales son:
+
+1) Las observaciones de ambas muestras son independientes.
+
+* Las muestras se obtuvieron de manera aleatoria utilizando una semilla (71) para garantizar la reproducibilidad, lo que minimiza la posibilidad de sesgo en la selección de datos. También los tiempos de ejecución de las versiones A y B se registraron independientemente para cada instancia de 45 o más nodos. Dado que cada ejecución de una versión del algoritmo es independiente de las demás, las observaciones no se afectan entre sí. Por lo que se cumple este requisito.
+
+2) La escala de medición empleada debe ser a lo menos ordinal, de modo que tenga sentido hablar de relaciones de orden.
+
+* La variable de interés, el tiempo de ejecución, está medida en una escala de intervalos. Esto significa que no solo se pueden establecer relaciones de orden (qué tiempo es mayor o menor), sino también comparar diferencias absolutas entre los tiempos.
+
+Se cumplen las condiciones, por lo que procedemos a realizar la prueba de suma de rangos de Wilcoxon.
+
+```{r d}
+# Se realiza la prueba de suma de rangos de Wilcoxon para el problema enunciado.
+alfa <- 0.05
+prueba <- wilcox.test(muestra_A$tiempo.A, muestra_B$tiempo.B, 
+                      alternative = "two.sided", conf.level = 1- alfa)
+
+# Se imprimen los resultados de la prueba. 
+print(prueba)
+```
+
+* Con un nivel de significancia de 0.05, se rechaza la hipótesis nula en favor de la hipótesis alternativa, por lo que se concluye que sí existen diferencias significativas en el tiempo de ejecución entre las versiones A y B del algoritmo cuando las instancias tienen 45 o más nodos.
+
+### Pregunta 2:
+#### La memorista también sospecha que, al comparar las mismas instancias de iguales características, las mejores soluciones encontradas por las versiones A y C tienen rendimientos distintos. ¿Estará en lo cierto?
+#### Para responder, filtren los datos para tener las instancias con 45 o más nodos y seleccionen las columnas con el mejor rendimiento de las versiones A y C en formato ancho. Usando como semilla el valor 54, obtengan una muestra aleatoria de 20 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+#### Solución:
+Para ver si hay diferencias significativas, realizamos el procedimiento solicitado en el enunciado. Con esto, procederemos a plantear las hipótesis nulas y alternativas, y a realizar el análisis estadístico pertinente.
+
+Para realizar el análisis estadístico, planteamos las hipótesis nulas y alternativas:
+* Hipótesis nula: No hay diferencias significativas en el mejor rendimiento entre las versiones A y C del algoritmo cuando las instancias tienen 45 o más nodos.
+* Hipótesis alternativa: Si hay diferencias significativas en el mejor rendimiento entre las versiones A y C del algoritmo cuando las instancias tienen 45 o más nodos.
+
+```{r e}
+# Se define la semilla de 54 para garantizar reproducibilidad en la muestra,
+# y así no tener sesgo en la selección de datos.
+set.seed(54)
+
+# Se seleccionan 20 datos aleatorios del mejor rendimiento de A y C para 
+# un número de nodos igual o mayor a 45.
+muestra_mejor_A_C <- datos_mayor_45 %>% select(mejor.A, mejor.C) %>% sample_n(20)
+
+# Normalidad con Shapiro-Wilk
+diferencia <- muestra_mejor_A_C$mejor.A - muestra_mejor_A_C$mejor.C
+norm <- shapiro.test(diferencia)
+
+# Se imprimen los resultados de la prueba Shapiro-Wilk.
+print(norm)
+```
+
+* Notemos que con un nivel de significancia de 0.05, los datos siguen una distribución normal, esto deja un par de alternativas, pero nos decidimos por realizar una prueba no paramétrica, además en esta ocasión se reconoce que las muestras de mejor.A y mejor.C pertenecen a la misma instancia para cada tupla, lo que corresponde a un caso de muestras correlacionales o apareadas.
+
+* Es por lo anterior que usaremos la prueba de suma de rangos con signo de Wilcoxon.
+
+La anterior prueba debe cumplir ciertos requisitos, los cuales son:
+
+1) Las observaciones de ambas muestras son independientes.
+
+* Al extraer una muestra aleatoria de 20 instancias de cada versión (A y C) usando una semilla (54), garantizamos que la selección de datos es aleatoria y representa de manera no sesgada el conjunto de datos disponible. Por otra parte, los tiempos de ejecución para las versiones A y C representan el rendimiento de cada versión en cada instancia, lo cual implica que estos rendimientos se registran en condiciones independientes. La ejecución de una versión del algoritmo en una instancia no afecta ni influye el rendimiento de la otra versión en esa misma instancia.
+
+2) La escala de medición empleada debe ser a lo menos ordinal, de modo que tenga sentido hablar de relaciones de orden.
+
+* La variable en cuestión es el rendimiento o mejor tiempo registrado, que se mide en unidades de tiempo en una escala de intervalos. Esto significa que no solo podemos ordenar los rendimientos (identificar qué versión es más rápida o lenta en una instancia), sino también comparar las diferencias entre ellos.
+
+Se cumplen todas las condiciones planteadas anteriormente, por lo que procedemos a realizar la prueba de suma de rangos de Wilcoxon.
+
+```{r f}
+# Se hace la prueba de rangos de signos de Wilcoxon para el problema planteado.
+prueba <- wilcox.test(muestra_mejor_A_C$mejor.A, muestra_mejor_A_C$mejor.C, 
+                      alternative = "two.sided", conf.level = 1- alfa, 
+                      paired=TRUE)
+# Se imprime el resultado de la prueba.
+print(prueba)
+```
+* El p-value que arrojo la prueba es de 0.1536, un valor claramente superior a nuestro nivel de significancia de 0.05, por lo que se falla en rechazar la hipótesis nula. Por lo tanto, no se puede concluir que existan diferencias significativas en el mejor rendimiento entre las versiones A y C de la misma instancia del algoritmo cuando las instancias tienen 45 o más nodos.
+
+### Pregunta 3:
+#### La memorista sospecha que hay diferencias significativas en el tiempo de ejecución entre las versiones del algoritmo cuando las instancias de prueba tienen 70 o más nodos. ¿Los datos respaldan la intuición de la memorista?
+#### Para responder, filtren los datos para tener las instancias con 70 o más nodos y seleccionen las columnas con los tiempos de ejecución registrados (en formato ancho). Usando como semilla el valor 31, obtengan muestras aleatorias independientes de 17, 13 y 15 tiempos registrados por las versiones A, B y C, respectivamente. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+#### Solución:
+Para determinar si hay diferencias significativas en los tiempos de ejecución de acuerdo al enunciado de la pregunta, se presentan las siguientes hipótesis.
+
+* Hipótesis nula: No hay diferencias significativas en los tiempos de ejecución entre las versiones del algoritmo (A, B y C) cuando las instancias tienen 70 o más nodos.
+* Hipótesis alternativa:  Hay al menos una diferencia significativa en los tiempos de ejecución entre las versiones del algoritmo (A, B y C) cuando las instancias tienen 70 o más nodos.
+
+Se estudia normalidad para decidir con que prueba proceder:
+
+```{r g}
+# Se filtran los datos que contienen un n°de nodos mayor a 70.
+datos_mayor_70 <- datos %>% filter(n.nodos >= 70)
+```
+
+```{r h}
+# Se define la semilla de 31 para garantizar reproducibilidad en la muestra,
+# y así no tener sesgo en la selección de datos.
+set.seed(31)
+
+# Se seleccionan las muestras de los algoritmos (A, B y C) con sus 
+# mejores tiempos. 
+muestra_A <- datos_mayor_70 %>% select(tiempo.A) %>% sample_n(17)
+muestra_B <- datos_mayor_70 %>% select(tiempo.B) %>% sample_n(13)
+muestra_C <- datos_mayor_70 %>% select(tiempo.C) %>% sample_n(15)
+
+# Se hace la prueba de Shapiro Wilk para los tiempos de cada algoritmo 
+# respectivo y se imprimen los resultados.
+normA <- shapiro.test(muestra_A$tiempo.A)
+normB <- shapiro.test(muestra_B$tiempo.B)
+normC <- shapiro.test(muestra_C$tiempo.C)
+
+print(normA)
+print(normB)
+print(normC)
+```
+
+Se reconocen 3 muestras independientes como parte de este problema, no obstante, la muestra de tiempos A tiene un p-value inferior a 0.05 con lo que se rechaza la hipótesis nula: la muestra pertenece a una población de distribución normal, por esto se descarta ANOVA pero se considera su alternativa no paramétrica:
+
+1) Variable independiente debe tomar a lo menos 2 niveles:
+
+* La variable independiente posee 3 niveles, los cuales son las versiones del algoritmo que corresponde a A, B y C. Por lo tanto, se cumple esta condición.
+
+2) Escala de variable dependiente a lo menos ordinal:
+
+* La variable dependiente es el tiempo de ejecución de las versiones del algoritmo, por lo que se cumple, ya que los tiempos de ejecución son datos en una escala de intervalo. Esto significa que no solo podemos ordenar los tiempos de menor a mayor, sino también medir las diferencias entre ellos, lo cual supera el requisito mínimo de una escala ordinal. 
+
+3) Observaciones son independientes
+
+* Los datos especifican que se obtuvieron muestras aleatorias de tiempos registrados de las versiones A, B y C del algoritmo, lo cual ayuda a asegurar que las muestras no tengan una relación directa entre sí. Al seleccionar una muestra de 17 tiempos para la versión A, 13 para la versión B, y 15 para la versión C, cada observación representa una ejecución independiente.
+
+Como se trata de medir el tiempo de ejecución en instancias con características específicas (70 o más nodos), las observaciones de cada versión no influyen en las de las otras versiones. Esto implica que las observaciones son independientes en tanto representan pruebas separadas de cada versión del algoritmo.
+
+Y con esto último se cumplen las condiciones para usar la prueba de Kruskall-Wallis.
+
+```{r i}
+# Combina los tiempos de ejecución de las muestras de los tres algoritmos (A, B y C)
+# en un solo vector llamado "Tiempo"
+Tiempo <- c(muestra_A$tiempo.A, muestra_B$tiempo.B, muestra_C$tiempo.C)
+
+# Crea un vector "Algoritmo" que identifica el algoritmo correspondiente (A, B o C) 
+# para cada valor en "Tiempo".
+# Usa la función rep() para repetir "A", "B" y "C" según la longitud de cada 
+# muestra.
+Algoritmo <- c(rep("A", length(muestra_A)), rep("B", length(muestra_B)), rep("C", length(muestra_C)))
+Algoritmo <- factor(Algoritmo)
+
+# Se combina "Tiempo" y "Algoritmo" en un data frame llamado "datos_tiempo" que
+# sirve para realizar la prueba de Kruskal-Wallis en el problema planteado.
+datos_tiempo <- data.frame(Tiempo, Algoritmo)
+
+# Realiza la prueba de Kruskal-Wallis para evaluar si existen diferencias 
+# significativas en los tiempos de ejecución entre los algoritmos A, B y C.
+# Después se imprime el resultado de la prueba de Kruskal-Wallis.
+prueba <- kruskal.test(Tiempo ~ Algoritmo, data = datos_tiempo)
+print(prueba)
+```
+
+* Se obtuvo un p-value de 0.7776, superior al nivel de significancia 0.05, con lo que se falla en rechazar la hipótesis nula con un 95% de confianza; el mejor rendimiento del algoritmo cuando las instancias tienen 70 o más nodos es igual para las versiones A, B y C. 
+Debido a que se favorece la Hipótesis nula y no la alternativa, no se realizaran pruebas post-hoc
+
+### Pregunta 4:
+#### La memorista también sospecha que, al comparar las mismas instancias con iguales características, las mejores soluciones encontradas por las diferentes versiones del algoritmo tienen rendimientos distintos. ¿Estará en lo cierto?
+#### Para responder, filtren los datos para tener las instancias con 70 o más nodos y seleccionen las columnas con los mejores rendimientos registrados. Usando como semilla el valor 71, obtengan una muestra aleatoria de 21 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+## Solución:
+Para encontrar si las mejores soluciones de las distintas versiones del algoritmo tienen rendimientos distintos, se realiza el procedimiento solicitado en el enunciado. Con esto, se procede a plantear la hipótesis nula y alternativa, y después el realizar el análisis estadístico pertinente.
+
+Para realizar el análisis estadístico, se plantea la hipótesis nulas y alternativas en base al enunciado:
+
+* Hipótesis nula: No hay diferencia significativa en los rendimientos de las mejores soluciones encontradas en las diferentes versiones de los algoritmos (A, B y C).
+* Hipótesis nula: Existen diferencias significativas en los rendimientos de las mejores soluciones encontradas en las diferentes versiones de los algoritmos (A, B y C).
+
+Para empezar, se decide hacer una prueba ANOVA para muestras correlacionada, pues se está comparando los rendimientos de las versiones del algoritmo (A, B y C) en las mismas instancias (es decir, las mismas 21 instancias de nodos seleccionadas). Esto implica que los datos de cada versión del algoritmo están correlacionados o relacionados para cada instancia.
+
+Para comprobar si se debe hacer esta prueba, se ve la normalidad de los datos:
+
+```{r}
+# Se define la semilla de 71 para garantizar reproducibilidad en la muestra,
+# y así no tener sesgo en la selección de datos.
+set.seed(71)
+
+# Seleccionar y muestrear 21 observaciones aleatorias de cada variable
+muestra_mejor_A <- datos_mayor_70 %>% select(mejor.A) %>% sample_n(21)
+muestra_mejor_B <- datos_mayor_70 %>% select(mejor.B) %>% sample_n(21)
+muestra_mejor_C <- datos_mayor_70 %>% select(mejor.C) %>% sample_n(21)
+
+# Realizar la prueba de Shapiro-Wilk para evaluar la normalidad de cada muestra
+normA <- shapiro.test(muestra_mejor_A$mejor.A) # Prueba para mejor.A
+normB <- shapiro.test(muestra_mejor_B$mejor.B) # Prueba para mejor.B
+normC <- shapiro.test(muestra_mejor_C$mejor.C) # Prueba para mejor.C
+
+# Imprimir los resultados de las pruebas de normalidad
+print(normA) # Resultados de la prueba para mejor.A
+print(normB) # Resultados de la prueba para mejor.B
+print(normC) # Resultados de la prueba para mejor.C
+
+```
+
+* Notemos que con un nivel de significancia de 0.05, los datos de los mejores rendimientos del algoritmo C no siguen una distribución normal, por lo que no podemos realizar la prueba ANOVA de una vía para muestras correlacionadas. Por lo tanto, se selecciona la alternativa de la prueba no paramétrica de Friedman, sin embargo se debe comprobar las condiciones de esta:
+
+1) La variable independiente debe ser categórica y tener a lo menos 3 niveles:
+
+* La variable independiente es el algoritmo porque representa las diferentes versiones del algoritmo (A, B y C), que son categorías discretas o niveles de un factor en lugar de valores numéricos continuos u ordinales. Este posee 3 niveles: Algoritmo A, B y C.
+
+2) Escala de variable dependiente a lo menos ordinal:
+
+* La variable dependiente son los mejores rendimientos registrados (tiempos), dado que estos se pueden ordenar de mayor a menor y la escala de tiempos permite medir diferencias exactas y tiene un punto cero, lo que la convierte en una escala de razón. Entonces se cumple que la escala de variable dependiente sea a lo menos ordinal. 
+
+3) Las observaciones son una muestra aleatoria e independiente de la población:
+
+* Según el enunciado, los datos para el análisis fueron seleccionados utilizando una muestra aleatoria de 21 instancias, con una semilla (71) que garantiza la reproducibilidad del muestreo. Esto sugiere que la selección de observaciones es aleatoria y no influenciada por algún sesgo de selección.
+
+La independencia entre observaciones significa que el rendimiento de una instancia no debería afectar el rendimiento de otra. Si las instancias fueron registradas y evaluadas de manera separada y sin interacciones entre algoritmos o entre corridas, entonces se puede asumir que las observaciones son independientes.
+
+Y con esto último, se cumplen las condiciones para usar la prueba de Friedman. Entonces la aplicamos la prueba de Friedman.
+
+```{r}
+# Crear el vector de Mejores_Tiempos y los factores necesarios para la prueba de 
+# Friedman
+Mejores_Tiempos <- c(muestra_mejor_A$mejor.A, muestra_mejor_B$mejor.B, 
+                     muestra_mejor_C$mejor.C)
+
+Algoritmos <- c(rep("A", length(muestra_mejor_A$mejor.A)),
+              rep("B", length(muestra_mejor_B$mejor.B)),
+              rep("C", length(muestra_mejor_C$mejor.C)))
+
+# Supone que los 21 valores corresponden a las mismas instancias
+Instancias <- rep(1:21, 3)  
+
+# Convertir Algoritmos en factor y crear el data frame
+Algoritmos <- factor(Algoritmos)
+datos <- data.frame(Instancias, Mejores_Tiempos, Algoritmos)
+
+# Se establece el nivel de significancia
+alfa <- 0.05
+
+# Se hace la prueba de Friedman y se muestra el resultado
+prueba <- friedman.test(Mejores_Tiempos ~ Algoritmos | Instancias, 
+                        data=datos)
+print(prueba)
+```
+
+* El valor p arroja el resultado de 0.05476, el cual es mayor al nivel de significancia de 0.05, por lo tanto no hay evidencia para rechazar la hipótesis nula en favor de la hipótesis alternativa. Esto quiere decir que no hay diferencias significativas en los rendimientos de las mejores soluciones encontradas en las diferentes versiones de los algoritmos (A, B y C).

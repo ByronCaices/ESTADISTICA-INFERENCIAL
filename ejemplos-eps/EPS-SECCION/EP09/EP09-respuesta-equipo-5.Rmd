@@ -1,0 +1,269 @@
+---
+title: "EP09-respuesta-equipo-5"
+output:
+  html_document:
+    df_print: paged
+date: "2024-12-02"
+---
+
+Debemos obtener los datos, y sacamos una muestra de 100. Para hacer esto, primero debemos obtener aleatoriamente 8 posibles variables predictoras. Escogemos la variable Navel.Girth, que representa el grosor a la altura del ombligo, para poder predecir el peso.
+```{r}
+set.seed(7246)
+library(tidyverse)
+library(car)
+library(ggpubr)
+datos = read.csv2("EP09 Datos.csv")
+datos_filtrados_conNavel = datos %>% filter(Gender == 0) %>% sample_n(100) %>% select(-Gender)
+
+datos_filtrados = datos_filtrados_conNavel[sample(1:24, 8, replace = FALSE)]
+datos_filtrados = mutate(datos_filtrados, Navel.Girth = datos_filtrados_conNavel$Navel.Girth)
+
+```
+
+Ahora, debemos obtener los datos de entrenamiento y los datos de prueba.
+```{r}
+datos_trabajar = datos_filtrados %>% sample_n(70) 
+
+# Obtener los otros 30 datos
+datos_sobrantes = anti_join(datos_filtrados, datos_trabajar)
+```
+
+Se utiliza un modelo lineal para predecir el peso con la variable escogida anteriormente.
+```{r}
+summary(lm(Weight ~ Navel.Girth, data = datos_trabajar))
+modelo <- lm(Weight ~ Navel.Girth, data = datos_trabajar)
+modelo_ant <- modelo
+```
+
+Ahora, se tiene que buscar entre 2 a 5 predictores entre las variables que fueron seleccionadas en los apartados anterirores. Para esto, se emplea el método de selección de modelos hacia adelante.
+
+```{r}
+modelo_nulo <- lm(Weight ~ 1, data = datos_trabajar)
+modelo_completo <- lm(Weight ~ . , data = datos_trabajar)
+paso <- add1(modelo_nulo, scope = modelo_completo, test = "F")
+print(paso, digits = 3, signif.legend=FALSE)
+```
+
+En base a los valores de RSS que se nos entregan al realizar un paso del método, se puede ver que el mejor predictor a agregar es Chest.Girth. Por lo tanto, se procede a agregarlo al modelo.
+
+```{r}
+nuevo_modelo <- update(modelo_nulo, . ~ . + Chest.Girth)
+print(summary(nuevo_modelo))
+
+paso <- add1(nuevo_modelo, scope = modelo_completo, test = "F")
+print(paso, digits = 3, signif.legend=FALSE)
+```
+
+Siguiendo los valores de RSS, se puede ver que el mejor predictor a agregar es Height. Por lo tanto, se procede a agregarlo al modelo.
+
+```{r}
+nuevo_modelo <- update(nuevo_modelo, . ~ . + Height)
+print(summary(nuevo_modelo))
+
+paso <- add1(nuevo_modelo, scope = modelo_completo, test = "F")
+print(paso, digits = 3, signif.legend=FALSE)
+```
+
+Ahora, se toma Bicep.Girth como predictor debido a su valor de RSS.
+
+```{r}
+nuevo_modelo <- update(nuevo_modelo, . ~ . + Bicep.Girth)
+print(summary(nuevo_modelo))
+
+```
+
+Se necesita comprobar que se cumplan las condiciones de confiabilidad del modelo de regresión líneal creado:
+
+Hay que ver el gráfico de dispersión con la línea de regresión para ver si los datos siguen una tendencia lineal.
+
+```{r}
+g <- ggscatter(datos_trabajar, x = "Navel.Girth", y = "Weight", color = "steelblue",fill="steelblue")
+
+g<- g + geom_abline(intercept = coef(modelo_ant)[1], slope =coef(modelo_ant)[2], color = "red")
+
+g<-g+labs(x = "Navel Girth",y = "Weight")
+print(g)
+
+```
+Donde se puede observar una relación lineal positiva entre las variables.
+
+Se realiza una prueba de curvatura el modelo líneal creado:
+
+```{r}
+residualPlots(modelo_ant)
+
+```
+
+Como los valores de p son mayores a 0.05, se puede decir que no existe evidencia sobre el comportamiento curvo de los residuos. Por lo tanto, son aproximadamente lineales.
+
+Ahora, se emplea una prueba de independencia de los residuos:
+```{r}
+print(durbinWatsonTest(modelo_ant))
+```
+
+Dado que el valor de p obtenido en dicho test es mayor que el del nivel de significancia que uno plantea (0.05), no existe evidencia para poder descartar el cumplimento de la condición, es decir, se cumple dicha condición.
+
+Luego, una prueba de homocedasticidad:
+```{r}
+print(ncvTest(modelo_ant))
+```
+
+Como el valor de p es igual a 0.68041 y es mayor a 0.05, se puede decir que la variabilidad de los residuos es aproximadamente constante. Cumpliendo así la condición.
+
+```{r}
+print(influencePlot(modelo_ant))
+```
+
+Con estos datos, se puede decir que no se encuentran observaciones influyentes en el modelo y que resultados obtenidos no van a alterados de manera significativa.
+
+En base a lo anterior, se puede decir que el modelo de regresión líneal creado cumple con las condiciones de confiabilidad.
+
+Ahora, tenemos que comprobar que se cumplan las condiciones para la confiabilidad del modelo de regresión múltiple. Estas condiciones son las siguientes:
+
+1.La variable de respuesta debe ser cuantitativa y continua, sin restricciones para su variabilidad.
+
+Debido a que los datos de la variable de respuesta son continuos y son valores numericos, se cumple la condicion.
+
+2.Los predictores deben ser cuantitativos o dicotómicos.
+
+Dado que estamos usando como predictores datos cuantitativos, podemos tachar esta condición como cumplida.
+
+3.Los predictores deben tener algún grado de variabilidad, es decir, no ser constantes.
+
+Se puede emplear lo siguiente para comprobar este punto:
+
+```{r}
+apply(datos_trabajar[,c("Chest.Girth","Height","Bicep.Girth")], 2, var)
+```
+
+Al ver los resultados de emplear esta función, se puede ver que los valores de varianza son mayores a cero. Por lo tanto, se cumple la condición.
+
+4.Cada predictor debe estar relacionado linealmente con la respuesta.
+
+Para comprobar la lineanidad de estos predictores con la variable de respuesta, se emplea lo siguiente:
+
+```{r}
+residual_plots <- residualPlots(lm(Weight ~ Chest.Girth + Height + Bicep.Girth , data = datos_trabajar))
+```
+
+Al ver lo entregados, nos damos cuenta que cada predictor que ha sido seleccionado tiene un valor de p-value menor a 0.05, lo que nos indica que existe una relación lineal entre los predictores y la variable de respuesta.
+
+5.La distribución de los residuos debe ser cercana a la normal centrada en el cero.
+
+Se puede realizar este análisis en base al grafico que nos entrega el apartado anterior. En base a esto, a simple vista de puede deducir que existen datos que se escapan un poco de esta línea y no seguirían la normalidad. Para saber si realmente no cumplen esto, se emplea una prueba de Shapiro y nos da lo siguiente:
+
+```{r}
+print(shapiro.test(residuals(nuevo_modelo)))
+```
+
+Dado al p-value obtenido, no se puede rechazar la hipótesis nula que uno plantea en estos casos, es decir, no se puede rechazar de no provienen de una distribución normal los datos y dando a entender de que estos pueden estar distribuidos normalmente.
+
+6.La variabilidad de los residuos debe ser aproximadamente constante.
+
+Para esto, se emplea la función ncvTest y analizar el valor de p que nos entregue:
+
+```{r}
+print(ncvTest(nuevo_modelo))
+```
+Como el valor entregado es mayor al nivel de significancia que uno tiende a plantear (0.05), se cumple la condición de que la variabilidad de los residuos es aproximadamente constante.
+
+7.Los residuos deben ser independientes entre sí.
+Para comprobar esto, se emplea un test de durbinWatson en R al modelo creado y entrega lo siguiente:
+
+```{r}
+print(durbinWatsonTest(modelo))
+```
+
+Dado que el valor de p obtenido en dicho test es mayor que el del nivel de significancia que uno plantea (0.05), no existe evidencia para poder descartar el cumplimento de la condición, es decir, se cumple dicha condición.
+
+8.No debe existir multicolinealidad. Esto significa que no deben darse relaciones lineales fuertes entre dos o más predictores.
+
+Se emplea la función vif al modelo creado para comprobar esta condición:
+
+```{r}
+print(vif(nuevo_modelo))
+```
+Como estos valores están entre 1 y 5, existe una multicolinealidad moderada y que no es de mayor preocupación. Por lo tanto, se cumple la condición.
+
+9.Las estimaciones de los coeficientes del modelo no debe estar alterados por unas pocas observaciones influyentes.
+
+Para comprobar dicha condición, se emplea la función influencePlot al modelo creado:
+
+```{r}
+print(influencePlot(nuevo_modelo))
+```
+
+Como ningún valor de Hat observado se acerca al 1 y las distancias de Cook son pequeñas y menores al umbral que se define, es decir, no sobrepasan el valor de 1, el modelo que se ha creado cumple con esta condición.
+
+Con esto, se puede decir que el modelo de regresión múltiple creado cumple con las condiciones de confiabilidad.
+
+
+Ahora vamos a responder el punto 7: Evaluar la bondad de ajuste (incluyendo el análisis de casos atípicos y casos influyentes) y la generalidad (condiciones para RLM) de los modelos y “arreglarlos” en caso de que presenten algún problema.
+
+```{r}
+summary(nuevo_modelo)
+print(influencePlot(nuevo_modelo))
+```
+Es importante notar que ninguna observacion tiene un alto nivel de distancia de cook, pero sí hay valores con un apalancamiento relativamente alto.
+
+Eliminemos las variables con un gran nivel de distancia de Cook con respecto al resto de las observaciones y con un relativo alto nivel de apalancamiento. (25 y 28)
+
+```{r}
+datos_trabajaraux <- datos_trabajar[-c(25, 28), ]
+modelo <- lm(Weight ~ Chest.Girth + Height + Bicep.Girth, data = datos_trabajaraux)
+summary(modelo)
+print(influencePlot(modelo))
+```
+
+Como vemos, nuestro $R^2$ ajustado mejoró a 0.7773.
+
+```{r}
+datos_trabajar = datos_trabajaraux
+```
+
+
+
+Ahora, debemos responder al punto 8, utilizando los datos sobrantes a los utilizados al momento de construir los modelos. Estos datos sobrantes son el 30% que no se tomó en cuenta. Así, podemos comparar las predicciones de los datos vistos y de los datos sobrantes.
+
+```{r}
+
+modelo_simple <- lm(Weight ~ Navel.Girth, data = datos_trabajar)
+modelo_multiple <- lm(Weight ~ Chest.Girth + Height + Bicep.Girth, data = datos_trabajar)
+# Predicciones y RMSE
+rmse <- function(actual, predicted) {
+  sqrt(mean((actual - predicted)^2))
+}
+
+# Calcular RMSE
+rmse_train_simple <- rmse(datos_trabajar$Weight, predict(modelo_simple, newdata = datos_trabajar))
+rmse_test_simple <- rmse(datos_sobrantes$Weight, predict(modelo_simple, newdata = datos_sobrantes))
+
+# Cambio porcentual en el error
+cambio_error_simple <- ((rmse_test_simple - rmse_train_simple) / rmse_train_simple) * 100
+
+# Modelo múltiple
+modelo_multiple <- lm(Weight ~ Chest.Girth + Height + Bicep.Girth, data = datos_trabajar)
+
+# Calcular RMSE
+rmse_train_multiple <- rmse(datos_trabajar$Weight, predict(modelo_multiple, newdata = datos_trabajar))
+rmse_test_multiple <- rmse(datos_sobrantes$Weight, predict(modelo_multiple, newdata = datos_sobrantes))
+
+# Cambio porcentual en el error
+cambio_error_multiple <- ((rmse_test_multiple - rmse_train_multiple) / rmse_train_multiple) * 100
+
+# Resultados
+cat("Modelo Simple:\n")
+cat("RMSE para entrenamiento:", round(rmse_train_simple, 3), "\n")
+cat("RMSE para prueba:", round(rmse_test_simple, 3), "\n")
+cat("Cambio porcentual en el error:", round(cambio_error_simple, 2), "%\n")
+
+cat("Modelo Múltiple:\n")
+cat("RMSE para entrenamiento:", round(rmse_train_multiple, 3), "\n")
+cat("RMSE para prueba:", round(rmse_test_multiple, 3), "\n")
+cat("Cambio porcentual en el error:", round(cambio_error_multiple, 2), "%\n")
+
+```
+
+Al analizar los resultados, se observa que el modelo múltiple (RLM) presenta un RMSE significativamente menor en el conjunto de entrenamiento en comparación con el modelo simple (RLS), lo que indica un ajuste más preciso a los datos vistos. Sin embargo, al evaluar en el conjunto de prueba, el RMSE del modelo múltiple es ligeramente menor que el del modelo simple, con un aumento porcentual de error del 9.88 %. Esto indica una leve pérdida de generalización en el modelo múltiple, aunque esta sigue siendo razonable.
+
+Por otro lado, el modelo simple, aunque tiene un error mayor en el conjunto de entrenamiento, logra reducir su RMSE en un 30.68 % al pasar al conjunto de prueba. Este comportamiento podría sugerir que el modelo simple, al no ajustarse tanto a los datos de entrenamiento, evita problemas de sobreajuste, lo que se traduce en un mejor desempeño relativo en datos no vistos.

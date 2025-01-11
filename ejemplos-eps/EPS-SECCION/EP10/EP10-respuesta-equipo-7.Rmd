@@ -1,0 +1,369 @@
+---
+title: "EP-10:"
+author: "Grupo N°7"
+date: "15/12/2024"
+output: html_document
+---
+
+##### Importante
+
+Antes de comenzar, se hará la importanción de las siguientes librerías para la correcta realización de la actividad, que vienen dadas por : *car*, *ggpubr*, *ggplot2*, *caret* y *dplyr*.
+
+```{r, echo = F, message = F}
+# Librerías a utilizar.
+library(car)
+library(dplyr)
+library(ggpubr)
+library(ggplot2)
+library(caret)
+```
+
+#### Actividades
+
+##### 1.- Definir la semilla a utilizar, que corresponde a los últimos cuatro dígitos del RUN (sin considerar el dígito verificador) del integrante de mayor edad del equipo.
+
+Solución:
+
+La semilla a utilizar corresponde a los últimos cuatro dígitos (sin dígito verificador) del mayor integrante del equipo, el cual es 7670.
+
+```{r, echo = F, message = F}
+# Se define la semilla con los 4 últimos dígitos del RUN  
+# (antes del guión) del mayor integrante del equipo.
+set.seed(7670)
+```
+
+#####  2.- Seleccionar una muestra de 150 mujeres (si la semilla es un número par) o 150 hombres (si la semilla es impar), asegurando que la mitad tenga estado nutricional “sobrepeso” y la otra mitad “no sobrepeso” en cada caso. Dividir esta muestra en dos conjuntos: los datos de 100 personas (50 con EN “sobrepeso”) para utilizar en la construcción de los modelos y 50 personas (25 con EN “sobrepeso”) para poder evaluarlos.
+
+Solución:
+
+En particular, para hacer la carga de datos se utilizará la función nativa de R, *read.csv2*. Para así, poder obtener los conjuntos solicitados por enunciado.
+
+```{r}
+# Se define la semilla anteriormente explicada.
+set.seed(7670)
+
+# Cargar datos y calcular el IMC
+datos <- read.csv2("EP09 Datos.csv")
+datos[["IMC"]] <- datos[["Weight"]] / (datos[["Height"]] / 100)^2
+datos <- datos %>%
+  mutate(EN = ifelse(IMC >= 23.2, 1, 0))
+
+# Determinar el género según la semilla
+genero <- ifelse(7670 %% 2 == 0, 0, 1)  # 0: Mujeres, 1: Hombres
+
+# Filtrar por género y seleccionar una muestra balanceada de 150 personas
+muestra <- datos %>%
+  filter(Gender == genero) %>%
+  group_by(EN) %>%
+  slice_sample(n = 75) %>%  # 75 de cada estado nutricional
+  ungroup()
+
+# Dividir en entrenamiento y evaluación manteniendo balance
+# Crear índices para entrenamiento
+indices_sobrepeso <- sample.int(75, size = 50)  # 50 "Sobrepeso"
+indices_no_sobrepeso <- sample.int(75, size = 50)  # 50 "No Sobrepeso"
+
+# Subconjunto "Sobrepeso"
+sobrepeso <- muestra %>% filter(EN == 1)
+entrenamiento_sobrepeso <- sobrepeso[indices_sobrepeso, ]
+evaluacion_sobrepeso <- sobrepeso[-indices_sobrepeso, ]
+
+# Subconjunto "No Sobrepeso"
+no_sobrepeso <- muestra %>% filter(EN == 0)
+entrenamiento_no_sobrepeso <- no_sobrepeso[indices_no_sobrepeso, ]
+evaluacion_no_sobrepeso <- no_sobrepeso[-indices_no_sobrepeso, ]
+
+# Combinar los conjuntos
+entrenamiento <- bind_rows(entrenamiento_sobrepeso, entrenamiento_no_sobrepeso)
+evaluacion <- bind_rows(evaluacion_sobrepeso, evaluacion_no_sobrepeso)
+
+# Verificar el balance
+cat("Balance en entrenamiento:\n")
+print(table(entrenamiento[["EN"]]))
+
+cat("\nBalance en evaluación:\n")
+print(table(evaluacion[["EN"]]))
+```
+
+##### 3.- Recordar las ocho posibles variables predictoras seleccionadas de forma aleatoria en el ejercicio anterior.
+
+Solución:
+
+Las variables predictoras seleccionadas aleatoriamente en el ejercicio anterior, se obtuvieron a través de una combinación de la función propia de R, *colnames*, así, asegurando su aleatoriedad.
+
+```{r}
+# Se define la semilla con los 4 últimos dígitos del RUN  
+# (antes del guión) del menor integrante del equipo. 
+set.seed(2225)
+
+# Se obtienen los nombres de todas las vaiables del data frame "entrenamiento".
+variables_predictoras <- colnames(entrenamiento)[!colnames(entrenamiento) 
+                                                 %in% c("EN")]
+
+# De los nombres de las columnas, se seleccionan aleatoriamente las 8 posibles
+# variables predictoras.
+# Esto crea un conjunto aleatorio de posibles 8 variables predictoras.
+variables_predictoras <- sample(variables_predictoras, 8)
+```
+
+De esa forma, las variables vienen dadas por:
+
+  - Height
+  - Biacromial.diameter
+  - Chest.depth
+  - Chest.diameter
+  - Navel.Girth
+  - Knee.Girth
+  - Thigh.Girth
+  - Gender
+
+#### 4.- Seleccionar, de las otras variables, una que el equipo considere que podría ser útil para predecir la clase EN, justificando bien esta selección (idealmente con literatura).
+
+Solución:
+
+La selección efectiva del método viene dada por la búsqueda de aquel predictor que mejor AIC entregue según el modelo
+
+```{r}
+# Se define la semilla con los 4 últimos dígitos del RUN  
+# (antes del guión) del mayor integrante del equipo. 
+set.seed(7670)
+
+# Se identifican las variables restantes en el conjunto de datos de entrenamiento.
+# Estas son las variables que no se incluyen en las variables_predictoras ni la 
+# variable dependiente "EN".
+variables_restantes <- colnames(entrenamiento)[!colnames(entrenamiento) %in% 
+                                                 c(variables_predictoras, "EN")]
+
+# Se ajusta el modelo nulo, que solo incluye una constante (sin variables 
+# predictoras).
+nulo <- glm(EN ~ 1, family = binomial(link = "logit"), data = entrenamiento)
+
+# Se construye la fórmula para el modelo máximo utilizando las 
+# variables restantes.
+# Unimos todas las variables restantes en una fórmula de la forma: EN ~ var1 + 
+# var2 + ...
+formula_maximo <- as.formula(paste("EN ~", paste(variables_restantes, 
+                                                 collapse = " + ")))
+
+# Ajustamos el modelo máximo, que incluye todas las variables restantes como 
+# predictoras.
+maximo <- glm(formula_maximo, family = binomial(link = "logit"), 
+              data = entrenamiento)
+
+# Usamos la función add1() para evaluar el AIC de cada variable al modelo nulo.
+# Esto se hace dentro del alcance definido por el modelo máximo.
+modelo_nulo <- add1(nulo, scope = maximo)
+
+# Mostramos los resultados del paso 1 del análisis.
+cat("\nPaso 1:\n")
+cat("-----\n")
+print(modelo_nulo)
+```
+
+Como se puede apreciar en el modelo, la variable a seleccionar viene dada por *Hip.Girth*, que es la que menor AIC presenta respecto de sus contrapartes.
+
+
+##### 5.- Usando el entorno R, construir un modelo de regresión logística con el predictor seleccionado en el paso anterior y utilizando de la muestra obtenida.
+
+Solución:
+
+En base a la función provista por R, *glm*, se construye el modelo para predecir EN en base a Hip.Girth
+
+```{r}
+# Ajuste del modelo de regresión logística simple
+modelo_simple <- glm(EN ~ Hip.Girth, family = binomial(link = "logit"), data = entrenamiento)
+
+# Imprimir un resumen del modelo ajustado
+print(summary(modelo_simple))
+```
+
+
+##### 6.- Usando estas herramientas para la exploración de modelos del entorno R, buscar entre dos y cinco predictores de entre las variables seleccionadas al azar, recordadas en el punto 3, para agregar al modelo obtenido en el paso 
+
+Solución:
+
+Al igual que el ejercicio anterior, buscamos aquel predictor que mejor adapte un AIC a nuestro modelo, de esa forma, se obtienen los siguientes modelos en base a los mejores predictores:
+
+```{r}
+# Se construye la fórmula completa que incluye 'Hip.Girth' y todas las variables 
+# predictoras en 'variables_predictoras' (todas las demás variables seleccionadas).
+formula_completo <- as.formula(paste("EN ~ Hip.Girth + ", 
+                                     paste(variables_predictoras, 
+                                           collapse = " + ")))
+
+# Ajuste del modelo completo utilizando la fórmula construida
+modelo_completo <- glm(formula_completo, family = binomial(link = "logit"), 
+                       data = entrenamiento)
+
+# Evaluación del modelo simple 'modelo_simple' con las posibles variables a 
+# añadir desde 'modelo_completo' usando la función add1(). 
+AIC_1 <- add1(modelo_simple, scope = modelo_completo)
+
+# Imprimir el AIC del modelo simple después de comparar con el modelo completo.
+print(AIC_1)
+
+# Se actualiza el modelo 'modelo_simple' agregando la variable 'Chest.depth'.
+modelo_2 <- update(modelo_simple, .~. + Chest.depth)
+
+# Evaluación del nuevo modelo 'modelo_2' con las posibles variables a añadir 
+# usando add1() y comparándolo con el modelo completo.
+AIC_2 <- add1(modelo_2, scope = modelo_completo)
+
+# Imprimir el AIC del nuevo modelo 'modelo_2'.
+print(AIC_2)
+
+# Se actualiza el modelo 'modelo_2' agregando la variable 'Thigh.Girth'.
+modelo_3 <- update(modelo_2, .~. + Thigh.Girth)
+
+# Evaluación del nuevo modelo 'modelo_3' con las posibles variables a añadir 
+# usando add1() y comparándolo con el modelo completo.
+AIC_3 <- add1(modelo_3, scope = modelo_completo)
+
+# Imprimir el AIC del modelo 'modelo_3'.
+print(AIC_3)
+
+# Se actualiza el modelo 'modelo_3' agregando la variable 'Knee.Girth'.
+modelo_4 <- update(modelo_3, .~. + Knee.Girth)
+
+# Evaluación del modelo 'modelo_4' con las posibles variables a añadir 
+# usando add1() y comparándolo con el modelo completo.
+AIC_4 <- add1(modelo_4, scope = modelo_completo)
+
+# Imprimir el AIC del modelo 'modelo_4'.
+print(AIC_4)
+```
+
+##### 7.- Evaluar la confiabilidad de los modelos (i.e. que tengan un buen nivel de ajuste y son generalizables) y “arreglarlos” en caso de que tengan algún problema.
+
+Solución:
+
+Sabemos que para evaluar esta confiabilidad se deben cumplir ciertas condiciones que vienen dadas por las siguientes:
+
+
+  1.- Relación lineal entre los predictores y la respuesta: Para verificar esta condición, nos apañaremos de la función *residualPlots* del paquete *car*, donde, el resultado viene dado por los siguientes gráficos:
+  
+```{r, echo = F}
+# Se comprueba la relación lineal entre los predictores 
+# y la respuesta. 
+residualPlots(modelo_4, fitted=FALSE)
+```
+  
+  Se puede apreciar que las variables Weight y Thigh.Girth presentan gráficos no lineales respecto de la variable de respuesta, pero esto teoricamente hablando no es una contraindicación, debido a que el peso está directamente relacionado con el cálculo del IMC que es la variable que se utiliza para construir EN (Estado Nutricional) y por otro lado, Thigh.Girth mantiene la misma línea pero siguiendo la argumentación del punto 2.
+  
+  2.- Los residuos deben ser independientes entre si: Para el cumplimiento de esta condición, se utilizará la función *durbinWatsonTest*, donde el resultado es el siguiente:
+
+```{r}
+# Se comprueba la independencia de los residuos.
+durbinWatsonTest(modelo_4, echo = F)
+```
+
+Como el p valor obtenido es cero, podemos decir que en efecto existe autocorrelación entre las variables, esto nuevamente, tiene una justificación detrás, debido a que a mayor IMC, las variables que restantes también tienden a aumentar.
+  
+  3.- Multicolinealidad entre los predictores: Se utilizará la función vif, que nos reporta los siguientes valores:
+  
+```{r}
+# Se comprueba la multicolinealidad de los predictores.
+vif(modelo_4, echo = F)
+```
+  
+  Donde ninguno supera el umbral crítico.
+  
+  4.- Información incompleta: En particular, se supera la cantidad propuesta de 15 observaciones para cada variable, de esa forma, se presume tener una información sin restricciones.
+  5.- Separación perfecta: 
+  
+```{r, echo = F}
+# Crear un gráfico de dispersión para la variable Weight frente a EN
+g1 <- ggplot(entrenamiento, aes(x = Weight, y = EN, color = as.factor(EN))) +
+  geom_point(size = 3) +  
+  scale_color_manual(values = c("red", "blue"), labels = c("EN = 0", "EN = 1")) +
+  labs(title = "Weight vs EN", x = "Weight", y = "EN", color = "EN") +
+  theme_minimal() 
+
+# Crear un gráfico de dispersión para la variable Thigh.Girth frente a EN
+g2 <- ggplot(entrenamiento, aes(x = Thigh.Girth, y = EN, color = as.factor(EN))) +
+  geom_point(size = 3) +  
+  scale_color_manual(values = c("red", "blue"), labels = c("EN = 0", "EN = 1")) +  
+  labs(title = "Thigh Girth vs EN", x = "Thigh Girth", y = "EN", color = "EN") + 
+  theme_minimal()  
+
+# Crear un gráfico de dispersión para la variable Chest.depth frente a EN
+g3 <- ggplot(entrenamiento, aes(x = Chest.depth, y = EN, color = as.factor(EN))) +
+  geom_point(size = 3) +  
+  scale_color_manual(values = c("red", "blue"), labels = c("EN = 0", "EN = 1")) +  
+  labs(title = "Chest Depth vs EN", x = "Chest Depth", y = "EN", color = "EN") +  
+  theme_minimal() 
+
+# Crear un gráfico de dispersión para la variable Biacromial.diameter frente a EN
+g4 <- ggplot(entrenamiento, aes(x = Biacromial.diameter, y = EN, color = as.factor(EN))) +
+  geom_point(size = 3) +  # Dibuja los puntos del gráfico
+  scale_color_manual(values = c("red", "blue"), labels = c("EN = 0", "EN = 1")) +  # Asigna colores para las dos clases de EN
+  labs(title = "Biacromial Diameter vs EN", x = "Biacromial Diameter", y = "EN", 
+       color = "EN") + theme_minimal()  
+
+# Organiza los gráficos en una cuadrícula 2x2 con una leyenda común en la parte 
+# inferior.
+final_plot <- ggarrange(g1, g2, g3, g4, 
+                        ncol = 2, nrow = 2,  
+                        common.legend = TRUE, legend = "bottom")  
+
+# Muestra el gráfico final con todos los gráficos organizados.
+final_plot
+
+```
+
+Como se busca una función (lineal o no) que pueda separar completamente las categorías sin que haya solapamiento en los valores de los predictores, podemos aclarar que no existe separación perfecta.
+
+  6.- Estimaciones de los coeficientes del modelo no están dominados por casos influyentes: En base al gráfico entregado por *influencePlot()*, se obtiene lo siguiente:
+
+```{r, echo = F}
+# Se comprueba que los coeficientes del modelo no se encuentren dominados 
+# por casos influyentes.
+influencePlot(modelo_4)
+```
+
+Donde en particular tenemos 3 observaciones que superan el valor crítico de 1, estas 3 observaciones requeririan un mayor estudio determinar qué realizar con ellas.
+
+##### 8.- Usando código estándar, evaluar el poder predictivo de los modelos con los datos de las 50 personas que no se incluyeron en su construcción en términos de sensibilidad y especificidad.
+
+Solución: Para obtener la matriz de confusión con los datos solicitados, se utilizará la función confusionMatrix, donde se requiere tener la probabilidad 
+
+```{r, echo = F}
+# Convertimos la variable 'EN' en un factor con los niveles 0 y 1, asegurándonos 
+# de que estén en el orden correcto
+evaluacion[["EN"]] <- factor(evaluacion[["EN"]], levels = c(0, 1))
+
+# Extraemos las probabilidades predichas para las primeras 50 observaciones del 
+# conjunto de entrenamiento
+probs_ent <- fitted(modelo_4)[1:50]
+
+# Reconvertimos la variable 'EN' de nuevo a un factor con los niveles correctos
+evaluacion[["EN"]] <- factor(evaluacion[["EN"]], levels = c(0, 1))
+
+# Definimos un umbral para la clasificación (0.5 en este caso, es el valor estándar)
+umbral <- 0.5
+
+# Convertimos las probabilidades en predicciones de clase (0 o 1) usando el umbral
+# Si la probabilidad es mayor o igual que el umbral, asignamos 1 (clase positiva), 
+# de lo contrario 0 (clase negativa)
+preds_ent <- sapply(probs_ent, function(p) ifelse(p >= umbral, 1, 0))
+
+# Convertimos las predicciones a un factor, asegurándonos de que tenga los mismos 
+# niveles que la variable real 'EN'
+preds_ent <- factor(preds_ent, levels = levels(evaluacion[["EN"]]))
+
+# Generamos una matriz de confusión que compara las predicciones con los valores 
+# reales
+mat_conf_ent <- confusionMatrix(preds_ent, evaluacion[["EN"]], positive = "1")
+
+# Imprimimos la matriz de confusión completa
+print(mat_conf_ent)
+
+# Imprimimos la tabla de la matriz de confusión, que contiene los valores de las 
+# clases predicha y real
+print(mat_conf_ent[["table"]])
+
+# Imprimimos las métricas de desempeño por clase (precisión, recall, F1, etc.)
+print(mat_conf_ent[["byClass"]])
+```
+
+En conclusión: El modelo evaluado cumple con las condiciones de ajuste, lo que indica que los resultados obtenidos son confiables. De igual forma, se recomienda continuar evaluando posibles mejoras al modelo, como la inclusión de nuevas variables o el tratamiento de datos atípicos si es que se encuentra alguno, para así lograr optimizar su desempeño en contextos reales.

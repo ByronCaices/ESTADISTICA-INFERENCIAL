@@ -1,0 +1,262 @@
+---
+title: "EP07-respuesta-equipo-2"
+author: "Equipo 2"
+date: "2024-10-29"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggpubr)
+```
+
+
+1) Observando los datos, la memorista sospecha que hay diferencias significativas en el tiempo de ejecución entre las versiones A y B del algoritmo cuando las instancias tienen 70 o más nodos. ¿Los datos respaldan la intuición de la memorista?
+Para responder, filtren los datos para tener las instancias con 70 o más nodos y seleccionen las columnas de los tiempos de ejecución de las versiones A y B en formato ancho. Usando como semilla el valor 13, obtenga muestras aleatorias independientes de 20 tiempos registrados por la versión A y 18 tiempos registrados por la versión B del algoritmo. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+Comenzamos filtrando los datos y aplicando la prueba de Shapiro Wilk para probar normalidad en las muestras.
+
+```{r}
+Datos = read.csv("EP07 Datos.csv")
+Datos_1 = Datos %>% filter(n.nodos >= 70)
+Datos_1 = Datos_1 %>% select(instancia, tiempo.A, tiempo.B)
+
+#Semilla especificada
+set.seed(13)
+tiemposA = sample(Datos_1$tiempo.A, 20)
+tiemposB = sample(Datos_1$tiempo.B, 18)
+shapiro.test(tiemposA)
+shapiro.test(tiemposB)
+```
+
+```{r}
+#Crear dataframe con muestras y etiquetar la versión del algoritmo
+muestras_df <- data.frame(
+  tiempo = c(tiemposA, tiemposB),
+  Algoritmo = factor(rep(c("A", "B"), times = c(20, 18))))
+
+#Graficar el qq-plot para cada muestra de forma individual
+ggqqplot(muestras_df, x = "tiempo", color = "Algoritmo", facet.by = "Algoritmo") +
+  labs(title = "QQ-plot de Tiempos de Ejecución para Algoritmos A y B",
+       x = "Teórico (Distribución Normal)", y = "Tiempo de Ejecución") +
+  theme_minimal()
+```
+Las hipótesis para esta pregunta sera las siguientes:
+
+H0: No existen diferencias significativas entre los tiempos de ejecución de los algoritmos A y B.
+
+Ha: Existen diferencias significativas en los tiempos de ejecución entre los algoritmos A y B.
+
+Revisión de condiciones:
+
+Normalidad: Se puede ver por la prueba de Shapiro Wilk que la muestra A no sigue una distribución normal a diferencia de la muestra B, esto también se puede evidenciar en el gráfico anterior.
+
+Escala de intervalos iguales: Se mide el tiempo por lo que la escala de intervalos es igual.
+
+Aleatoriedad: Se tomaron muestras aleatorias de cada grupo.
+
+Independencia: Las observaciones son independientes entre si.
+
+Por lo anterior usamos la prueba no paramétrica de Wilcoxon, con una significancia de 0.05.
+```{r}
+alpha = 0.05
+wilcox.test(tiemposA, tiemposB, paired=FALSE, alternative = "two.sided", conf.level = 1-alpha)
+```
+Vemos que el valor P es menor que la significancia de 0.05, por que que con un 95% de confianza rechazamos la hipótesis nula en favor de la alternativa, por lo que si existe una diferencia significativa entre los tiempos de ejecución entre los algoritmos A y B.
+
+
+2) La memorista también sospecha que, al comparar las mismas instancias de prueba con iguales características, las mejores soluciones encontradas por las versiones B y C tienen rendimientos distintos. ¿Estará en lo cierto?
+Para responder, filtren los datos para tener las instancias con 70 o más nodos y seleccionen las columnas con el mejor rendimiento de las versiones B y C en formato ancho. Usando como semilla el valor 73, obtengan una muestra aleatoria de 24 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+En este momento, los investigadores buscan determinar si existen diferencias en el tiempo que tardan los usuarios en formular consultas para problemas con diferente nivel de dificultad en el área de computación.
+```{r}
+# Filtrar instancias con 70 o más nodos
+data_filtrada_2 <- Datos %>% filter(n.nodos >= 70)
+
+# Seleccionar las columnas necesarias (ajusta los nombres de columna)
+data_ancho <- data_filtrada_2 %>%
+  select( instancia,mejor.B, mejor.C) 
+
+# Configurar la semilla y tomar una muestra aleatoria
+set.seed(73)
+muestra <- data_ancho %>% sample_n(24)
+
+#shapiro.test
+shapiro.test(muestra$mejor.B)
+shapiro.test(muestra$mejor.C)
+```
+
+Dado que en el shapiro test el p value de ambas muestras nos dio menor a 0.05 podemos decir que no siguen una distribución normal, y también se puede observar en los siguientes gráficos.
+
+```{r}
+#Crear dataframe con muestras y etiquetar la versión del algoritmo
+muestras_df <- data.frame(
+  tiempo = c(muestra$mejor.B, muestra$mejor.C),
+  Algoritmo = factor(rep(c("B", "C"), times = c(24, 24))))
+
+#Graficar el qq-plot para cada muestra de forma individual
+ggqqplot(muestras_df, x = "tiempo", color = "Algoritmo", facet.by = "Algoritmo") +
+  labs(title = "QQ-plot de Tiempos de Ejecución para Algoritmos B y C",
+       x = "Teórico (Distribución Normal)", y = "Tiempo de Ejecución") +
+  theme_minimal()
+```
+
+Condiciones 
+1) Los pares de observaciones son escogidos de manera aleatoria por lo que se asume la independencia 
+2) Las escala de datos esta en una escala ordinal ya que para porcentaje podremos decir que 99% es mayor a 98%
+
+Hipótesis 
+Ho= los mejores tiempos de las versiones B y C no presentan diferencias 
+Ha= los mejores tiempos de las versiones B y C presentan diferencias  
+
+
+Aplicar la prueba de Wilcoxon en las dos columnas seleccionadas
+
+```{r}
+prueba_wilcoxon <- wilcox.test(muestra$mejor.B, muestra$mejor.C, paired = TRUE)
+print(prueba_wilcoxon)
+```
+
+Vemos que el valor P es mayor que la significancia de 0.05, por lo que no hay suficiente evidencia para rechazar la hipótesis nula y se concluye que los mejores tiempos de las versiones B y C no presentan diferencias.
+
+3) La memorista sospecha que hay diferencias significativas en el tiempo de ejecución entre las versiones del algoritmo cuando las instancias de prueba tienen 50 o más nodos. ¿Los datos respaldan la intuición de la memorista?
+Para responder, filtren los datos para tener las instancias con 50 o más nodos y seleccionen las columnas con los tiempos de ejecución registrados (en formato ancho). Usando como semilla el valor 43, obtengan muestras aleatorias independientes de 12, 14 y 13 tiempos registrados por las versiones A, B y C, respectivamente. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+```{r}
+# Filtrar las instancias con 50 o más nodos y seleccionar columnas de tiempo de ejecución de A, B y C
+data_filtrada <- Datos[Datos$n.nodos >= 50, c("instancia", "n.nodos", "tiempo.A", "tiempo.B", "tiempo.C")]
+
+# Configurar la semilla y tomar muestras aleatorias
+set.seed(43)
+muestra_A <- sample(data_filtrada$tiempo.A, 12)
+muestra_B <- sample(data_filtrada$tiempo.B, 14)
+muestra_C <- sample(data_filtrada$tiempo.C, 13)
+```
+
+Analizar la normalidad de la distribución:
+```{r}
+# Crear data frame con muestras y etiquetar la versión del algoritmo
+muestras_df <- data.frame(
+  tiempo = c(muestra_A, muestra_B, muestra_C),
+  Algoritmo = factor(rep(c("A", "B", "C"), times = c(12, 14, 13)))
+)
+
+# Graficar el QQ-plot para cada muestra de forma individual
+ggqqplot(muestras_df, x = "tiempo", color = "Algoritmo", facet.by = "Algoritmo") +
+  labs(title = "QQ-plot de Tiempos de Ejecución para Algoritmos A, B y C",
+       x = "Teórico (Distribución Normal)", y = "Tiempo de Ejecución") +
+  theme_minimal()
+```
+
+```{r}
+shapiro.test(muestra_A)
+shapiro.test(muestra_B)
+shapiro.test(muestra_C)
+```
+Según los gráficos realizados y las pruebas shapiro wilk sobre las muestras, se determina que la muestra_A no posee una distribución similar a la normal, por lo que utilizaremos un prueba no parámetrica de kruskal wallis para el análisis de la pregunta.
+
+Verificación de condiciones:
+
+1) La variable independiente tiene tiene 3 niveles, por lo que cumple con el mínimo de niveles requeridos.
+
+2) La variable dependiente, tiempo de ejecución, es una medida continua con intervalos iguales entre valores, y además permite un orden natural según la duración. Aunque el tiempo es en realidad una variable de razón (con un cero absoluto), cumple con la condición de ser al menos ordinal, ya que sus valores pueden ordenarse de menor a mayor.
+
+3) Según el enunciado las instancias que son probadas en cada algoritmo, son independientes y además son seleccionadas de manera aleatoria.
+
+
+Las Hipótesis planteadas son las siguientes:
+
+Ho: Todos los algoritmos llevan a tiempos similares.
+Ha: Al menos uno de los algoritmos obtiene un tiempo de ejecución distinto al de al menos otro algoritmo.
+
+```{r}
+Tiempo <- c(muestra_A, muestra_B, muestra_C)
+
+Algoritmo <- c(rep("Tiempo A", length(muestra_A)), 
+              rep("Tiempo B", length(muestra_B)), 
+              rep("Tiempo C", length(muestra_C)))
+
+Algoritmo <- factor(Algoritmo)
+
+datos <- data.frame(Tiempo, Algoritmo)
+
+# Establecer nivel de significación
+alfa <- 0.05
+
+# Hacer la prueba de Kruskal-Wallis.
+prueba <- kruskal.test(Tiempo ~ Algoritmo, data = datos)
+print(prueba)
+
+# Efectuar procedimiento post-hoc de Benjamini & Hochberg
+# si se encuentran diferencias significativas.
+if (prueba[["p.value"]] < alfa) {
+  post_hoc <- pairwise.wilcox.test(datos[["Tiempo"]],
+                                   datos[["Algoritmo"]],
+                                   p.adjust.method = "BH",
+                                   paired = FALSE,
+                                   exact = FALSE)
+  print(post_hoc)
+}
+```
+Según los resultados obtenidos en la prueba kruskal-wallis con un p-value menor al nivel de significacia, rechazamos la hipótesis nula en favor de la alternativa. Por lo mismo es que se realizó el análisis post-hoc para determinar cuáles de los algoritmos presentan tiempos disintos.
+
+De el resutlado de la prueba post-hoc de Benjamini & Hochberg se determina que los algoritmos que presentan diferencias en sus tiempos de ejecución son A-B y B-C.
+
+4) La memorista también sospecha que, al comparar las mismas instancias con iguales características, las mejores soluciones encontradas por las diferentes versiones del algoritmo tienen rendimientos distintos. ¿Estará en lo cierto?
+Para responder, filtren los datos para tener las instancias con 50 o más nodos y seleccionen las columnas con los mejores rendimientos registrados. Usando como semilla el valor 16, obtengan una muestra aleatoria de 22 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+```{r}
+# Filtrar instancias con 70 o más nodos
+data_filtrada_4 <- Datos %>% filter(n.nodos >= 50)
+
+# Seleccionar las columnas necesarias (ajusta los nombres de columna)
+data_ancho_4 <- data_filtrada_4 %>%
+  select( instancia,mejor.A,mejor.B,mejor.C) 
+
+
+# Configurar la semilla y tomar una muestra aleatoria
+set.seed(16)
+muestra_4 <- data_ancho_4 %>% sample_n(22)
+
+#shapiro.test
+shapiro.test(muestra_4$mejor.A)
+shapiro.test(muestra_4$mejor.B)
+shapiro.test(muestra_4$mejor.C)
+```
+A través de los 3 shapiro test concluimos  que no siguen una distribución normal por lo que se decido optar por emplear una prueba no paramétrica 
+
+Condiciones 
+1) la variable independiente en este caso los algoritmo son de 3 niveles dado que existen 3 algoritmo diferentes
+2) la variable dependiente en este caso  el porcentaje esta en una escala de intervalo por lo que podemos decir que un valor es mayor a otro
+3) las muestras fueron escogidas de una manera aleatoria 
+
+Hipótesis 
+H0=Las mejores soluciones encontradas por las diferentes versiones del algoritmo tienen rendimientos iguales.
+Ha=Las mejores soluciones encontradas por las diferentes versiones del algoritmo tienen rendimientos distintos.
+
+```{r}
+# Convertir los datos al formato largo
+muestra_4_long <- muestra_4 %>%
+  pivot_longer(cols = c(mejor.A, mejor.B, mejor.C), names_to = "algoritmo", values_to = "rendimiento")
+
+# Realizar el test de Friedman
+resultado_friedman <- friedman.test(rendimiento ~ algoritmo | instancia, data = muestra_4_long)
+
+# Mostrar resultados
+resultado_friedman
+```
+
+Dado que el p-value nos dio menos a 0.05 debemos realizar una prueba post hoc
+
+```{r}
+#prueba post hoc
+post_hoc<- pairwise.wilcox.test(muestra_4_long$rendimiento,
+                                muestra_4_long$algoritmo,
+                                p.adjust.method = "holm",
+                                paired=TRUE,
+                                exact=FALSE)
+post_hoc
+```
+A través de la prueba post hoc, encontramos que existe una diferencia significativa en el rendimiento entre los algoritmos mejor.A y mejor.B. Esto nos permite concluir, con un nivel de confianza del 95%, que los rendimientos de las mejor son distintos.
+

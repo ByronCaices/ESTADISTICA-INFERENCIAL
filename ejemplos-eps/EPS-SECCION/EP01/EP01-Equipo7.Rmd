@@ -1,0 +1,114 @@
+---
+title: "E01 - Estadística Inferencial"
+author: "Jaime Riquelme & Byron Caices"
+date: "2024-09-24"
+output:
+    html_document:
+    highlight: tango
+    word_document: default
+    pdf_document: default
+---
+
+<style>
+body {
+  font-family: 'Calibri', sans-serif;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Equipo 7.
+
+# ¿Tiene relación el ingreso de las mujeres de la RM con el riqueza del municipio donde habita?
+
+```{r , include=FALSE}
+#Realizamos el gráfico de las comunas dado su ranking de ingreso promedio.
+library(ggpubr)
+library(ggplot2)
+library(dplyr)
+```
+
+```{r Casen}
+DatosCasen <- read.csv2("EP01 Datos Casen 2017.csv", stringsAsFactors = TRUE )
+
+#Mostramos los primeros datos de la data para tener una idea principal sobre su contenido.
+
+head(DatosCasen)
+```
+
+```{r}
+
+#Filtramos los datos a solo mujeres
+DatosCasen <- DatosCasen[DatosCasen$sexo == "Mujer",]
+
+#Agrupamos a las mujeres por comuna
+IngresoPorComuna <- DatosCasen %>% group_by(comuna)
+
+#Calculamos el ingreso promedio de las mujeres por comuna.
+
+IngresoPorComuna <- IngresoPorComuna %>% summarise(IngresoPromedio = mean(ytot))
+
+#Creamos un gráfico de barras para visualizar el ingreso promedio de las mujeres por comuna.
+
+g1 <- ggplot(data = IngresoPorComuna, aes(x = reorder(comuna, IngresoPromedio), y = IngresoPromedio)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Ingreso promedio de las mujeres por comuna",
+       x = "Comuna",
+       y = "Ingreso promedio") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 8)) 
+
+#Mostramos el Grafico realizado para vizualidar el ingreso promedio de las mujeres por comuna.
+g1
+```
+
+--------
+
+Aquí en el gráfico podemos ver claramente el orden descendente de las comunas de acuerdo a su ingreso promedio de las mujeres. teniendo como las comunas más ricas en ingresos Vitacura, Providencia, Las condes, ñuñoa, entre otras
+
+--------
+
+```{r}
+#Realizamos el gráfico de las comunas dado su ranking de riqueza.
+
+#Objetemos la riqueza promedio de las comunas y lo guardamos en una variable.
+
+RiquezaPorComuna <- DatosCasen %>% group_by(comuna)
+
+#Calculamos la riqueza promedio de las comunas.
+
+RiquezaPorComuna <- RiquezaPorComuna %>% summarise(RiquezaPromedio = mean(ing.comuna))
+
+#Ordenamos las comunas por riqueza promedio.
+
+RiquezaPorComuna <- RiquezaPorComuna[order(RiquezaPorComuna$RiquezaPromedio),]
+
+#Creamos un gráfico de barras para visualizar la riqueza promedio de las comunas.
+
+g2<- ggplot(data = RiquezaPorComuna, aes(x = reorder(comuna, RiquezaPromedio), y = RiquezaPromedio)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Riqueza promedio de las comunas",
+       x = "Comuna",
+       y = "Riqueza promedio") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 8))
+
+#Mostramos el Grafico realizado para vizualidar la riqueza promedio de las comunas.
+g2
+
+
+```
+
+--------
+
+Dado el gráfico anterior podemos ver claramente el orden descendente de las comunas de acuerdo a su riqueza promedio, teniendo como las comunas con mayor riqueza a Vitacura, Las Condes, Lo Barnechea, Providencia, entre otras.
+
+de acuerdo a esto último, podemos responder la pregunta planteada en el título. ¿Tiene relación el ingreso de las mujeres de la RM con el riqueza del municipio donde habita? 
+
+La respuesta es sí, ya que dado los gráficos anteriores podemos ver que las comunas con mayor ingreso promedio de las mujeres son las mismas comunas con mayor riqueza promedio, por lo que podemos decir que sí existe una relación entre el ingreso de las mujeres de la RM con la riqueza del municipio donde habita.
+
+--------

@@ -1,0 +1,423 @@
+---
+title: "EP11"
+author: "Grupo 6"
+date: "2024-12-16"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(caret)
+library(leaps)
+library(car)
+library(ggpubr)
+library(ggpubr)
+library(psych)
+library(pROC)
+```
+
+Para esta actividad se nos pidio realizar los siguientes puntos:
+
+1.-Definir la semilla a utilizar, que corresponde a los primeros cinco dígitos del RUN del integrante de mayor edad del equipo.
+
+2.-Seleccionar una muestra de 100 personas, asegurando que la mitad tenga estado nutricional “sobrepeso” y la otra mitad “no sobrepeso”.
+
+3.-Usando las herramientas del paquete leaps, realizar una búsqueda exhaustiva para seleccionar entre dos y ocho predictores que ayuden a estimar la variable Peso (Weight), obviamente sin considerar las nuevas variables IMC ni EN, y luego utilizar las funciones del paquete caret para construir un modelo de regresión lineal múltiple con los predictores escogidos y evaluarlo usando bootstrapping.
+
+4.-Haciendo un poco de investigación sobre el paquete caret, en particular cómo hacer Recursive Feature Elimination (RFE), construir un modelo de regresión lineal múltiple para predecir la variable IMC que incluya entre 10 y 20 predictores, seleccionando el conjunto de variables que maximice R2 y que use cinco repeticiones de validación cruzada de cinco pliegues para evitar el sobreajuste (obviamente no se debe considerar las variables Peso, Estatura ni estado nutricional –Weight, Height, EN respectivamente).
+
+5.-Usando RFE, construir un modelo de regresión logística múltiple para la variable EN que incluya el conjunto de predictores, entre dos y seis, que entregue la mejor curva ROC y que utilice validación cruzada dejando uno fuera para evitar el sobreajuste (obviamente no se debe considerar las variables Peso, Estatura –Weight y Height respectivamente– ni IMC).
+
+6.-Pronunciarse sobre la confiabilidad y el poder predictivo de los modelos obtenidos.
+
+Para comenzar se leen los datos del archivo EP09 Datos.csv que contiene las mediciones recolectadas, las cuales serán utilizadas en posterior análisis. Dado que la altura en los datos originales está registrada en centímetros, se realiza una conversión a metros dividiendo la columna entre 100, y se calcula el Indice de Masa Corporal de la forma $\text{IMC} = \frac{\text{Peso (kg)}}{\text{Altura (m)}}$, donde el peso está en kilogramos y la altura en metros.
+
+```{r}
+#Lectura de datos
+datos = read.csv2("EP09 Datos.csv")
+
+#Paso de CM A M en una nueva columna
+datos$Height_m <- datos$Height / 100
+
+#IMC de los datos
+datos$IMC <- datos$Weight / (datos$Height_m^2)
+
+#Estado nutricional en base al IMC
+#Sobrepeso = 1 y No Sobrepeso = 0
+datos$EN <- ifelse(datos$IMC >= 23.2, 1, 0)
+set.seed(24326)
+
+```
+
+En este análisis, utilizamos una semilla específica basada en el RUN del integrante de mayor edad del equipo. En este caso, los primeros cinco dígitos del RUN son 24326, que será utilizado como la semilla para garantizar la reproducibilidad del muestreo aleatorio.
+
+Dado que esta semilla es un número impar, según las reglas establecidas en el ejercicio, enfocaremos nuestro análisis únicamente en la población de hombres. Esto asegura consistencia en la selección y permite realizar un análisis más enfocado, con lo que obtenemos los siguientes datos:
+
+```{r}
+set.seed(24326)
+#Seleccionar hombres
+hombres <- subset(datos, Gender == 1)
+
+#Seleccion por Sobrepeso y no
+hombres_sobrepeso <- subset(hombres, EN == 1)
+hombres_no_sobrepeso <- subset(hombres, EN == 0)
+muestra_sobrepeso <- sample_n(hombres_sobrepeso, 75)
+muestra_no_sobrepeso <- sample_n(hombres_no_sobrepeso, 75)
+muestra <- rbind(muestra_sobrepeso, muestra_no_sobrepeso)
+muestra_100 = rbind(sample_n(muestra_sobrepeso, 50), sample_n(muestra_no_sobrepeso, 50))
+#muestra_50 = rbind(sample_n(muestra_sobrepeso, 25), sample_n(muestra_no_sobrepeso, 25))
+
+```
+
+Utilizamos el método de búsqueda exhaustiva proporcionado por la función regsubsets del paquete leaps para determinar los mejores predictores con un máximo de 3. Pero antes de definir el modelo, excluimos de la fórmula las variables que no deben ser consideradas como predictores (IMC, EN, Height_m, Weight), ya que estas se derivan directamente de la variable dependiente o están relacionadas con su clasificación. Esto garantiza que el modelo se enfoque en predictores independientes.
+
+```{r}
+set.seed(24326)
+excluir = c("IMC", "EN", "Height_m", "Weight")
+
+formula = as.formula(paste("Weight ~", paste(setdiff(names(muestra_100), excluir), collapse = " + ")))
+
+reg_model = regsubsets(formula, data = muestra_100, nbest = 1, nvmax = 3, method = "exhaustive")
+
+#Grafico de predictores
+
+plot(reg_model, scale = "bic")
+
+#Procedimiento para obtener los nombres de los 3 mejores predictores
+
+comb_summary = summary(reg_model)
+i_min_bic = which.min(comb_summary[["bic"]])
+i_max_r2a =which.max(comb_summary[["adjr2"]])
+
+mejor_comb_bic = comb_summary[["which"]][i_min_bic, ]
+mejor_comb_r2a = comb_summary[["which"]][i_max_r2a, ]
+
+comb_mejor_bic = names(mejor_comb_bic[mejor_comb_bic == TRUE])
+comb_mejor_r2a = names(mejor_comb_r2a[mejor_comb_r2a == TRUE])
+
+nombres_bic = unique(gsub("^(.*)\\d$", "\\1", comb_mejor_bic))
+nombres_r2a = unique(gsub("^(.*)\\d$", "\\1", comb_mejor_r2a))
+
+pred_mejor_bic = paste(nombres_bic[-1], collapse = " + ")
+pred_mejor_r2a = paste(nombres_r2a[-1], collapse = " + ")
+
+fmla_mejor_bic = as.formula(paste("EN", pred_mejor_bic, sep = "~"))
+fmla_mejor_r2a = as.formula(paste("EN", pred_mejor_r2a, sep = "~"))
+
+modelo_mejor_bic = lm(fmla_mejor_bic, data = datos)
+modelo_mejor_r2a = lm(fmla_mejor_r2a, data = datos)
+cat("\n")
+cat("Predictores seleccionados (R^2 ajustado):\n")
+cat("\n")
+print(nombres_r2a)
+
+```
+
+Como se puede observar en la salida, el resultado que se obtuvo con el modelo de regresión basado en el R\^2 ajustado, los predictores seleccionados son Waist.Girth, Forearm.Girth y HeightEntonces, para este caso usaremos estos 3 predictores obtenidos. Es importante recalcar que tenemos un warning de que hay una dependencia linear; esto será evaluado dentro del análisis de bondad de ajuste.
+
+Probemos el modelo con bootstrapping:
+
+#RLM con bootstrapping
+
+```{r}
+#Boostraping
+set.seed(24326)
+train = train(Weight ~ Waist.Girth + Forearm.Girth + Height, data = muestra_100, method = "lm", trControl = trainControl(method = "boot", number = 1250))
+rlm1 = train[["finalModel"]]
+
+cat("Modelo de RLM")
+print(summary(rlm1))
+```
+
+Como se puede observar en el resultado obtenido con la evaluación de bootstrapping, los residuos representan la diferencia entre los valores observados y los valores predichos por el modelo, siendo mínimo: -8.6456, máximo: 13.8028 y mediana: -0.3457. Esto quiere decir que los residuos muestran una distribución razonablemente simétrica en torno a cero, lo que sugiere que el modelo no presenta un sesgo evidente. Sin embargo, el rango de los residuos (de -8.6456 a 13.8028) indica que hay casos con errores de predicción más altos. También se puede notar que los tres predictores son estadísticamente significativos, como lo indican sus p-valores menores a 0.001. El error estándar residual es 3.476, lo que significa que, en promedio, las predicciones del modelo tienen un error de aproximadamente 3.476 unidades. Esto indica un nivel aceptable de precisión en las predicciones. A lo respecto del p-value del modelo \< 2.2e-16, este resultado confirma que el modelo global es estadísticamente significativo, es decir, al menos uno de los predictores tiene un efecto real sobre la variable dependiente (Weight).
+
+## Bondad de ajuste
+
+En esta sección realizaremos el análisis del modelo para determinar si es necesario realizar correcciones.
+
+### Multicolinealidad
+
+```{r}
+cat("Factores de inflacion de la varianza y Valores de tolerancia\n")
+print(vif(rlm1))
+cat("Valores de tolerancia\n")
+print(1/vif(rlm1))
+```
+
+Se observa que todos los VIF están por debajo de 5, con esto se puede concluir que no hay un problema significativo de colinealidad entre los predictores, y también dado que todos los valores de tolerancia están significativamente por encima del umbral de preocupación (0.1 o menos), por lo cual no se detectan problemas de colinealidad.
+
+### Ajuste y linealidad
+
+```{r}
+rlm2 = lm(Weight ~ Waist.Girth + Forearm.Girth + Height, data = muestra_100)
+residualPlots(rlm2, linear = TRUE)
+```
+
+Vemos que no se observan patrones claros en los residuos, lo que se confirma por las pruebas de cobertura, por lo cual no hay evidencia suficiente para decir que los residuos no siguen una distribución normal para cada predictor.
+
+Ademas, revisemos las relaciones marginales entre la respuesta y cada predictor.
+
+```{r}
+marginalModelPlots(rlm2, sd = TRUE, fitted = FALSE)
+```
+
+Notemos que las relaciones entre los predictores y la respuesta son aproximadamente lineales. Además, el modelo se ajusta bien a las relaciones observadas, con algunas desviaciones en los datos más extremos. Por último, la varianza es relativamente constante y es reproducida bien por el modelo en cada caso.
+
+### Casos influyentes
+
+```{r}
+influencePlot(rlm2)
+```
+
+Vemos que todos los datos se encuentran dentro de rangos aceptables, por lo cual no hay casos que tengan sobreinfluencia en el modelo.
+
+### Independencia de los residuos
+
+```{r}
+print(durbinWatsonTest(rlm2))
+```
+
+Se puede observar que el test de Durbin-Watson arroja un estadístico de 1.673, con una autocorrelación de 0.153 y un p-valor de 0.082. Esto sugiere que no hay evidencia suficiente para rechazar la hipótesis nula de ausencia de autocorrelación en los residuos, aunque el valor se acerca al límite de significancia.
+
+### Desempeño
+
+```{r}
+data = data.frame(RMSE = train[["resample"]][["RMSE"]])
+rlm2_hist = gghistogram(data, x = "RMSE", bins = 30)
+print(rlm2_hist)
+
+print(train[["results"]])
+print(describe(data, trim = 0, skew = FALSE, IQR = TRUE), digits = 3)
+```
+
+El modelo de RLM muestra un rendimiento robusto, con alta capacidad explicativa y errores predictivos bajos y consistentes (RMSE=3.615 y MAE=2.719). Esto sugiere que las variables predictoras seleccionadas son adecuadas para modelar el peso corporal en esta muestra.
+
+# RLM con RFE
+
+```{r}
+data_rlm3 <- muestra_100[, !(colnames(muestra_100) %in% c("Weight", "Height", "IMC", "EN", "Height_m"))]
+formula_rlm3 <- as.formula("IMC ~ .")
+control <- rfeControl(functions = lmFuncs, method = "repeatedcv",
+                           number = 10, repeats = 5, verbose = FALSE)
+
+set.seed(24326)
+rlm3_rfe <- rfe(data_rlm3[, -1], muestra_100$IMC, sizes = 10:20, rfeControl = control, metric = "Rsquared")
+rlm3 <- rlm3_rfe[["fit"]]
+cat("Resumen del modelo RFE para IMC:\n")
+print(summary(rlm3))
+```
+
+Viendo los resultados, estadístico F = 48.19 y valor p \< 2.2e−16, lo que confirma que el modelo global es estadísticamente significativo, los residuos están distribuidos entre -2.6881 y 3.3908, mostrando una buena consistencia.El modelo tiene un R\^2=0.8881, lo que significa que el 88.81% de la variabilidad en el IMC es explicada por las variables predictoras seleccionadas. R\^2 ajustado = 0.8697, lo que indica que el modelo mantiene su capacidad explicativa incluso después de penalizar por el número de predictores. El error estándar residual es 1.112, mostrando una buena precisión en las predicciones.
+
+```{r}
+rfe_grafico <- ggplot(rlm3_rfe) + theme_pubr()
+print(rfe_grafico)
+```
+Vemos del gráfico que el modelo con R\^2 resulta tener alrededor de 14 predictores y el modelo obtenido considera 14.
+
+## Bondad de ajuste
+
+En esta sección realizaremos el análisis del modelo con RFE para determinar si es necesario realizar correcciones.
+
+### Multicolinealidad
+
+```{r}
+cat("Factores de inflacion de la varianza y Valores de tolerancia\n")
+print(vif(rlm3))
+
+cat("\n----------------------------\n")
+print(1/vif(rlm3))
+```
+Vemos que resultan varios predictores con resultados preocupantes al contar con un vif mayor a 5, lo que indica que hay problemas de colinealidad entre los predictores por lo cual tenemos que tomar acciones correctivas.
+
+Por lo cual procedemos a eliminar los predictores Forearm.Girth, Bicep.Girth, Hip.Girth y Thigh.Girth.
+
+```{r}
+data_rlm4 <- muestra_100[, !(colnames(muestra_100) %in% c("Weight", "Height", "EN", "Height_m", "Forearm.Girth", "Bicep.Girth", "Hip.Girth", "Thigh.Girth"))]
+formula_rlm4 <- as.formula("IMC ~ .")
+
+set.seed(24326)
+rlm4_train <- train(IMC ~ Calf.Maximum.Girth + Ankle.Minimum.Girth + Bitrochanteric.diameter+ Knees.diameter
+             + Waist.Girth+ Chest.depth + Chest.Girth+ Ankles.diameter + Elbows.diameter+ Wrists.diameter, data = data_rlm4, method = "lm",
+                    trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5))
+rlm4<- rlm4_train[["finalModel"]]
+
+```
+
+```{r}
+cat("Nuevos factores de inflacion de la varianza y Valores de tolerancia\n")
+print(vif(rlm4))
+
+cat("Nuevos valores de tolerancia\n")
+print(1/vif(rlm4))
+
+```
+Se observa que después de la corrección todos los VIF están por debajo de 5, con esto se puede concluir que no hay un problema significativo de colinealidad entre los predictores, y también dado que todos los valores de tolerancia están significativamente por encima del umbral de preocupación (0.1 o menos), por lo cual no se detectan problemas de colinealidad.
+
+### Ajuste y linealidad
+
+```{r}
+rlm3_ba = lm(IMC ~ Calf.Maximum.Girth + Ankle.Minimum.Girth + Bitrochanteric.diameter+ Knees.diameter
+             + Waist.Girth+ Chest.depth + Chest.Girth+ Ankles.diameter + Elbows.diameter+ Wrists.diameter , data = muestra_100)
+
+cat("Prueba de curvatura para los predictores del modelo de RLM con RFE:\n")
+
+residualPlots(rlm3_ba, linear = TRUE, ask = FALSE)
+```
+Vemos que hay 2 predictores que muestran problemas, los cuales son Chest.Girth y Bitrochanteric.diameter, ya que no son lineales, sino que son cuadráticos y esto lo respalda la prueba de corvertura, la cual entrega un p-value pequeño, por lo cual se procede a eliminarlos.
+
+```{r}
+rlm4_ba = lm(IMC ~ Calf.Maximum.Girth + Ankle.Minimum.Girth + Knees.diameter
+             + Waist.Girth+ Chest.depth + Ankles.diameter + Elbows.diameter+ Wrists.diameter , data = muestra_100)
+
+cat("Nuevo modelo de RLM con RFE:\n")
+summary(rlm4_ba)
+
+```
+```{r}
+cat("Nueva prueba de curvatura para los predictores del modelo de RLM con RFE:\n")
+
+residualPlots(rlm4_ba, linear = TRUE, ask = FALSE)
+```
+Con esta modificación vemos que no se observan patrones dentro de los residuos, lo que aparte se confirma por las pruebas de cobertura, por lo cual no hay evidencia suficiente para decir que los residuos no siguen una distribución normal para cada predictor después de las modificaciones.
+
+### Casos influyentes
+
+```{r}
+influencePlot(rlm4_ba)
+```
+
+Vemos que todos los datos se encuentran dentro de rangos aceptables, por lo cual no hay casos que tengan sobreinfluencia en el modelo.
+
+### Independencia de residuos
+
+```{r}
+print(durbinWatsonTest(rlm4_ba))
+```
+
+Vemos que no hay razones para suponer que los residuos son independientes.
+
+Se puede observar que el test de Durbin-Watson arroja un estadístico de 1.861, con una autocorrelación de 0.06534379 y un p-valor de 0.482. Esto sugiere que no hay evidencia suficiente para rechazar la hipótesis nula de ausencia de autocorrelación en los residuos, aunque el valor se acerca al límite de significancia.
+
+### Desempeño
+
+```{r}
+data_RFE = data.frame(RMSE = rlm4_train[["resample"]][["RMSE"]])
+rlm3_hist = gghistogram(data, x = "RMSE", bins = 30)
+print(rlm3_hist)
+
+
+print(rlm4_train[["results"]])
+print(describe(data_RFE, trim = 0, skew = FALSE, IQR = TRUE), digits = 3)
+```
+
+El modelo de RLM muestra un rendimiento robusto, con alta capacidad explicativa y errores predictivos bajos y consistentes (RMSE=1.351 y MAE=1.104). Esto sugiere que las variables predictoras seleccionadas son adecuadas para modelar el peso corporal en esta muestra.
+
+# RlogM con RFE
+
+```{r}
+# Datos
+set.seed(24326)
+rlog_data <- muestra_100 |> select(-Weight, -Height, -Height_m, -IMC)
+
+rlog_formula <- formula(paste("EN", ".", sep = " ~ "))
+
+lrFuncs[["summary"]] <- twoClassSummary
+
+rlog_control <- rfeControl(functions = lrFuncs, method = "LOOCV", saveDetails = TRUE,
+                            returnResamp = "all", verbose = FALSE)
+rlog_train <- trainControl(method = "none", classProbs = TRUE,
+                            summaryFunction = twoClassSummary)
+
+rlog_data$EN <- factor(rlog_data$EN, levels = c(0, 1), labels = c("No", "Si"))
+
+#RFE
+set.seed(24326)
+rlog_rfe <- suppressWarnings(
+  rfe(x = rlog_data %>% select(-EN),
+      y = as.factor(rlog_data$EN),
+      sizes = 2:6,
+      metric = "ROC",
+      rfeControl = rlog_control,
+      trControl = rlog_train)
+)
+rlog <- rlog_rfe[["fit"]]
+
+cat("RLogitM con RFE:\n")
+print(summary(rlog))
+```
+EL modelo muestra resultados significativos para varios de los predictores, excluyéndose de este grupo Waist.Girth y Hip.Girth, los cuales no son significativos para el modelo. Podemos ver además que la desviación residual es menor a la del modelo nulo, por lo que las variables tienen poder predictivo. Finalmente, el valor de AIC también respalda la significancia del modelo.
+
+```{r}
+rlog_graf <- ggplot(rlog_rfe) + theme_pubr()
+print(rlog_graf)
+```
+Vemos del gráfico que el modelo con R\^2 resulta tener alrededor de 5 predictores y el modelo obtenido considera 5.
+
+## Bondad de ajuste
+
+En esta sección realizaremos el análisis del RlogM con RFE para determinar si es necesario realizar correcciones.
+
+### Multicolinealidad
+
+```{r}
+cat("Factores de inflación de la varianza y Valores de tolerancia\n")
+print(vif(rlog))
+
+cat("\n----------------------------\n")
+print(1/vif(rlog))
+```
+Se observa que todos los VIF están por debajo de 5, con esto se puede concluir que no hay un problema significativo de colinealidad entre los predictores, y también dado que todos los valores de tolerancia están significativamente por encima del umbral de preocupación (0.1 o menos), por lo cual no se detectan problemas de colinealidad.
+
+
+### Ajuste y linealidad
+
+```{r}
+rlog_original <- glm(rlog_formula, data = rlog_data, family = binomial(link = "logit"))
+
+rlog_nulo_formula<- formula(paste("EN", "1", sep = " ~ "))
+rlog_nulo <- glm(rlog_nulo_formula, data = rlog_data, family = binomial(link = "logit"))
+
+cat("Modelo de RLogitM con cinco predictores:\n")
+print(summary(rlog))
+cat("\n")
+cat("Comparación con el modelo nulo:\n")
+print(anova(rlog_nulo, rlog_original))
+```
+
+Podemos observar que se genero una disminución en la deviancia con respecto al modelo nulo, por lo que existe una mejora en el modelo.
+
+### Casos influyentes
+
+```{r}
+inf_plot = influencePlot(rlog_original)
+print(inf_plot)
+```
+
+Vemos que todos los datos se encuentran dentro de rangos aceptables, por lo cual no hay casos que tengan sobreinfluencia en el modelo.
+
+### Independencia de residuos
+
+```{r}
+print(durbinWatsonTest(rlog))
+```
+La prueba muestra que existe autocorrelación entre los residuos, además, el valor del p-value nos indica que estos mismos no son independientes.
+
+Para esto no se pueden tomar acciones correctivas, ya que este es un problema del modelo completo y el p-value es extremadamente bajo. Al trabajar bajo una semilla no podemos cambiar este resultado, por lo cual no se hará el análisis de desempeño a un modelo que no cumple con las condiciones básicas.
+
+# Conclusiones
+
+Respecto a los 3 modelos generados podemos decir que 2/3 resultan confiables y 1 para ser confiable tuvo que ser modificado eliminando predictores que no cumplían con el requisito de linealidad de residuos. A continuación vamos a describir modelo evaluando su confiabilidad y poder predictivo.
+
+### RLM con bootstrapping
+
+Este modelo resulta confiable al cumplir con todas las condiciones necesarias para ser utilizado como un modelo predictivo, aparte de no necesitar acciones correctivas, así no modificando datos considerados. Respecto al poder predictivo, este resulta con R\^2 = 0.905, el cual es extremadamente alto, por lo cual presenta un alto poder predictivo. Aparte, no parece presentar problemas de sobreajuste, por lo cual resulta un buen modelo general para predecir el "Weight" de un hombre.
+
+### RLM con RFE
+
+Este modelo, después de las modificaciones realizadas, cumple con las condiciones necesarias para ser utilizado como un modelo predictivo. Respecto al poder predictivo, este resulta con R\^2 = 0.762, el cual resulta bueno, por lo cual parece presentar un poder predictivo razonable sobre el "IMC".Pero puede resultar no generalizable, ya que el modelo primero presentó problemas de colinealidad, donde algunos valores del VIF resultaron preocupantemente cercanos a 10, por lo cual se eliminaron predictores. Luego, el modelo aparte presentó problemas de sobreajuste, donde ciertos predictores resultaron ser no lineales con la respuesta, por lo cual se eliminaron estos predictores. Podemos decir que el modelo no resulta generalizable.
+
+### RlogM con RFE
+
+Este modelo no resulta confiable, ya que los residuos no son independientes, por lo cual no se puede confiar en las predicciones que este modelo pueda realizar. Por lo cual no podemos evaluar su calidad predictiva y resulta no generalizable.
+ 

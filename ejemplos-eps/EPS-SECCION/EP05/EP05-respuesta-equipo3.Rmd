@@ -1,0 +1,99 @@
+---
+title: "EP05"
+date: "2024-10-21"
+output: pdf_document
+---
+# Importar librerías
+```{r}
+library(dplyr)
+library(ggpubr)
+library(ez)
+library(tidyverse)
+```
+
+# Leer datos
+
+```{r}
+datos = read.csv2("EP05 Datos.csv",  stringsAsFactors = TRUE)
+
+datos[["id"]] = factor(datos[["id"]])
+
+megaminx = datos %>% filter(tipo == "Megaminx") %>%
+        filter(pais == "Ecuador" | pais == "Uruguay" | pais == "Argentina") %>%
+              select(id, pais, tiempo) %>% droplevels()
+
+megaminx[["id"]] = factor(megaminx[["id"]])
+
+```
+
+# Hipótesis
+
+En lenguaje natural:
+
+$H_0: $ El promedio de tiempos de resolución por país (Ecuador, Uruguay y Argentina) del cubo megaminx es igual para todos.
+
+$H_1: $ El promedio de tiempos de resolución por país (Ecuador, Uruguay y Argentina) del cubo megaminx es distinto al menos para un país.
+
+Matemáticamente:
+
+$H_0: \mu_E = \mu_U = \mu_A$
+
+$H_1: \exists i,j \in \{Ecuador, Uruguay, Argentina\}, i \neq j | \mu_i \neq \mu_j$
+
+# Comprobación de condiciones necesarias
+
+## Escala de intervalos iguales
+
+Como los tiempos están medidos en segundos (s) se puede decir que siguen una escala de intervalos iguales.
+
+## Independencia
+
+A partir del enunciado, se puede decir que todas las muestras son de diferentes participantes y son aleatorias, por lo tanto, las muestras son independientes entre sí.
+
+## Comprobar normalidad
+
+```{r}
+g = ggqqplot(megaminx, x = "tiempo", y = "pais", color = "pais")
+g = g + facet_wrap(~pais)
+plot(g)
+```
+
+Como se ve en el gráfico anterior, no existen valores atípicos, con lo cual asumimos que todas las poblaciones de las muestras siguen una distribución normal.
+
+## Test de homocedasticidad usando ezANOVA
+
+```{r}
+prueba = ezANOVA(data = megaminx,
+                 dv = tiempo,
+                 between = pais,
+                 wid = id,
+                 return_aov = TRUE)
+print(prueba$`Levene's Test for Homogeneity of Variance`)
+```
+Como se puede ver en el test, $p>0,05$ lo cual indica que se cumple la condición de homocedasticidad.
+
+# Resultado de test ANOVA
+```{r}
+print(summary(prueba[["aov"]]))
+```
+
+Como $p<0.05$, se rechaza $H_0$ en favor de $H_1$ es decir que, con un 95$\%$ de confianza podemos afirmar que el promedio de tiempos de resolución por país (Ecuador, Uruguay y Argentina) del cubo megaminx es distinto al menos para un país.
+
+Como se rechaza $H_0$ corresponde un análisis Post-Hoc.
+
+# Tests Post-Hoc
+
+En este caso se utilizará la prueba HSD de Tukey debido a que es más poderosa que la corrección de Bonferonni y Holm, también queremos solo las comparaciones entre pares.
+
+```{r}
+post_hoc = TukeyHSD(prueba[["aov"]],
+                    "pais",
+                    ordered = TRUE,
+                    conf.level = 1-0.05)
+(post_hoc$pais)
+
+e = ezPlot(data = megaminx, dv = tiempo, wid = id, between = pais, x = pais, y_lab = "")
+e = e + theme_pubr()
+print(e)
+```
+Como se muestra en los resultados del test, con un 95$\%$ de confianza podemos afirmar que existe diferencia significativa entre las medias de tiempo de resolución entre Uruguay-Ecuador y Argentina-Ecuador y no hay evidencia suficiente para descartar que no existe diferencia entre Argentina-Uruguay.

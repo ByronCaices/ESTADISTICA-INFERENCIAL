@@ -1,0 +1,308 @@
+---
+title: "Ep08"
+author: "Grupo 7"
+date: "2024-11-19"
+output: pdf_document
+---
+# Pregunta 1
+¿Existen diferencias significativas entre la cantidad de personas asalariadas y casadas entre las comunas de Maipú y Puente Alto?
+Para esta pregunta primero filtraremos los datos según las comunas, y luego obtendremos si son casados y asalariados. Finalmente obtendremos una muestra de tamaño 125 con una seed = 10.
+```{r}
+library(dplyr)
+set.seed(10)
+datos <- read.csv("EP08 Datos CASEN 2017.csv")
+datosP1Final <- datos %>% filter(comuna == c("Puente Alto","Maipú"))  %>% mutate(ecivil = (ecivil=="Casado(a)" & ch1 == "Asalariado")) %>% select(comuna,ecivil) %>% sample_n(125)
+```
+
+Definiremos una función para poder calcular la diferencia entre las proporciones de las dos comunas.
+```{r}
+diferenciaProporciones <- function(df,verbose=FALSE)
+{
+  tabla <- table(df)
+  if(verbose)
+    print(tabla)
+  ph <- tabla[1, 2] / (tabla[1, 1] + tabla[1, 2])
+  pm <- tabla[2, 2] / (tabla[2, 1] + tabla[2, 2])
+  if(verbose)
+  {
+    cat("\n")
+    cat("Proporción de personas que son Asalariado(a) y Casado(a):\n")
+    cat("Maipu:", round(ph, 4), "\n")
+    cat("Puente Alto:", round(pm, 4), "\n")
+  }
+  return(ph - pm)
+}
+dif <- diferenciaProporciones(datosP1Final,TRUE)
+```
+Se puede observar que la diferencia entre las proporciones es cercana al 1,6%, por lo tanto, se proponen las siguientes hipótesis: 
+
+H0: Las proporciones de personas Asalariadas y Casadas que son de las comunas de Maipú y Puente alto son iguales: $p_M - p_P = 0$
+
+HA: Las proporciones de personas Asalariadas y Casadas que son de las comunas de Maipú y Puente alto son diferentes: $p_M - p_P \neq 0$
+
+Asignamos la cantidad de remuestras en 4000, y definimos una función que calcula la diferencia de las proporciones de las permutaciones generadas.
+
+```{r}
+R <- 4000
+set.seed(10)
+permutaciones <- lapply(1:R,function(i) sample(1:125))
+
+get.prop.dif.perm <- function(indices, df, verbose = FALSE)
+{
+  df.nuevo <- data.frame(comuna = df[indices, "comuna"], df[["ecivil"]])
+  diferenciaProporciones(df.nuevo, verbose)
+}
+distribucion <- sapply(permutaciones, get.prop.dif.perm, datosP1Final)
+
+```
+
+Revisamos el resultado de la distribución resultante.
+
+```{r}
+library(ggpubr)
+
+p1 <- gghistogram(data.frame(distribucion), "distribucion", bins = 30, fill = "blue",
+                  title = "Distribución permutada",
+                  xlab = "Diferencia entre las proporciones de hombres y mujeres",
+                  ylab = "Frecuencia")
+p1 <- p1 + geom_vline(xintercept = dif, colour="red")
+print(p1)
+```
+
+Luego de graficar, podemos notar que la diferencia de las proporciones observada se encuentra cercana a 0. Ahora calcularemos el intervalo de confianza de 95% y el valor de p.
+
+```{r}
+ci1 <- quantile(distribucion, c(0.025, 0.975))
+numerador1 <- sum(abs( distribucion) > abs(dif))
+valor_p1 <- (numerador1 + 1) / (R + 1)
+
+cat("IC 95%: [", round(ci1[1], 3), ", ", round(ci1[2], 3), "]\n", sep = "")
+cat("Valor p:", round(valor_p1, 3))
+```
+
+R: Entonces podemos concluir con un 95% de confianza que no existe suficiente evidencia para rechazar H0. Por lo tanto, no es posible descartar que las proporciones de personas asalariadas y casadas en las comunas de Maipú y Puente Alto sean distintas.
+
+Pregunta 2: ¿Existen diferencias significativas en los ingresos entre los hombres casados, solteros o conviviente de la provincia de Santiago, de entre 25 a 40 años?
+
+Se proponen las siguientes Hipotesis:
+
+H0: No existen diferencias significativas en el ingreso promedio entre hombres, de entre 25 y 40 años de la provincia de Santiago, de estado civil casado, soltero o conviviente. $H_0 : \mu_{Casado} = \mu_{Soltero} = \mu_{Conviviente}$
+
+HA: Al menos uno de los grupos tiene diferencias significativas en el ingreso promedio respecto a los otros grupos.  $H_A : \exists i, j \in {Casado, Soltero, Conviviente}, i \neq j \mid \mu_i \neq \mu_j$
+
+Primero se filtran los datos y se verifica si la condición de homocedasticidad se cumple.
+
+```{r}
+library(dplyr)
+library(WRS2) 
+library(car)
+
+# Filtrar y limpiar los datos
+datos_filt <- datos %>%
+  filter(provincia == "Santiago",
+         sexo == "Hombre",
+         edad >= 25, edad <= 40,
+         ecivil %in% c("Casado(a)", "Soltero(a)", "Conviviente o pareja sin acuerdo de unión civil")) %>%
+  select(ecivil, ytot)
+
+set.seed(123)
+muestra <- datos_filt %>% 
+  sample_n(230)
+
+# Verificar homocedasticidad
+levene <- car::leveneTest(ytot ~ ecivil, data = muestra, center = "median")
+
+cat("Test de Levene para homocedasticidad:\n")
+print(levene)
+
+```
+
+Se observa que p \< 0.05 en el test de Levene, por lo que no se cumple la condición de homocedasticidad. Además de esto, se tiene que los tamaños muestrales difieren considerablemente, por lo que no podemos usar un método de análisis clásico y debemos recurrir a otros métodos, en este caso, vamos a utilizar remuestreo con bootstrapping.
+
+```{r}
+# Separamos la muestra en base al estado civil
+datosCasado <- which(muestra[["ecivil"]] == "Casado(a)")
+datosSoltero <-  which(muestra[["ecivil"]] == "Soltero(a)")
+datosConviviente <- which(muestra[["ecivil"]] == "Conviviente o pareja sin acuerdo de unión civil") 
+
+# Cantidad de observaciones
+nCasado <- length(datosCasado)
+nSoltero <- length(datosSoltero)
+nConviviente <- length(datosConviviente)
+
+cat("Casados: ", nCasado, " | Solteros: ", nSoltero, " | Convivientes: ", nConviviente)
+
+p2 <- ggboxplot(muestra, x = "ecivil", y = "ytot", fill = "salmon")
+p2 <- p2 + xlab("Estado Civil") + ylab("Ingreso total)")
+print(p2)
+
+```
+Además, los datos parecen estar desbalanceados. Así, definimos una función para calcular el estadístico F de ANOVA para muestras independientes.
+
+```{r}
+
+library(ez)
+
+get.F <- function(df, iA, iC, iM, verbose = FALSE)
+{
+  # Armamos el conjunto de datos con los índices recibidos 
+  i <- c(iA, iC, iM)
+  ids <- factor(1:length(i))
+  datos <- cbind(id = ids, df[i, ])
+  dd <<- datos
+  
+  ez <- ezANOVA(datos, ytot, id, between = ecivil, type = 2)
+  if(verbose)
+    print(ez)
+  return(ez[["ANOVA"]][["F"]])
+}
+
+```
+
+Obtenemos el estadístico para la muestra original.
+
+```{r}
+
+orgF <- get.F(muestra, datosCasado, datosSoltero, datosConviviente, TRUE)
+
+```
+
+```{r}
+# obtenemos las medias generales
+
+media.general <- mean(muestra[["ytot"]])
+desvest <- sd(muestra[["ytot"]])
+
+# Obtenemos las medias por grupo
+
+grupos <- muestra %>% group_by(ecivil) %>% summarise(media = mean(ytot), sd = sd(ytot)) %>%
+  as.data.frame()
+```
+
+Ahora desplazamos los valores para que todos los grupos tengan la misma media y desviación estándar.
+
+```{r}
+muestraDesp <- muestra
+muestraDesp[datosCasado, "ytot"] <- media.general +  (muestraDesp[datosCasado, "ytot"] - grupos[1, "media"]) *
+  (desvest / grupos[1, "sd"])
+
+muestraDesp[datosSoltero, "ytot"] <- media.general  + (muestraDesp[datosSoltero, "ytot"] - grupos[2, "media"]) *
+  (desvest / grupos[2, "sd"])
+
+muestraDesp[datosConviviente, "ytot"] <- media.general +  (muestraDesp[datosConviviente, "ytot"] - grupos[3, "media"]) *
+  (desvest / grupos[2, "sd"])
+
+```
+
+Ahora, se generan las remuestras
+
+```{r}
+library(parallel)
+
+numCores <- detectCores() - 3
+B <- 3000
+
+cl <- makeCluster(numCores)
+clusterExport(cl, c("datosCasado", "datosSoltero", "datosConviviente", "muestraDesp", "get.F", "B"))
+clusterEvalQ(cl, library(ggplot2)) 
+
+set.seed(743)
+remuestraCasado <-  lapply(1:B, function(i) sample(datosCasado, replace = TRUE))
+remuestraSoltero <-  lapply(1:B, function(i) sample(datosSoltero, replace = TRUE))
+remuestraConviviente <- lapply(1:B, function(i) sample(datosConviviente, replace = TRUE))
+
+cat("Aplicando remuestras\n")
+get.F.boot <- function(i, df, verbose = FALSE)
+  get.F(df, remuestraCasado[[i]], remuestraSoltero[[i]], remuestraConviviente[[i]], verbose)
+
+
+
+distribucion <- suppressMessages(suppressWarnings(
+  sapply(1:B, function(i) get.F.boot(i, muestraDesp, FALSE))
+))
+
+p2 <- gghistogram(data.frame(distribucion), x = "distribucion",
+                  title = "Distribución permutada",
+                  xlab = "Estadístico F", ylab = "Frecuencia",
+                  bins = 30, fill = "blue")
+p2 <- p2 + geom_vline(xintercept = orgF, colour="red")
+print(p2)
+
+stopCluster(cl)
+
+```
+Ahora, calcularemos el valor crítico de F con 95% confianza en esta distribución, y estimaremos el valor p que le corresponde.
+
+```{r}
+critF <- quantile(distribucion, 0.95)
+cat("F crítico con 95% de confianza:", round(critF, 3), "\n")
+
+numerador2 <- sum(distribucion > orgF)
+p2 <- (numerador2 + 1) / (B + 1)
+cat("Valor p:", round(p2, 3))
+
+```
+En base a estos resultados, podemos concluir lo siguiente: el valor del estadístico F calculado para la muestra original es de 8.102669, el cual es menor que el valor crítico de F (11.81) correspondiente a un nivel de confianza del 95%. Dado que el valor calculado de F no se encuentra en la cola derecha de la distribución, no tenemos suficiente evidencia para rechazar la hipótesis nula.
+
+Con respecto al valor p, este es 0.177, esto significa que, bajo la hipótesis nula, hay un 17.7% de probabilidades de encontrar un valor F igual o mayor a orgF solo por azar. Este valor es mayor que 0.05, por lo tanto, no se puede rechazar la hipótesis nula. En términos prácticos, esto sugiere que no hay diferencias estadísticamente significativas en los ingresos promedio entre los grupos de estado civil (casados, solteros y convivientes).
+
+A pesar de esto, se realizará un análisis Post-Hoc, solo con fines académicos. Para esto, necesitamos una función que calcule la diferencia de medias como estadístico de interés.
+
+
+```{r}
+get.dif.medias <- function(df, i1, i2)
+{
+  media1 <- mean(df[i1, "ytot"]) 
+  media2 <- mean(df[i2, "ytot"])
+  return(abs(media1 - media2))
+}
+
+```
+
+Tras esto, calculamos la diferencia entre cada par de estados civiles diferentes:
+
+```{r}
+
+difCasSol <- get.dif.medias(muestra, datosCasado, datosSoltero)
+difSolConv <- get.dif.medias(muestra, datosSoltero, datosConviviente)
+difConvCas <- get.dif.medias(muestra, datosConviviente, datosCasado)
+
+
+cat("Casado - Soltero:", round(difCasSol), "\n")
+cat("Soltero - Conviviente:", round(difSolConv), "\n")
+cat("Conviviente - Casado:", round(difConvCas), "\n")
+```
+Ahora, hay que obtener las distribuciones bootstrap para cada una de las muestras 
+
+```{r}
+distCasSol <- sapply(1:B,
+                            function(i) get.dif.medias(muestra,
+                                                       remuestraCasado[[i]],
+                                                       remuestraSoltero[[i]]))
+distSolConv <- sapply(1:B,
+                            function(i) get.dif.medias(muestra,
+                                                       remuestraSoltero[[i]],
+                                                       remuestraConviviente[[i]]))
+distConvCas <- sapply(1:B,
+                            function(i) get.dif.medias(muestra,
+                                                       remuestraConviviente[[i]],
+                                                       remuestraCasado[[i]]))
+
+```
+
+Ahora, calcularemos los valores p.
+
+```{r}
+pCasSol <- (sum(distCasSol > difCasSol) + 1) / (B + 1)
+pSolConv <- (sum(distSolConv > difSolConv) + 1) / (B + 1)
+pConvCas <- (sum(distConvCas > difConvCas) + 1) / (B + 1)
+pAdj <- p.adjust(c(pCasSol, pSolConv, pConvCas), method = "BH")
+
+cat("Valores p de pruebas bilaterales:\n")
+cat("Casado - Soltero:", round(pAdj[1], 3), "\n")
+cat("Soltero - Conviviente   :", round(pAdj[2],3), "\n")
+cat("Conviviente - Casado  :", round(pAdj[3], 3), "\n")
+
+```
+Observamos que todos los valores p son considerablemente mayores a 0.05, lo que nos lleva a concluir que no existen diferencias significativas entre los grupos, tal como se esperaba.
+

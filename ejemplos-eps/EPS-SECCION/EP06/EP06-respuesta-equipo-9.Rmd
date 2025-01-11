@@ -1,0 +1,157 @@
+---
+title: "EP06 Grupo 9"
+date: "`r Sys.Date()`"
+output: html_document 
+---
+
+```{r setup, include=FALSE}
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(tidyr)) install.packages("tidyr")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(ggpubr)) install.packages("ggpubr")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(ggmosaic)) install.packages("ggmosaic")
+if(!require(kableExtra)) install.packages("kableExtra")
+if(!require(ggpattern)) install.packages("ggpattern")
+if(!require(pwr)) install.packages("pwr")
+if(!require(tidyverse)) install.packages("tidyverse")
+if(!require(rcompanion)) install.packages("rcompanion")
+if(!require(RVAideMemoire)) install.packages("RVAideMemoire")
+if(!require(ez)) install.packages("ez")
+if(!require(nlme)) install.packages("nlme")
+if(!require(emmeans)) install.packages("emmeans")
+```
+
+```{=html}
+<style>
+body {
+text-align: justify}
+</style>
+```
+
+### Enunciado: Un equipo de investigadores del área de interacción humano-información está estudiando si el área temática y el nivel de dificultad del problema de información influyen en el tiempo (en segundos) que toma un usuario en formular una consulta de búsqueda para resolver dicho problema. Para ello, han reclutado a un grupo de participantes voluntarios, asignados aleatoriamente a distintos grupos. Cada participante debe resolver tres problemas de información con diferentes niveles de dificultad: baja, media y alta. A su vez, cada grupo debe resolver problemas relacionados a una temática diferente.
+### En este momento, los investigadores buscan determinar si existen diferencias en el tiempo que tardan los usuarios en formular consultas para problemas con diferente nivel de dificultad en el área de arquitectura.
+
+Se identifica del contexto un caso de muestras correlacionadas en donde nos interesa estudiar las diferencias entre medias presentes en cada grupo, por ende se obtienen las siguientes hipótesis:
+
+* Hipótesis nula: No existen diferencias en el tiempo que tardan los usuarios en formular consultas para problemas con diferente nivel de dificultad en el área de arquitectura.
+$$
+Ho : \mu_{Baja-Media} = \mu_{Media-Alta} = \mu_{Alta-Baja} = 0
+$$
+
+* Hipótesis alternativa: Existen diferencias en el tiempo que tardan los usuarios en formular consultas a problemas para por lo menos uno de los niveles de dificultad con respecto al resto, en el área de arquitectura.
+
+$$
+Ha : \exists {A,B} \ \epsilon \left\{ Alta, Baja, Media \right\}, A \neq B \ | \ \mu_{B-A} \neq 0
+$$
+
+Además, asumamos un nivel de significancia de alfa = 0.01.
+
+## Verificación de condiciones
+
+#### 1) La escala con que se mide la variable dependiente tiene las propiedades de una escala de intervalos iguales.
+
+* Lo anterior se cumple ya que el tiempo que tardan los usuarios en formular consultas es una variable continua y se mide en minutos, lo que significa que la diferencia entre 1 y 2 minutos es la misma que entre 2 y 3 minutos.
+
+#### 2) Las mediciones son independientes de cada grupo.
+
+* Los voluntarios fueron asignados de forma aleatoria a los distintos grupos y se trata de diferentes usuarios en cada uno de estos, con lo que se comprueba la condición.
+
+#### 3) Se puede suponer que la población de cada grupo sigue una distribución normal.
+
+* Para responder lo anterior, se realiza un gráfico Q-Q plot para verificar si los datos siguen una distribución normal.
+
+
+```{r a}
+datos <- read.csv("EP06 Datos.csv")
+datos <- datos %>% filter(area == "Arquitectura")
+
+dificultad_alta <- datos %>% filter(dificultad == "Alta")
+dificultad_media <- datos %>% filter(dificultad == "Media")
+dificultad_baja <- datos %>% filter(dificultad == "Baja")
+
+
+# Aplico gráficos Q-Q
+g <- ggqqplot(datos, x = "tiempo", y = "dificultad", color = "dificultad")
+g <- g + facet_wrap(~ dificultad)
+g <- g + rremove("x.ticks") + rremove("x.text")
+g <- g + rremove("y.ticks") + rremove("y.text")
+g <- g + rremove("axis.title")
+
+print(g)
+```
+
+* Dado los resultados obtenidos por los gráficos Q-Q, se puede asumir que la distribución es aproximadamente normal, aunque la distribución de la dificultad baja tiene algunos valores atípicos que escapan de la normal.
+Para ahondar más en comprobar la normalidad de los datos, se puede realizar una prueba de Shapiro-Wilk.
+
+```{r h}
+normalidad_baja <- shapiro.test(dificultad_baja$tiempo)
+normalidad_media <- shapiro.test(dificultad_media$tiempo)
+normalidad_alta <- shapiro.test(dificultad_alta$tiempo)
+
+cat("Prueba de Shapiro-Wilk para dificultad baja: ", normalidad_baja$p.value, "\n")
+cat("Prueba de Shapiro-Wilk para dificultad media: ", normalidad_media$p.value, "\n")
+cat("Prueba de Shapiro-Wilk para dificultad alta: ", normalidad_alta$p.value, "\n")
+
+```
+* Con los test de Shapiro-Wilk se puede concluir que los datos de los tres niveles de dificultad siguen una distribución normal, ya que los p-values obtenidos son mayores a nuestro nivel de significancia (0.01).
+
+#### 4) La matriz de covarianzas es esférica.
+
+* Para verificar si la matriz de covarianzas es esférica, se puede realizar una prueba de esfericidad de Mauchly. Para lo anterior se puede utilizar la función ezANOVA.
+
+```{r b}
+# Prueba de Esfericidad con ezANOVA
+instancia <- factor(1:200)
+Alta <- c(dificultad_alta$tiempo)
+Media <- c(dificultad_media$tiempo)
+Baja <- c(dificultad_baja$tiempo)
+datos <- data.frame(instancia, Alta, Media, Baja)
+
+datos <- datos %>% pivot_longer(c("Alta", "Media", "Baja"), names_to = "dificultad", values_to = "tiempo")
+
+datos[["dificultad"]] <- factor(datos[["dificultad"]])
+
+
+prueba <- ezANOVA(data = datos, dv = tiempo, wid = instancia, within = dificultad, return_aov = TRUE)
+
+print(prueba[["Mauchly's Test for Sphericity"]])
+
+```
+
+* De lo anterior se puede concluir que, por el p-value obtenido en la prueba de Mauchly (p-value 0.53), no hay suficiente evidencia para rechazar la hipótesis nula:  la matriz de covarianzas es esférica.
+
+## Prueba ANOVA
+* Por eso, podemos usar un ANOVA para muestras correlacionadas
+
+```{r c}
+# ANOVA para muestras correlacionadas
+print(summary(prueba[["aov"]]))
+```
+```{r g}
+# Hacemos un gráfico del tamaño del efecto
+g2 <- ezPlot(data = datos, dv = tiempo, wid = instancia, within = dificultad, y_lab = "Tiempo promedio (minutos)", x = dificultad)
+g2 <- g2 + theme_pubr()
+
+print(g2)
+
+```
+
+Notemos que el p-value obtenido es claramente menor a 0.01 [2e-16], por lo que se rechaza la hipótesis nula en favor de la hipótesis alternativa concluyéndose que existen diferencias en el tiempo que tardan los usuarios en formular consultas a problemas para por lo menos un nivel de dificultad con respecto al resto, en el área de arquitectura. Además, podemos usar un test post-hoc para determinar cuáles son las diferencias significativas.
+Lo anterior descrito se puede observar en el gráfico de tamaño de efecto, donde se puede observar que el tiempo promedio de formulación de consultas es mayor en problemas de alta dificultad, seguido por problemas de dificultad media y baja.
+
+## Post-hoc
+
+* Para determinar cuáles son las diferencias significativas, se puede realizar un test post-hoc de Tukey.
+ 
+```{r d}
+# Test de Tukey
+mixto <- lme(tiempo ~ dificultad, data = datos, random = ~1|instancia)
+medias <- emmeans(mixto, "dificultad")
+tukey <- pairs(medias, adjust = "tukey")
+
+print(tukey)
+```
+
+* Del procedimiento post-hoc realizado, se puede concluir que todas las diferencias son significativas, ya que todas tienen un p-value menor a 0.01. Es decir, el tiempo que tardan los usuarios en formular consultas para problemas con diferente nivel de dificultad en el área de arquitectura es significativamente diferente en todos los niveles de dificultad.

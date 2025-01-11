@@ -1,0 +1,106 @@
+---
+title: "EP06-equipo6-respuesta"
+date: "2024-10-24"
+output: pdf_document
+---
+
+# Contexto:
+
+Un equipo de investigadores del área de interacción humano-información está estudiando si el área temática y el nivel de dificultad del problema de información influyen en el tiempo (en segundos) que toma un usuario en formular una consulta de búsqueda para resolver dicho problema. Para ello, han reclutado a un grupo de participantes voluntarios, asignados aleatoriamente a distintos grupos. Cada participante debe resolver tres problemas de información con diferentes niveles de dificultad: baja, media y alta. A su vez, cada grupo debe resolver problemas relacionados a una temática diferente. Los datos recolectados contemplan las siguientes variables:
+
+# Librerías
+```{r}
+library(dplyr)
+library(ggpubr)
+library(ez)
+library(nlme)
+library(emmeans)
+```
+# Recolección de datos
+
+```{r}
+datos = read.csv2("EP06 Datos.csv",  stringsAsFactors = TRUE, sep = ",")
+
+datos[["id"]] = factor(datos[["id"]])
+
+leyes = datos %>% filter(area == "Leyes") %>%
+              select(id, dificultad, tiempo) %>% droplevels()
+```
+
+# Condiciones
+
+## Escala de intervalos iguales:
+
+ Como el tiempo se midió en segundos, se cumple esta condición.
+ 
+## Mediciones independientes:
+ Como los participantes son asignados aleatoriamente, se cumple.
+
+
+## Normalidad
+
+```{r}
+g = ggqqplot(leyes, x = "tiempo", y = "dificultad", color = "dificultad")
+g = g + facet_wrap(~ dificultad)
+g = g + rremove("x.ticks") + rremove("x.text")
+g = g + rremove("y.ticks") + rremove("y.text")
+g = g + rremove("axis.title")
+print(g)
+```
+Como se ve en los gráficos, se puede suponer que los datos provienen de una población de origen con distribución normal.
+
+
+## Esfericidad
+
+```{r}
+prueba = ezANOVA(data = leyes, dv = tiempo, within = dificultad,
+                 wid = id, return_aov = TRUE)
+cat("Prueba de esfericidad")
+print(prueba[["Mauchly's Test for Sphericity"]])
+cat("\nCorrecciones de esfericidad")
+print(prueba[["Sphericity Corrections"]])
+```
+Como $p>0.05$ se cumple la condición de esfericidad.
+
+
+# Prueba ANOVA
+
+# Hipótesis:
+
+## En palabras:
+$H_0: $ El promedio de resolución de los problemas igual para todas las dificultades.
+
+$H_1: $ El promedio de resolución de los problemas distinto para al menos una de las dificultades.
+
+## Matemáticamente:
+$H_0: \mu_A = \mu_B = \mu_M$
+
+$H_1: \exists i,j \in \{Alta, Baja, Media\}, i \neq j | \mu_i \neq \mu_j$
+
+Se realizó el test de ANOVA
+```{r}
+print(summary(prueba[["aov"]]))
+```
+Como $p < 0.05$ se acepta $H_1$ con un 95% de confianza.
+
+# Post Hoc
+
+## Tamaño del efecto
+
+```{r}
+g2 = ezPlot(data = leyes, dv = tiempo, wid = id, within = dificultad, y_lab = "Tiempo promedio de resolución[s]",
+            x = dificultad)
+g2 = g2 + theme_pubr()
+print(g2)
+```
+
+## Prueba Tukey
+Se realizó la prueba de Tukey
+```{r}
+mixto = lme(tiempo ~ dificultad, data = leyes, random = ~1|id)
+medias = emmeans(mixto, "dificultad")
+tukey = pairs(medias, adjust = "tukey")
+print(tukey)
+```
+
+Como se muestra en los resultados del test, con un 99$\%$ de confianza podemos afirmar que existe diferencia significativa entre las medias de tiempo de resolución entre Alta-Baja y Baja-Media y no hay evidencia suficiente para descartar que no existe diferencia entre Alta-Media.

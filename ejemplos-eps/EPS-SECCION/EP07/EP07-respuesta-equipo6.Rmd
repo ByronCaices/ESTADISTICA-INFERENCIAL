@@ -1,0 +1,366 @@
+---
+title: "EP07-equipo6-respuesta"
+date: "2024-10-29"
+output: pdf_document
+---
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggpubr)
+library(DescTools)
+```
+
+# Lectura de datos
+
+```{r}
+datos = read.csv2("EP07 Datos.csv", sep = ",")
+```
+
+# Pregunta 1: 
+
+Observando los datos, la memorista sospecha que hay diferencias significativas en el tiempo de ejecución entre las versiones A y C del algoritmo cuando las instancias tienen 60 o más nodos. ¿Los datos respaldan la intuición de la memorista?
+Para responder, filtren los datos para tener las instancias con 60 o más nodos y seleccionen las columnas de los tiempos de ejecución de las versiones A y C en formato ancho. Usando como semilla el valor 33, obtenga muestras aleatorias independientes de 24 tiempos registrados por la versión A y 18 tiempos registrados por la versión C del algoritmo. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+```{r}
+datos[["instancia"]] = factor(datos[["instancia"]])
+
+
+filtrado = datos %>% filter(n.nodos >= 60)  %>% select(instancia, tiempo.A, tiempo.C) %>% droplevels()
+
+set.seed(33)
+filtrado_A <- filtrado[sample(nrow(filtrado),size = 24),] %>% select(instancia, tiempo.A)
+filtrado_C <- filtrado[sample(nrow(filtrado),size = 18),] %>% select(instancia, tiempo.C)
+```
+
+## Condiciones:
+
+Variable independiente: Tipo de algoritmo, en este caso A o C, de 2 niveles.
+
+Variable dependiente: Tiempo de ejecución (medido en milisegundos).
+
+La variable dependiente se mide en escala de intervalos iguales.
+
+Las muestras son independientes, ya que provienen de distintas poblaciones y los tiempos de A no afectan a los tiempos de C.
+
+Comprobemos normalidad:
+```{r}
+ggqqplot(filtrado_A$tiempo.A) 
+ggqqplot(filtrado_C$tiempo.C)
+
+shapiro.test(filtrado_A$tiempo.A)$p.value >= 0.05
+shapiro.test(filtrado_C$tiempo.C)$p.value >= 0.05
+```
+Como se puede ver, el shapiro test nos indica que los tiempos de ejecución de la versión A del algoritmo no sigue una distribución normal.
+
+## Transformación de datos
+
+```{r}
+lambdaA = BoxCoxLambda(filtrado_A$tiempo.A)
+
+ATransformado = BoxCox(filtrado_A$tiempo.A, lambdaA)
+CTransformado = BoxCox(filtrado_C$tiempo.C, lambdaA)
+
+shapiro.test(ATransformado)$p.value >= 0.05
+shapiro.test(CTransformado)$p.value >= 0.05
+```
+
+
+Como tranformando los datos aún así no logramos tener una distribución normal, utilizaremos pruebas no paramétricas.
+
+## Hipótesis:
+
+$H_0:$ No existe diferencia significativa entre el tiempo de ejecución de las versiones A y C del algoritmo.
+
+$H_1:$ Existe diferencia significativa entre el tiempo de ejecución de las versiones A y C del algoritmo.
+
+Se utiliza la prueba de Wilcoxon.
+
+```{r}
+alfa = 0.05
+
+prueba = wilcox.test(filtrado_A$tiempo.A, filtrado_C$tiempo.C, alternative = "two.sided", conf.level = 1 - alfa)
+print(prueba)
+```
+Como $p \geq 0.05$ se falla en rechazar $H_0$, es decir, con un 95% de confianza no existe evidencia suficiente para afirmar que existe diferencia significativa entre los tiempos de ejecución de las versiones A y C del algoritmo.
+
+# Pregunta 2:
+
+La memorista también sospecha que, al comparar las mismas instancias de iguales características, las mejores soluciones encontradas por las versiones A y B tienen rendimientos distintos. ¿Estará en lo cierto?
+Para responder, filtren los datos para tener las instancias con 60 o más nodos y seleccionen las columnas con el mejor rendimiento de las versiones A y B en formato ancho. Usando como semilla el valor 33, obtengan una muestra aleatoria de 22 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+
+## Obtención de datos.
+
+```{r}
+filtrado2 = datos %>% filter(n.nodos >= 60)  %>% select(instancia, mejor.A, mejor.B) %>% droplevels()
+
+set.seed(33)
+filtrado2 = filtrado2[sample(nrow(filtrado2),size = 22),] %>% droplevels()
+```
+
+## Condiciones:
+
+Variable independiente: Tipo de algoritmo, en este caso A o B, de 2 niveles.
+
+Variable dependiente: Cercanía de la solución óptima (en porcentaje).
+
+La variable dependiente se mide en escala de intervalos iguales.
+
+Las muestras son dependientes, ya que provienen de la misma población (de la misma instancia).
+
+Comprobemos normalidad:
+```{r}
+ggqqplot(as.numeric(filtrado2$mejor.A))
+ggqqplot(as.numeric(filtrado2$mejor.B))
+
+shapiro.test(as.numeric(filtrado2$mejor.A))$p.value >= 0.05
+shapiro.test(as.numeric(filtrado2$mejor.B))$p.value >= 0.05
+```
+
+Como se muestra en el shapiro test, ninguna muestra cumple con la condición de normalidad.
+
+## Transformación de datos:
+
+```{r}
+lambdaA = BoxCoxLambda(as.numeric(filtrado2$mejor.A))
+
+ATranformado = BoxCox(as.numeric(filtrado2$mejor.A), lambdaA)
+BTransformado = BoxCox(as.numeric(filtrado2$mejor.B), lambdaA)
+
+shapiro.test(ATransformado)$p.value >= 0.05
+shapiro.test(BTransformado)$p.value >= 0.05
+
+lambdaB = BoxCoxLambda(as.numeric(filtrado2$mejor.B))
+
+ATranformado = BoxCox(as.numeric(filtrado2$mejor.A), lambdaB)
+BTransformado = BoxCox(as.numeric(filtrado2$mejor.B), lambdaB)
+
+shapiro.test(ATransformado)$p.value >= 0.05
+shapiro.test(BTransformado)$p.value >= 0.05
+```
+Como ningún lambda nos sirve para transformar todos los datos a distribuciones normales, usaremos pruebas no paramétricas.
+
+## Hipótesis:
+
+$H_0:$ No existe diferencia significativa entre la cercanía de de las soluciones óptimas entre las versiones A y B del algoritmo.
+
+$H_1:$ Existe al diferencia significativa entre la cercanía de de las soluciones óptimas entre las versiones A y B del algoritmo.
+
+
+Por lo tanto se utilizará la pruebad de rangos con signo de Wilcoxon.
+
+
+```{r}
+alfa = 0.05
+prueba2 = wilcox.test(as.numeric(filtrado2$mejor.A), 
+                      as.numeric(filtrado2$mejor.B),
+                      paired = TRUE,
+                      alternative = "two.sided",
+                      conf.level = 1 - alfa)
+print(prueba2)
+```
+Como se ve, $p < 0.05$ por lo tanto, se rechaza $H_0$, lo cual quiere decir, que con un 95% de confianza existe diferencia entre los mejores rendimientos de las versiones A y B.
+
+# Pregunta 3:
+
+La memorista sospecha que hay diferencias significativas en el tiempo de ejecución entre las versiones del algoritmo cuando las instancias de prueba tienen 45 o más nodos. ¿Los datos respaldan la intuición de la memorista?
+Para responder, filtren los datos para tener las instancias con 45 o más nodos y seleccionen las columnas con los tiempos de ejecución registrados (en formato ancho). Usando como semilla el valor 43, obtengan muestras aleatorias independientes de 15, 15 y 14 tiempos registrados por las versiones A, B y C, respectivamente. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+# Obtención de datos
+
+```{r}
+datos3 = datos %>% filter(n.nodos >= 45) %>% select(instancia, tiempo.A, tiempo.B, tiempo.C) %>% droplevels()
+
+set.seed(43)
+filtrado3_A = datos3[sample(nrow(datos3),size = 15),] %>% select(instancia, tiempo.A) %>% droplevels()
+filtrado3_B = datos3[sample(nrow(datos3),size = 15),] %>% select(instancia, tiempo.B) %>% droplevels()
+filtrado3_C = datos3[sample(nrow(datos3),size = 14),] %>% select(instancia, tiempo.C) %>% droplevels()
+```
+
+# Consideraciones:
+
+Variable independiente: Tipo de algoritmo, en este caso A, B o C, de 3 niveles.
+
+Variable dependiente: Tiempo de ejecución (medido en milisegundos).
+
+Las muestras son independientes, ya que son de distinta instancia.
+
+Comprobemos normalidad:
+```{r}
+ggqqplot(filtrado3_A$tiempo.A)
+ggqqplot(filtrado3_B$tiempo.B)
+ggqqplot(filtrado3_C$tiempo.C)
+
+shapiro.test(filtrado3_A$tiempo.A)$p.value >= 0.05
+shapiro.test(filtrado3_B$tiempo.B)$p.value >= 0.05
+shapiro.test(filtrado3_C$tiempo.C)$p.value >= 0.05
+```
+Como podemos observar, para los tiempos de ejecución del algoritmo de tipo A, no se cumple la condición de normalidad. 
+
+## Transformación de datos:
+
+```{r}
+lambdaA = BoxCoxLambda(filtrado3_A$tiempo.A)
+
+#Transformamos con lambdaA
+ATransformado = BoxCox(filtrado3_A$tiempo.A, lambdaA)
+BTransformado = BoxCox(filtrado3_B$tiempo.B, lambdaA)
+CTransformado = BoxCox(filtrado3_C$tiempo.C, lambdaA)
+
+#Comprobamos normalidad
+shapiro.test(ATransformado)$p.value >= 0.05
+shapiro.test(BTransformado)$p.value >= 0.05
+shapiro.test(CTransformado)$p.value >= 0.05
+```
+Como no al transfomar los datos con $\lambda_A$ no logramos obtener una distribución normal para todas las versiones utilizaremos pruebas no paramétricas.
+
+# Hipótesis:
+
+$H_0:$ No existe diferencia significativa entre el tiempo de ejecución entre las versiones A B y C del algoritmo.
+
+$H_1:$ Al menos una versión es significativamente diferente en cuanto al tiempo de ejecución.
+
+Para este problema utilizaremos el test de Kruskall-Wallis
+```{r}
+A = filtrado3_A$tiempo.A
+B = filtrado3_B$tiempo.B
+C = filtrado3_C$tiempo.C
+
+Tiempo = c(A,B,C)
+
+Version = c(rep("A", length(A)), rep("B", length(B)), rep("C", length(C)))
+
+Version = factor(Version)
+
+datos3Largos = data.frame(Tiempo, Version)
+
+alfa = 0.05
+prueba3 = kruskal.test(Tiempo ~ Version, data = datos3Largos)
+print(prueba3)
+
+if(prueba3[["p.value"]] < alfa){
+  post_hoc = pairwise.wilcox.test(Tiempo,
+                                  Version,
+                                  p.adjust.method = "BH",
+                                  paired = FALSE,
+                                  exact = FALSE)
+  print(post_hoc[["p.value"]])
+}
+```
+Como $p < 0.05$ se rechaza $H_0$ o sea, con un 95% de confianza se puede afirmar que al menos una versión es significativamente diferente en cuanto al tiempo de ejecución.
+
+En cuanto al post_hoc, se puede afirmar con un 95% de confianza que las versiones con diferencias significativas en cuanto al tiempo de ejecución son las A-B.
+
+# Pregunta 4:
+
+La memorista también sospecha que, al comparar las mismas instancias con iguales características, las mejores soluciones encontradas por las diferentes versiones del algoritmo tienen rendimientos distintos. ¿Estará en lo cierto?
+Para responder, filtren los datos para tener las instancias con 45 o más nodos y seleccionen las columnas con los mejores rendimientos registrados. Usando como semilla el valor 71, obtengan una muestra aleatoria de 23 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+# Obtención de datos
+```{r}
+filtrado4 = datos %>% filter(n.nodos >= 45)  %>% select(instancia, mejor.A, mejor.B, mejor.C) %>% droplevels()
+
+set.seed(71)
+filtrado4 = filtrado4[sample(nrow(filtrado4),size = 23),] %>% droplevels()
+```
+
+## Consideraciones:
+
+Variable independiente: Tipo de versión del algoritmo, A, B o C (3 niveles).
+
+Variable dependiente: Cercanía de la solución óptima (en porcentaje).
+
+Las muestras son dependientes, ya que son de las mismas instancias.
+
+Comprobemos normalidad:
+```{r}
+ggqqplot(as.numeric(filtrado4$mejor.A))
+ggqqplot(as.numeric(filtrado4$mejor.B))
+ggqqplot(as.numeric(filtrado4$mejor.C))
+
+shapiro.test(as.numeric(filtrado4$mejor.A))$p.value >= 0.05
+shapiro.test(as.numeric(filtrado4$mejor.B))$p.value >= 0.05
+shapiro.test(as.numeric(filtrado4$mejor.C))$p.value >= 0.05
+```
+
+Como se puede ver, en ninguna muestra se cumple la condición de normalidad.
+
+## Transformación de datos:
+
+```{r}
+lambdaA = BoxCoxLambda(as.numeric(filtrado4$mejor.A))
+
+#Transformamos con lambdaA
+ATransformado = BoxCox(filtrado3_A$tiempo.A, lambdaA)
+BTransformado = BoxCox(filtrado3_B$tiempo.B, lambdaA)
+CTransformado = BoxCox(filtrado3_C$tiempo.C, lambdaA)
+
+#Comprobamos normalidad
+shapiro.test(ATransformado)$p.value >= 0.05
+shapiro.test(BTransformado)$p.value >= 0.05
+shapiro.test(CTransformado)$p.value >= 0.05
+
+lambdaB = BoxCoxLambda(as.numeric(filtrado4$mejor.B))
+
+#Transformamos con lambdaB
+ATransformado = BoxCox(filtrado3_A$tiempo.A, lambdaB)
+BTransformado = BoxCox(filtrado3_B$tiempo.B, lambdaB)
+CTransformado = BoxCox(filtrado3_C$tiempo.C, lambdaB)
+
+#Comprobamos normalidad
+shapiro.test(ATransformado)$p.value >= 0.05
+shapiro.test(BTransformado)$p.value >= 0.05
+shapiro.test(CTransformado)$p.value >= 0.05
+
+lambdaC = BoxCoxLambda(as.numeric(filtrado4$mejor.C))
+
+#Transformamos con lambdaC
+ATransformado = BoxCox(filtrado3_A$tiempo.A, lambdaC)
+BTransformado = BoxCox(filtrado3_B$tiempo.B, lambdaC)
+CTransformado = BoxCox(filtrado3_C$tiempo.C, lambdaC)
+
+#Comprobamos normalidad
+shapiro.test(ATransformado)$p.value >= 0.05
+shapiro.test(BTransformado)$p.value >= 0.05
+shapiro.test(CTransformado)$p.value >= 0.05
+```
+Como no se puede encontrar un lambda que transforme todos los datos a una distribución normal, utilizaremos pruebas no paramétricas.
+
+## Hipótesis
+
+$H_0:$ No existe diferencia significativa entre la cercanía a la solución óptima de las versiones A B y C del algoritmo.
+
+$H_1:$ Al menos una versión es significativamente diferente en cuanto a la cercanía de la solución óptima.
+
+Por lo tanto se usará la prueba de Friedman
+
+```{r}
+A = as.numeric(filtrado4$mejor.A)
+B = as.numeric(filtrado4$mejor.B)
+C = as.numeric(filtrado4$mejor.C)
+Tiempo = c(A,B,C)
+Caso = rep(filtrado4$instancia, 3)
+Version = c(rep("A", length(A)), rep("B", length(B)), rep("C", length(C)))
+
+Version = factor(Version)
+
+datos4Largos = data.frame(Caso, Tiempo, Version)
+
+alfa = 0.05
+
+prueba4 = friedman.test(Tiempo ~ Version | Caso, data = datos4Largos)
+print(prueba4)
+
+if(prueba4[["p.value"]] < alfa){
+  post_hoc = pairwise.wilcox.test(datos4Largos$Tiempo,
+                                  datos4Largos$Version,
+                                  p.adjust.method = "holm",
+                                  paired = TRUE,
+                                  exact = FALSE)
+  print(post_hoc[["p.value"]])
+}
+
+```
+
+Como se puede observar, $p < 0.05$ lo cual indica que se rechaza $H_0$, es decir, con un 95% de confianza, podemos afirmar que al menos una versión es significativamente diferente en cuanto a la cercanía de la solución óptima.
+
+En cuanto al post-hoc, podemos asegurar con un 95% de confianza que existe diferencia significativa entre los mejores tiempos entre las variantes de los algoritmos A-B y A-C.

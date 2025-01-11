@@ -1,0 +1,667 @@
+---
+title: "EP10-respuesta-equipo-3"
+output: html_document
+date: "2024-12-03"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r, echo =FALSE, warning=FALSE, message=FALSE}
+if (!requireNamespace('ggpubr', quietly = TRUE)){
+  install.packages('ggpubr')
+}
+library(ggpubr)
+if (!requireNamespace('ggplot2', quietly = TRUE)){
+  install.packages('ggplot2')
+}
+library(ggplot2)
+if (!requireNamespace('tidyverse', quietly = TRUE)){
+  install.packages('tidyverse')
+}
+library(tidyverse)
+if (!requireNamespace('car', quietly = TRUE)){
+  install.packages('car')
+}
+library(car)
+if (!requireNamespace('ggfortify', quietly = TRUE)){
+  install.packages('ggfortify')
+}
+library(ggfortify)
+if (!requireNamespace('leaps', quietly = TRUE)){
+  install.packages('leaps')
+}
+library(leaps)
+if (!requireNamespace('caret', quietly = TRUE)){
+  install.packages('caret')
+}
+library(caret)
+```
+
+Lectura de datos
+
+```{r}
+# Leer csv
+datos <- read.csv2("EP09 Datos.csv")
+
+# Mostrar datos
+head(datos)
+```
+
+Se define la semilla a utilizar y se extraen los datos especificados en el enunciado además de generar las columnas del IMC(Índice de masa corporal) y EN (Estado nutricional). as condiciones asociadas.
+
+```{r}
+set.seed(2026)
+# Se calcula el IMC para todos los datos y se agrega como columna
+datosColumna <- datos %>%
+  mutate(IMC = Weight / (Height/100)^2,
+         EN = as.numeric(IMC > 23.2))
+# Se filtra inmediatamente a las observaciones con genero mujer
+# debido a que la semilla que se va a usar es 2026 (par)
+```
+
+Luego de esto filtramos los datos generando una muestra 50/50 de personas con y sin sobrepeso base al resultado obtenido con el EN, para luego generar las submuestras de entrenamiento y prueba.
+
+```{r}
+# Se asigna la semilla mencionada anteriormente (punto 1)
+set.seed(2026)
+
+muestra_EN0 <- datosColumna %>% filter(EN == 0) %>% sample_n(50, replace =F)
+  
+muestra_EN1 <- datosColumna %>% filter(EN == 1) %>% sample_n(50, replace =F)
+
+datosEntrenamiento <- rbind(muestra_EN0, muestra_EN1)
+datos <- datosEntrenamiento[sample(nrow(datosEntrenamiento)), ]
+
+```
+
+# 1. Construcción de modelo RLM de Weight 
+
+Se procede a construir el modelo requerido por el punto 3, usando como variable de respuesta el peso.
+```{r}
+set.seed(2026)
+modelo_subset <- regsubsets(Weight ~ . -IMC -EN, 
+                          data = datos,
+                          nbest = 1,
+                          nvmax = 8,
+                          method = "exhaustive")
+
+plot(modelo_subset)
+
+comb_summary <- summary(modelo_subset)
+i_min_bic <- which.min(comb_summary[["bic"]])
+
+mejor_comb_bic <- comb_summary[["which"]][i_min_bic, ]
+
+comb_mejor_bic <- names(mejor_comb_bic[mejor_comb_bic == TRUE])
+
+# Eliminar variables indicadoras
+nombres_mejor_bic <- unique(gsub("~(.*)\\d$", "\\1", comb_mejor_bic))
+
+# Obtener las formulas
+pred_mejor_bic <- paste(nombres_mejor_bic[-1], collapse = " + ")
+
+fmla_mejor_bic <- as.formula(paste("Weight", pred_mejor_bic, sep = " ~ "))
+
+# Construir y mostrar los mejores modelos
+modelo_mejor_bic <- lm(fmla_mejor_bic, data = datos)
+```
+
+
+
+```{r}
+cat("Modelo que minimiza el BIC:\n")
+cat("-------------------------\n")
+print(modelo_mejor_bic)
+```
+Usamos la función train con el método de bootstrap, usando 1999 remuestreos.
+```{r}
+set.seed(2026)
+ctrl <- trainControl(method = "boot",
+                    number = 1999)
+
+formula_final <- as.formula(paste("Weight ~", pred_mejor_bic))
+
+modelo_final <- train(formula_final,
+                     data = datos,
+                     method = "lm",
+                     trControl = ctrl)
+
+# Ver resultados
+# Extraer el modelo final
+modelo <- modelo_final[["finalModel"]]
+
+print(summary(modelo))
+
+```
+
+# Verificación de condiciones confiabilidad + calidad predictiva de RLM con Weight
+
+Primero revisamos el modelo de regresión lineal múltiple construido con regsubsets.
+
+Como todos los modelos realizados tienen muchos predictores, verificaremos primeramente multicolinealidad.
+
+```{r}
+cat("Factores de inflación: \n")
+print(vif(modelo))
+
+cat("Tolerancia: \n")
+print(1/vif(modelo))
+```
+Como se puede ver, varias variables presentan factores mayores a 5 o tolerancias menores a 0.4. Por lo que se procede a ajustar el modelo. Entonces Eliminamos la variable Chest.Girth.
+
+```{r}
+set.seed(2026)
+rlm1_seleccion <- comb_mejor_bic[c(-1,-2)]
+rlm1_sel_text <- paste(rlm1_seleccion, collapse = " + ")
+rlm1_fmla <- formula(paste("Weight", rlm1_sel_text, sep = " ~ "))
+
+rlm1_train <- train(rlm1_fmla, data = datos, method = "lm",
+                    trControl = trainControl(method = "boot", number = 1999))
+rlm1<- rlm1_train[["finalModel"]]
+
+```
+
+Volvemos a verificar los factores y la tolerancia para ver si existen mas predictores problemáticos.
+```{r}
+cat("Factores de inflación: \n")
+print(vif(rlm1))
+
+cat("Tolerancia: \n")
+print(1/vif(rlm1))
+```
+Ahora eliminamos Hip.Girth debido a que es el único predictor problemático del resultado obtenido.
+
+```{r}
+set.seed(2026)
+rlm1_seleccion <- rlm1_seleccion[-2]
+rlm1_sel_text <- paste(rlm1_seleccion, collapse = " + ")
+rlm1_fmla <- formula(paste("Weight", rlm1_sel_text, sep = " ~ "))
+
+rlm1_train <- train(rlm1_fmla, data = datos, method = "lm",
+                    trControl = trainControl(method = "boot", number = 1999))
+rlm1<- rlm1_train[["finalModel"]]
+
+```
+
+Verificamos de nuevo.
+```{r}
+cat("Factores de inflación: \n")
+print(vif(rlm1))
+
+cat("Tolerancia: \n")
+print(1/vif(rlm1))
+```
+Notamos que ningún factor esta por sobre 3.89, pero Forearm.Girth aun presenta una tolerancia menor a 0.4, por lo que procede a eliminar debido a que igualmente es problemático.
+
+```{r}
+set.seed(2026)
+rlm1_seleccion <- rlm1_seleccion[-3]
+rlm1_sel_text <- paste(rlm1_seleccion, collapse = " + ")
+rlm1_fmla <- formula(paste("Weight", rlm1_sel_text, sep = " ~ "))
+
+rlm1_train <- train(rlm1_fmla, data = datos, method = "lm",
+                    trControl = trainControl(method = "boot", number = 1999))
+rlm1<- rlm1_train[["finalModel"]]
+```
+
+
+```{r}
+cat("Factores de inflación: \n")
+print(vif(rlm1))
+
+cat("Tolerancia: \n")
+print(1/vif(rlm1))
+```
+Ahora el modelo presenta niveles aceptables de multicolinealidad.
+
+- Debemos verificar que la variable de respuesta debe ser cuantitativa y continua, sin restricciones para su variabilidad.
+
+Al revisar los datos originales y ver el tipo de dato de la variable de respuesta Weight, se puede observar que es de tipo numérico y que además como la medición está en kilogramos, se puede decir que debido a la naturaleza de la medición esta es cuantitativa. Luego debido a que el peso en realidad puede tomar cualquier valor y que no tiene una variabilidad extremadamente baja se puede considerar continua en este caso.
+
+- Los predictores deben ser cuantitativos o dicotómicos
+
+Se tiene que todos los predictores son cuantitativos, ya que todos miden ya sea diámetro o grosor y estas mediciones son de ese tipo.
+
+- Los predictores deben tener algún grado de variabilidad, es decir, no ser constantes.
+
+Usamos el siguiente script para ver la variabilidad de cada predictor.
+```{r}
+apply(datos[, c("Waist.Girth", "Thigh.Girth", "Calf.Maximum.Girth", "Age", "Height")], 2, var)
+```
+Observamos que los predictores dan una varianza distinta 0, por lo que se cumple esta condición.
+
+- Cada predictor debe estar relacionado linealmente con la respuesta.
+
+Se evalúa la linealidad de los predictores usando residualPlots como indica el apunte.
+
+```{r}
+modelo_residualplots <- lm(Weight ~ Waist.Girth + Thigh.Girth + Calf.Maximum.Girth + Age + Height, datos)
+print(residualPlots(modelo_residualplots))
+```
+
+Podemos ver que solamente Height tiene un p-value menor a 0.05.
+
+```{r}
+print(marginalModelPlots(modelo_residualplots, sd=TRUE, fitted=FALSE))
+```
+Se puede observar que los fitted values y los datos observados presentan gráficos casi idénticos. Sin embargo, como el predictor Height presenta suficiente evidencia para descartar linealidad, el modelo no cumple esta condición. Se van a seguir verificando las demás condiciones pero tomando en consideración que la presencia de esta variable podría afectar la calidad predictiva.
+
+- La distribución de los residuos debe ser cercana a la normal centrada en el cero.
+
+Para descartar la posibilidad de que la distribución de los residuos no sea cercana a la normal va a usar un test de Shapiro Wilk.
+
+```{r}
+print(shapiro.test(resid(rlm1)))
+```
+Luego según el test de Shapiro Wilk se puede ver que no existe suficiente evidencia para descartar la distribución cercana a la normal de los residuos con un nivel de significancia del 0.05, por lo que el modelo cumple este punto.
+
+- Los residuos deben ser independientes entre sí.
+
+Para la condición de independencia tenemos que verificar con el test de Durbin-watson.
+```{r}
+print(durbinWatsonTest(rlm1))
+```
+Como podemos observar, no es significativo, entonces podemos descartar que exista autocorrelación entre los residuos, por lo tanto no hay suficiente evidencia de que no se cumpla esta condición de independencia.
+
+- Por último se van a revisar los casos influyentes
+
+
+Usemos el gráfico de diagnóstico disponible en el paquete car.
+```{r}
+rlm1_inf_estad <- influencePlot(modelo_residualplots, id = list(n = 3))
+```
+
+```{r}
+cat("Casos notorios para el modelo de RLM:\n")
+print(rlm1_inf_estad)
+```
+Como se puede observar ningún caso presenta una distancia de Cook mayor a 1, ni tampoco se presenta apalancamiento, por lo tanto no es necesario realizar modificaciones al modelo.
+
+Como conclusión se tiene que el modelo cumple la mayoría de condiciones, pero debido a que el predictor Height presenta problemas en linealidad, se tiene que el modelo no es del todo confiable.
+
+# Calidad Predictiva
+Como se pide también, se revisara la calidad predictiva del modelo generado, comparando las métricas de RMSE y $R^{2}$.
+```{r}
+print(head(rlm1_train[["resample"]]))
+print(rlm1_train[["results"]])
+```
+Como se puede observar, en el segundo dataframe generado, se obtiene un RMSE estimado de 2.793 y un $R^{2}$ de 0.949, por lo tanto explica el 94.9% de la variabilidad de los datos, además arrojando que el modelo tiene una buena generalización. Cabe destacar, que la verificación de calidad de los modelos, se realiza internamente, por lo tanto, los modelos se construyen a partir de un subconjunto generado internamente, y luego se calcula la calidad, con el resto de datos no usados en el subconjunto mencionado anteriormente.
+
+# 2. Construcción de modelo RLM de IMC con método RFE
+Ahora se procede a construir otro modelo de regresión lineal múltiple pero con el método RFE, requerido por el punto 4, usando como variable de respuesta el IMC en este caso.
+```{r}
+set.seed(2026)
+rlmrfe_dataframe <- datos |> select(-all_of(c("EN", "Weight", "Height")))
+rlmrfe_formula <- formula(paste("IMC", ".", sep = " ~ "))
+rlmrfe_control <- rfeControl(functions = lmFuncs, method = "repeatedcv",
+                           number = 5, repeats = 5, verbose = FALSE)
+
+rlmrfe_rfe <- rfe(rlmrfe_formula, data = rlmrfe_dataframe, rfeControl = rlmrfe_control, sizes = 10:20, metric = "Rsquared")
+rlmrfe <- rlmrfe_rfe[["fit"]]
+```
+
+Podemos apreciar que la búsqueda obtuvo el valor del $\small R^{2}$ más alto con un modelo que considera 16 variables.
+Veamos el modelo obtenido.
+```{r muestra RLM 2, results='hold'}
+cat("Modelo de RLM 2 obtenido con RFE:\n")
+print(summary(rlmrfe))
+```
+
+## Verificación de condiciones confiabilidad + calidad predictiva de RLM con IMC
+
+Ahora revisamos el modelo de regresión lineal múltiple construido con RFE.
+
+Como todos los modelos realizados tienen muchos predictores, verificaremos primeramente multicolinealidad.
+
+```{r}
+cat("Factores de inflación: \n")
+print(vif(rlmrfe))
+
+cat("Tolerancia: \n")
+print(1/vif(rlmrfe))
+```
+
+Como podemos observar, existe un valor preocupante en el predictor Forearm.Girth, por lo tanto, lo eliminaremos y crearemos un nuevo modelo sin este predictor.
+```{r}
+set.seed(2026)
+
+selected_predictors <- rlmrfe_rfe$optVariables
+
+selected_predictors <- selected_predictors[-2]
+print(selected_predictors)
+
+rlmrfe_formula2 <- as.formula(paste("IMC ~", paste(selected_predictors, collapse = " + ")))
+
+rlmrfe_control2 <- rfeControl(functions = lmFuncs, method = "repeatedcv",
+                           number = 5, repeats = 5, verbose = FALSE)
+
+rlmrfe_rfe2 <- rfe(rlmrfe_formula2, data = rlmrfe_dataframe, rfeControl = rlmrfe_control2, sizes = 10:20, metric = "Rsquared")
+rlmrfe2 <- rlmrfe_rfe2[["fit"]]
+```
+Verificamos nuevamente los factores de inflación y la tolerancia.
+```{r}
+cat("Factores de inflación: \n")
+print(vif(rlmrfe2))
+
+cat("Tolerancia: \n")
+print(1/vif(rlmrfe2))
+```
+Eliminamos el predictor Chest.Girth debido a que es problemático.
+```{r}
+set.seed(2026)
+
+selected_predictors <- rlmrfe_rfe2$optVariables
+
+selected_predictors <- selected_predictors[-11]
+print(selected_predictors)
+
+rlmrfe_formula2 <- as.formula(paste("IMC ~", paste(selected_predictors, collapse = " + ")))
+
+rlmrfe_control2 <- rfeControl(functions = lmFuncs, method = "repeatedcv",
+                           number = 5, repeats = 5, verbose = FALSE)
+
+rlmrfe_rfe2 <- rfe(rlmrfe_formula2, data = rlmrfe_dataframe, rfeControl = rlmrfe_control2, sizes = 10:20, metric = "Rsquared")
+rlmrfe2 <- rlmrfe_rfe2[["fit"]]
+```
+Verificamos otra vez.
+```{r}
+cat("Factores de inflación: \n")
+print(vif(rlmrfe2))
+
+cat("Tolerancia: \n")
+print(1/vif(rlmrfe2))
+```
+Se elimina Wrist.Minimum.Girth debido a que tiene un factor mayor a 5.
+
+
+```{r}
+set.seed(2026)
+
+selected_predictors <- rlmrfe_rfe2$optVariables
+
+selected_predictors <- selected_predictors[-6]
+print(selected_predictors)
+
+rlmrfe_formula2 <- as.formula(paste("IMC ~", paste(selected_predictors, collapse = " + ")))
+
+rlmrfe_control2 <- rfeControl(functions = lmFuncs, method = "repeatedcv",
+                           number = 5, repeats = 5, verbose = FALSE)
+
+rlmrfe_rfe2 <- rfe(rlmrfe_formula2, data = rlmrfe_dataframe, rfeControl = rlmrfe_control2, sizes = 10:20, metric = "Rsquared")
+rlmrfe2 <- rlmrfe_rfe2[["fit"]]
+```
+
+```{r}
+cat("Factores de inflación: \n")
+print(vif(rlmrfe2))
+
+cat("Tolerancia: \n")
+print(1/vif(rlmrfe2))
+```
+Por último, eliminamos Gender por las mismas razones que antes.
+
+```{r}
+set.seed(2026)
+
+selected_predictors <- rlmrfe_rfe2$optVariables
+
+selected_predictors <- selected_predictors[-4]
+print(selected_predictors)
+
+rlmrfe_formula2 <- as.formula(paste("IMC ~", paste(selected_predictors, collapse = " + ")))
+
+rlmrfe_control2 <- rfeControl(functions = lmFuncs, method = "repeatedcv",
+                           number = 5, repeats = 5, verbose = FALSE)
+
+rlmrfe_rfe2 <- rfe(rlmrfe_formula2, data = rlmrfe_dataframe, rfeControl = rlmrfe_control2, sizes = 10:20, metric = "Rsquared")
+rlmrfe2 <- rlmrfe_rfe2[["fit"]]
+```
+
+
+```{r}
+cat("Factores de inflación: \n")
+print(vif(rlmrfe2))
+
+cat("Tolerancia: \n")
+print(1/vif(rlmrfe2))
+```
+
+
+- Debemos verificar que la variable de respuesta debe ser cuantitativa y continua, sin restricciones para su variabilidad.
+
+Al revisar los datos originales y ver el tipo de dato de la variable de respuesta IMC, se puede observar que es de tipo numérico y que además como la medición está en ${kg/m^{2}}$, se puede decir que debido a la naturaleza de la medición esta es cuantitativa. Luego debido a que el IMC en realidad puede tomar cualquier valor y que no tiene una variabilidad extremadamente baja se puede considerar continua en este caso.
+
+- Los predictores deben ser cuantitativos o dicotómicos
+
+Se tiene que todos los predictores son cuantitativos, ya que todos miden ya sea diámetro o grosor y estas mediciones son de ese tipo.
+
+- Los predictores deben tener algún grado de variabilidad, es decir, no ser constantes.
+
+Usamos el siguiente script para ver la variabilidad de cada predictor.
+```{r}
+apply(datos[, selected_predictors], 2, var)
+```
+Observamos que los predictores tienen una varianza distinta 0, por lo que se cumple esta condición.
+
+- Cada predictor debe estar relacionado linealmente con la respuesta.
+
+
+Se evalúa la linealidad de los predictores usando residualPlots como indica el apunte.
+
+```{r}
+
+modelo_residualplotsrfe <- lm(rlmrfe_formula2, datos)
+print(residualPlots(modelo_residualplotsrfe, linear = TRUE, ask=FALSE))
+```
+
+Podemos ver que tres predictores tienen un p-value menor a 0.05, por lo tanto, se procede a eliminarlos del modelo.
+
+```{r}
+set.seed(2026)
+
+selected_predictors <- rlmrfe_rfe2$optVariables
+
+selected_predictors <- selected_predictors[c(-6,-7,-10)]
+print(selected_predictors)
+
+rlmrfe_formula2 <- as.formula(paste("IMC ~", paste(selected_predictors, collapse = " + ")))
+
+rlmrfe_control2 <- rfeControl(functions = lmFuncs, method = "repeatedcv",
+                           number = 5, repeats = 5, verbose = FALSE)
+
+rlmrfe_rfe2 <- rfe(rlmrfe_formula2, data = rlmrfe_dataframe, rfeControl = rlmrfe_control2, sizes = 10:20, metric = "Rsquared")
+rlmrfe2 <- rlmrfe_rfe2[["fit"]]
+```
+
+
+Volvemos a verificar multicolinealidad.
+```{r}
+cat("Factores de inflación: \n")
+print(vif(rlmrfe2))
+
+cat("Tolerancia: \n")
+print(1/vif(rlmrfe2))
+```
+
+También que los predictores tengan varianza distinta de 0.
+```{r}
+apply(datos[, selected_predictors], 2, var)
+```
+```{r}
+
+modelo_residualplotsrfe <- lm(rlmrfe_formula2, datos)
+print(residualPlots(modelo_residualplotsrfe, linear = TRUE, ask=FALSE))
+```
+
+```{r}
+print(marginalModelPlots(modelo_residualplotsrfe, sd=TRUE, fitted=FALSE))
+```
+Como se puede observar, todos los predictores tienen una relación lineal con la variable de respuesta.
+
+- Los residuos deben ser independientes entre sí.
+
+Para la condición de independencia tenemos que verificar con el test de Durbin-watson.
+```{r}
+print(durbinWatsonTest(rlmrfe2))
+```
+Como podemos observar, no es significativo, entonces podemos descartar que exista autocorrelación entre los residuos, por lo tanto no hay suficiente evidencia de que no se cumpla esta condición de independencia.
+
+- Por último se van a revisar los casos influyentes.
+
+Usemos el gráfico de diagnóstico disponible en el paquete car.
+```{r}
+rlm2_inf_estad <- influencePlot(rlmrfe2, id = list(n = 3))
+
+```
+
+```{r}
+cat("Casos notorios para el modelo de RLM:\n")
+print(rlm2_inf_estad)
+```
+
+Como se puede observar ningún caso presenta una distancia de Cook mayor a 1, ni tampoco se presenta apalancamiento, por lo tanto no es necesario realizar modificaciones al modelo.
+
+Como conclusión se tiene que el modelo cumple las condiciones, y se puede decir que el modelo es confiable.
+
+# Calidad predictiva.
+
+Como se pide también, se revisara la calidad predictiva del modelo generado, comparando las métricas de RMSE y $R^{2}$.
+```{r}
+print(rlmrfe_rfe2[["resample"]])
+print(rlmrfe_rfe2[["results"]])
+```
+Como se puede observar, en el segundo dataframe generado, se obtiene un RMSE estimado de 1.8396 y un $R^{2}$ de 0.6363, por lo tanto explica el 63.6% de la variabilidad de los datos, además arrojando que el modelo tiene una generalización de calidad media, debido a que el rango de IMC presente es de 18 a 31 aproximadamente. Cabe destacar, que la verificación de calidad de los modelos, se realiza internamente, por lo tanto los modelos se construyen a partir de un subconjunto generado internamente, y luego se calcula la calidad, con el resto de datos no usados en el subconjunto mencionado anteriormente.
+
+
+# 3. Regresión logística múltiple usando RFE
+
+La instrucción 5 nos pide usar RFE para conseguir un modelo de regresión logística múltiple, que incluya de 2 a 6 predictores, utilizando validación cruzada dejando uno fuera para evitar el sobreajuste.
+
+Esto podemos hacerlo con el siguiente código. Nuevamente definimos una semilla para poder reproducir la validación cruzada.
+
+```{r RFE rlogm 1, cache=TRUE}
+set.seed(2026)
+rlogm_dataframe <- datos |> select(-all_of(c("Weight", "Height", "IMC")))
+rlogm_formula <- formula(paste("EN", ".", sep = " ~ "))
+
+lrFuncs[["summary"]] <- twoClassSummary
+rlogm_rfe_control <- rfeControl(functions = lrFuncs, method = "LOOCV", saveDetails = TRUE, returnResamp = "all", verbose = FALSE)
+rlogm_train_control <- trainControl(method = "none", classProbs = TRUE,
+                                      summaryFunction = twoClassSummary)
+rlogm_dataframe[["EN"]]<- factor(rlogm_dataframe[["EN"]]) 
+
+rlogm_rfe <- suppressWarnings(
+  rfe(rlogm_formula, data = rlogm_dataframe, sizes = 2:6, metric = "ROC",
+      rfeControl = rlogm_rfe_control, trControl = rlogm_train_control)
+)
+rlogm <- rlogm_rfe[["fit"]]
+
+cat("Modelo de rlogm obtenido con RFE:\n")
+print(summary(rlogm))
+```
+
+Generamos el modelo base al RFE para la verificación de las condiciones de confiabilidad.
+
+```{r}
+rlogm_direct <- glm(EN ~ Chest.diameter + Navel.Girth + Shoulder.Girth + Chest.depth,
+                    family = binomial,
+                    data = rlogm_dataframe)
+```
+
+
+## Verificación de condiciones confiabilidad + calidad predictiva de RLG con EN
+
+Comprobamos que los residuos estandarizados mantienen
+una media cercana a cero, con la función residualPlots().
+
+```{r}
+residualPlots(rlogm_direct, type = "rstandard", fitted = FALSE,
+              smooth = list(col="blue"))
+```
+En este caso se ve que la media si es cercana a 0, sin patrones evidentes, además apoyado con el test, tampoco hay evidencia suficiente que demuestre que existe una desviacion significativa por lo tanto, el ajuste del modelo parece correcto.
+
+Ahora comprobaremos el supuesto de linealidad.
+```{r}
+crPlots(rlogm_direct)
+```
+Los resultados indican que no existe suficiente evidencia para descartar linealidad entre los predictores (p-value > 0.05 en todos los predictores) y la respuesta transformada y por lo tanto se cumple la condición.
+
+Ahora procederemos a verificar la independencia de residuos.
+
+```{r}
+set.seed(2026)
+durbinWatsonTest(rlogm_direct)
+```
+
+Se observa que el D-W está en un rango aceptable (entre 1.5 y 2.5), pero se tiene que el valor p es menor al nivel de significancia 0.05, aun con esto se tiene una autocorrelación baja, de tal manera que aunque sugiere una dependencia leve en los residuos, el problema no es lo suficientemente severo como para modificar el modelo.
+
+Ahora verificaremos la multicolinealidad del modelo múltiple.
+
+```{r}
+cat("Factores de inflación: \n")
+print(vif(rlogm_direct))
+
+cat("Tolerancia: \n")
+print(1/vif(rlogm_direct))
+```
+Se obtiene que ninguna de las variables supera el factor de inflación de 5, y no hay variables que presenten una tolerancia bajo a 0.2, por lo cual no existe multicolinealidad.
+
+
+Ahora verificaremos si el modelo tiene algunos casos influyentes.
+```{r}
+rLogits_influ <- influencePlot(rlogm_direct)
+print(rLogits_influ)
+```
+Como se puede observar ningún caso presenta una distancia de Cook mayor a 1, además los datos presentan apalancamiento, por lo tanto, esto afectará la confiabilidad del modelo. 
+
+Últimamente revisaremos los puntos de Información incompleta y Separación perfecta.
+Para el punto de información incompleta, podemos verificar que tenemos más observaciones que las requeridas por este punto, 
+que estarían alrededor de 60 observaciones, y poseemos 100.
+Para el punto de separación perfecta, 
+```{r}
+# Predicciones para el conjunto de entrenamiento
+probabs <- predict(rlogm_direct, rlogm_dataframe, type = "response")
+predicts <- ifelse(probabs >= 0.6, 1, 0)
+matrizConf <- table(Predichos = predicts, Observados = rlogm_dataframe$EN)
+print(matrizConf)
+```
+A partir de la tabla podemos ver que los predictores no generan una separación perfecta, ya que el modelo tiene errores en los falsos negativos.
+
+Como conclusión se tiene que el modelo cumple la mayoría de condiciones, pero debido a que el modelo no cumple la condición de independencia de residuos, se tiene que el modelo no es del todo confiable.
+
+# Calidad predictiva.
+
+Como se pide también, se revisara la calidad predictiva del modelo generado, comparando las métricas de sensibilidad, especificidad y $ROC$.
+
+
+```{r}
+set.seed(2026)
+
+selected_predictors <- rlogm_rfe$optVariables
+
+selected_predictors <- selected_predictors[c(-2)]
+print(selected_predictors)
+
+rlogm_formula2 <- as.formula(paste("EN ~", paste(selected_predictors, collapse = " + ")))
+
+lrFuncs[["summary"]] <- twoClassSummary
+rlogm_rfe_control2 <- rfeControl(functions = lrFuncs, method = "LOOCV", saveDetails = TRUE, returnResamp = "all", verbose = FALSE)
+rlogm_train_control2 <- trainControl(method = "none", classProbs = TRUE,
+                                      summaryFunction = twoClassSummary)
+rlogm_dataframe[["EN"]]<- factor(rlogm_dataframe[["EN"]]) 
+
+rlogm_rfe2 <- suppressWarnings(
+  rfe(rlogm_formula2, data = rlogm_dataframe, sizes = 2:6, metric = "ROC",
+      rfeControl = rlogm_rfe_control2, trControl = rlogm_train_control2)
+)
+rlogm <- rlogm_rfe2[["fit"]]
+
+cat("Modelo de rlogm obtenido con RFE:\n")
+print(summary(rlogm))
+```
+
+```{r}
+print(rlogm_rfe2[["results"]])
+```
+Como se puede observar en los resultados obtenidos, el modelo con 3 variables predictoras alcanza un área bajo la curva ROC de 0.8252, lo que indica una buena capacidad descriptiva del modelo. La sensibilidad de 0.78 muestra que el modelo es capaz de identificar correctamente el 78% de los casos positivos, mientras que la especificidad de 0.66 indica que identifica correctamente el 66% de los casos negativos. Cabe destacar que aparece un segundo modelo que presenta 2 predictores, pero posee una menor area bajo la curva ROC, por lo que no se tomó en consideración.

@@ -1,0 +1,190 @@
+---
+title: "EP02"
+author: "Vicente Arce, Benjamin Zúñiga"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(tidyr)) install.packages("tidyr")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(ggpubr)) install.packages("ggpubr")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(ggmosaic)) install.packages("ggmosaic")
+if(!require(kableExtra)) isntall.packages("kableExtra")
+```
+
+
+```{=html}
+<style>
+body {
+text-align: justify}
+</style>
+```
+
+
+```{r a }
+# Leo los datos del archivo csv
+datos <- read.csv2("EP02 Datos.csv")
+head(datos) %>% kbl(caption = "Tabla 1. Datos") %>% kable_classic_2(full_width = T, html_font = "Cambria", bootstrap_options = "striped")
+
+```
+
+
+### Pregunta 1: El Comité Olímpico cree que el mejor tiempo medio de los atletas de raza blanca después de ingresar al programa de entrenamiento es superior a 13,2 segundos. ¿Soportan los datos esta afirmación?
+
+* Hipótesis nula: mu = 13.2
+* Hipótesis alternativa: mu > 13.2
+
+```{r b}
+# filtro los datos de raza blanca
+datos_raza_blanca <- datos %>% filter(Raza == "Blanca")
+
+# Caculo el promedio
+meanRB <- mean(datos_raza_blanca$Posterior)
+
+# Definimos alpha como 0.05
+alpha <- 0.01
+
+# Realizamos prueba de normalidad
+normalidad <- shapiro.test(datos_raza_blanca$Posterior)
+print(normalidad)
+
+normalidad <- ggqqplot(datos_raza_blanca$Posterior, color = "SteelBlue")
+print(normalidad)
+prueba <- t.test(datos_raza_blanca$Posterior, alternative = "greater", mu = 13.2, conf.level = 1 - alpha)
+print(prueba)
+```
+* Según el shapiro test, obtenemos un p-value de 0.2008 sobre la normalidad de los datos, por ende se falla en rechazar la hipotesis nula sobre la normalidad de los datos.
+* Con esto, tenemos lo suficiente para poder usar el test de T student, tomamos un valor de significancia del 99%, y realizando el test dicho, obtenemos un p-value de 0.2003, lo cual es suficiente para concluir que tenemos un 99% de confianza en que el tiempo medio de los atletas es de 13,2 segundos.
+
+### Pregunta 2: ¿Sugieren los datos que la mejor marca de los atletas de raza oriental se reduce en promedio más de 5,2 segundos tras el entrenamiento?
+
+* Hipótesis nula: la media de las diferencias en las mejores marcas de los atletas de raza oriental tras el entrenamiento es de 5,2 segundos.
+* Hipótesis alternativa: la media de las diferencias en las mejores marcas de los atletas de raza oriental tras el entrenamiento es mayor a 5,2 segundos.
+
+Matematicamente:
+
+* Hipótesis nula: mu_dif = 5.2
+* Hipótesis alternativa: mu_dif > 5.2
+
+* Primeramente notemos que debemos usar el t de Student para muestras pareadas, puesto que las muestras son obtenidas en base a las mismas personas, con cada muestra obtenida de una persona distinta a otra muestra
+
+```{r c}
+datos_raza_oriental <- datos %>% filter(Raza == "Oriental")
+
+d_oa <- datos_raza_oriental$Previo
+d_od <- datos_raza_oriental$Posterior
+
+diferencia <- d_oa - d_od
+print(diferencia)
+
+# Verificamos normalidad
+norm <- shapiro.test(diferencia)
+print(norm)
+
+# Definimos un alfa y valor nulo
+alpha2 <- 0.05
+valor_nulo <- 5.2
+
+# Aplicamos t test para muestras pareadas
+prueba<- t.test(diferencia,
+                alternative = "greater",
+                mu= valor_nulo,
+                conf.level = 1-alpha2)
+print(prueba)
+
+```
+Después de aplicar shapiro test a la diferencia de los datos, obtenemos un p-value de 0.6839 por lo cual por lo cual con un 95% de confianza no podemos afirmar que ambas muestras no siguen una distribución cercana a una normal y posteriormente luego de aplicar t test para muestras pareadas a las muestras, se obtiene un p-value de 0.9994 por lo cual se falla en rechazar la hipótesis nula y con un 95% de confianza no hay suficiente evidencia para afirmar que la mejor marca de los atletas de raza oriental se reduce en promedio más de 5,2 segundos tras el entrenamiento
+
+### Pregunta 3: ¿Es posible afirmar que, en promedio, los atletas de raza negra superan a los de raza blanca por 1,3 segundos después del entrenamiento?
+
+* Hipótesis nula: la diferencia entre las mejores marcas de los atletas de raza negra frente a los de raza blanca tras el entrenamiento es de 1,3 segundos.
+* Hipótesis alternativa: la diferencia entre las mejores marcas de los atletas de raza negra frente a los de raza blanca tras el entrenamiento es distinta a 1,3 segundos.
+
+Matematicamente:
+
+* Hipótesis nula: mu_raza_negra - mu_raza_blanca = 1.3
+* Hipótesis alternativa: mu_raza_negra - mu_raza_blanca != 1.3
+
+* Primeramente notemos que debemos usar el t de Student para muestras independientes, puesto que las muestras son obtenidas en base a distintas personas.
+```{r d}
+
+datos_raza_negra = datos %>% filter( Raza == "Negra")
+
+d_rn = datos_raza_negra$Posterior
+d_rb = datos_raza_blanca$Posterior
+
+# Verificamos normalidad
+norm1 <- shapiro.test(d_rn)
+print(norm1)
+
+norm2 <- shapiro.test(d_rb)
+print(norm2)
+# Definimos un alfa y valor nulo
+alpha2 <- 0.05
+valor_nulo <- 1.3
+
+# Aplicamos t test para muestras pareadas
+prueba<- t.test(x = d_rb,
+                y = d_rn,
+                paired = FALSE,
+                alternative = "two.sided",
+                mu= valor_nulo,
+                conf.level = 1-alpha2)
+print(prueba)
+
+```
+Después de aplicar shapiro test a cada muestra de datos, obtenemos unos p-values de 0.2225 y 0.2008 para las muestras de los deportistas de raza negra y blanca respectivamente, por lo cual con un 95% de confianza no podemos afirmar que ambas muestras no siguen una distribución cercana a una normal y posteriormente luego de aplicar t test para muestras independientes, se obtiene un p-value de 0.1246 por lo cual se falla en rechazar la hipótesis nula y con un 95% de confianza no hay suficiente evidencia para afirmar que los atletas de raza negra superan a los de raza blanca por 1,3 segundos después del entrenamiento
+
+### Pregunta 4 ¿Será cierto que hay más atletas de raza blanca que redujeron sus mejores marcas en al menos 2,6 segundos que atletas de raza negra que lo hicieron en al menos 1,5 segundos?
+
+* Hipótesis nula: La proporción de atletas de raza blanca que redujeron sus mejores marcas en al menos 2,6 segundos es igual a la proporción de atletas que lo hicieron en al menos 1,5 segundos.
+
+* Hipótesis alternativa: La proporción de atletas de raza blanca que redujeron sus mejores marcas en al menos 2,6 segundos es mayor a la proporción de atletas que lo hicieron en al menos 1,5 segundos.
+
+De una manera más mátematica, donde p1 es la proporción de atletas de raza blanca y p2 la proporción de atletas de raza negra:
+
+* Hipótesis nula: p1 - p2 = 0
+* Hipótesis alternativa: p1 - p2 > 0
+
+
+```{r e}
+# Raza blanca
+# Obtenemos la 
+diferencia_rb <- datos_raza_blanca$Previo - datos_raza_blanca$Posterior
+
+diferencia_rb_df <- data.frame(diferencia_rb)
+
+n_rb <- (count(datos_raza_blanca)$n)
+
+exitos_rb <- count(diferencia_rb_df %>% filter(diferencia_rb >= 2.6))$n
+
+# Raza negra
+diferencia_rn <- datos_raza_negra$Previo - datos_raza_negra$Posterior
+
+diferencia_rn_df <- data.frame(diferencia_rn)
+
+n_rn <- count(datos_raza_negra)$n
+
+exitos_rn <- count(diferencia_rn_df %>% filter(diferencia_rn >= 1.5))$n
+
+```
+
+Notar que no se cumple la condición de cantidad de éxitos y fracasos para la raza negra, mientras que para la raza blanca si, por lo cual decidimos usar un alfa más exigente para aplicar el método de Wilson.
+
+```{r f}
+n <- c(n_rb, n_rn)
+exitos <- c(exitos_rb, exitos_rn)
+alpha <- 0.01
+
+# Prueba de wilson
+prueba <- prop.test(exitos, n = n, alternative = "greater", conf.level = 1 - alpha)
+
+print(prueba)
+
+```
+Después de aplicar el método de Wilson para los datos, obtenemos un p-value de 0.0042, por lo que al ser menor a 0.01, se rechaza la hipótesis nula y con un 99% de confianza podemos afirmar que la proporción de atletas de raza blanca que redujeron sus mejores marcas en al menos 2,6 segundos es mayor a la proporción de atletas que lo hicieron en al menos 1,5 segundos.

@@ -1,0 +1,200 @@
+---
+title: "EP09-respuesta-equipo-9"
+author: "Grupo 9"
+date: "2024-12-02"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(leaps)
+library(car)
+library(caret)
+```
+
+#### 1) Definir la semilla a utilizar, que corresponde a los últimos cuatro dígitos del RUN (sin considerar el dígito verificador) del integrante de menor edad del equipo.
+
+```{r}
+Datos = read.csv2("EP09 Datos.csv")
+
+set.seed(8071)
+#definimos el numero de muestras
+n1 <- 100
+
+# Filtrar los datos según la condición: hombres
+datos_filtrados <- Datos %>% 
+  filter(Gender == 1) %>% sample_n(n1)
+```
+
+#### 2) Seleccionar una muestra aleatoria de 100 mujeres (si la semilla es un número par) o 100 hombres (si la semilla es impar), y separar 70 casos para trabajar en la construcción de modelos y 30 para su evaluación en datos no vistos.
+
+En base al código anterior podemos observar que la semilla utilizada es impar, por lo que se seleccionarán 100 hombres.
+
+```{r}
+# Seleccionar los primeros 70 datos
+datos_muestra <- datos_filtrados[1:70, ]
+
+# Seleccionar los siguientes 30 datos restantes
+datos_restantes <- datos_filtrados[71:100, ]
+```
+
+#### 3) Seleccionar de forma aleatoria ocho posibles variables predictoras.
+
+A continuación se mostrara el *script* para obtener las 8 variables aleatorias.
+
+```{r}
+nombres_columnas <- colnames(Datos)
+#elegir al azar 8 columnas
+set.seed(8071)
+predictores <- sample(nombres_columnas, 8)
+print(predictores)
+```
+
+#### 4) Seleccionar, de las otras variables, una que el equipo considere que podría ser útil para predecir la variable Peso (sin considerar la estatura), justificando bien esta selección.
+
+La variable elegida corresponde a Chest.depth, esto debido a que entre más grande sea la distancia entre el esternón y la espina de una persona indicaría que tiene un mayor peso, por lo que se considera que esta variable puede ser útil para predecir el peso de una persona.
+
+Para apoyar esta elección se mostrara la correlacion que existe entre esta variable y el peso de un hombre.
+
+```{r}
+cor(datos_muestra$Chest.depth, datos_muestra$Weight)
+```
+
+En base al resultado de esta prueba, podemos observar que existe una alta correlación entre estas variables, por lo que se justifica Chest.depth como predictor.
+
+#### 5) Usando el entorno R y paquetes estándares1, construir un modelo de regresión lineal simple con el predictor seleccionado en el paso anterior.
+
+A continuación se muestra el *script* donde se crea un modelo simple con la variable elegida en el punto anterior.
+
+```{r}
+# modelo de regresión lineal simple chest.depth
+modelo <- lm(Weight ~ Chest.depth, data = datos_muestra)
+```
+
+#### 6) Usando herramientas estándares para la exploración de modelos del entorno R, buscar entre dos y cinco predictores de entre las variables seleccionadas al azar en el punto 3, para agregar al modelo de regresión lineal simple obtenido en el paso 5.
+
+Antes de realizar esto, se debe mencionar que para crear el modelo se elegirán un máximo tres predictores, esto con el fin de que no se vuelva muy complejo y para evitar posibles variables irrelevantes.
+
+```{r}
+# Seleccionar las variables predictoras en el data frame
+predictores = c(predictores, "Weight", "Chest.depth")
+datos_muestra_6 = datos_muestra[,predictores]
+```
+
+```{r}
+
+# Ajustar el mol modelo completo.
+nulo <- modelo
+completo <- lm(Weight ~ ., data = datos_muestra_6)
+
+# Realiza regresión escalonada usando el menor BIC
+# como criterio (aunque se reporta como AIC), bajando
+# (temporalmente) el número de cifras significativas
+# y el ancho máximo de la pantalla al imprimir.
+opt <- options(digits = 2, width = 54)
+modelo_final <- step(nulo, scope = list(lower = nulo, upper = completo),
+  direction = "both", k = log(nrow(datos_muestra_6)),
+  test = "F", trace = 1)
+options(digits = opt[[1]], width = opt[[2]])
+
+# Mostrar los coeficientes del modelo conseguido
+cat("\nModelo obtenido:\n")
+print(modelo_final[["coefficients"]])
+```
+
+```{r}
+# Finalmente se muestra por pantalla el modelo obtenido
+print(summary(modelo_final))
+```
+
+#### 7) Evaluar la bondad de ajuste (incluyendo el análisis de casos atípicos y casos influyentes) y la generalidad (condiciones para RLM) de los modelos y “arreglarlos” en caso de que presenten algún problema.
+
+A continuación se evaluara la bondad de ajuste que tiene el modelo creado anteriormente.
+
+```{r}
+print(summary(modelo))
+cat("-------------------------------------")
+print(summary(modelo_final))
+```
+
+Debido a que el $R^2$ ajustado del modelo final es mayor que el $R^2$ del modelo simple, se puede concluir que el modelo final es mejor que el modelo simple, por lo tanto se demuestra que los predictores agregados son relevantes para predecir el peso de un hombre.
+
+Si bien se mostró que los valores de $R^2$ nos indican que el modelo final es mejor, es necesario realizar una prueba anova para confirmar si realmente una diferencia significativa entre los modelos nulo, RLS y RLM.
+
+```{r}
+modelo_nulo = lm(Weight ~ 1, data = datos_muestra)
+anova = anova(modelo_nulo, modelo, modelo_final)
+print(anova)
+```
+
+Tras el análisis de la prueba Anova para la comparación de los modelos, se concluye que tanto el modelo final como el RLS son significativamente mejores que el nulo, no obstante el RLM presenta una mayor reducción de la varianza respecto al RLS, disminuyendo de 3075,3 a 897, por lo tanto el modelo RLM es mejor que el RLS.
+
+##### Evaluar las condiciones para RLM
+
+**Condición 1:** La variable *Weight* efectivamente es cuantitativa y continua, por lo que cumple con la condición.
+
+**Condición 2:** Todos los predictores utilizados son cuantitativos, cumpliendo la condición.
+
+**Condición 3:** Se observa que los datos de cada predictor varían en cada observación, cumpliendo la condición.
+
+Para evaluar las **condiciones 4, 5 y 6** se realizarán los gráficos de residuos y marginales asociados a cada predictor del modelo, incluyendo la prueba de homocedasticidad para la condición 6:
+
+```{r}
+residualPlots(modelo_final)
+```
+
+```{r}
+marginalModelPlots(modelo_final, sd = TRUE,
+                   id = list(method = "r", n = 3, cex = 0.7, location = "lr"),
+                   col = "steelblue", pch = 20, col.line = c("steelblue", "red"))
+```
+
+```{r}
+# verificar homocedasticidad
+ncvTest(modelo_final)
+```
+
+De los gráficos y pruebas realizadas no podemos descartar que las relaciones entre la variable de salida y los predictores sean lineales, ni que la varianza de los residuos producidos por el modelo es constante.
+
+**Condición 7:** Para esta se utilizará la función *durbinWatsonTest()* sobre el modelo para evaluar la independencia de los residuos:
+
+```{r}
+# verificar independencia de los datos
+durbinWatsonTest(modelo_final)
+```
+
+Con el resultado de la prueba, se descarta la existencia de autocorrelación entre los residuos, por lo que no hay evidencia suficiente de que no se esté cumpliendo la condición de independencia.
+
+**Condición 8:** Para evaluar esto se utilizará la función factor de inflación de varianza (VIF) sobre el modelo para evaluar la multicolinealidad:
+
+```{r}
+# Verificar multicolinealidad
+vif(modelo_final)
+```
+
+Dado que los valores para cada predictor se encuentran entre el rango de 1 a 5, existe multicolinealidad moderada, pero no es motivo de gran preocupación.
+
+**Condición 9:** Se verificará la existencia de casos influyentes en el modelo
+
+```{r}
+# verificar influencia
+influencePlot(modelo_final)
+```
+
+Dado que los valores obtenidos para los casos que podrían ser influyentes son bastante bajos, se concluye que no hay influencia significativa.
+
+#### 8) Evaluar el poder predictivo del modelo con los datos no utilizados para construirlo.
+
+A continuación se evaluara la calidad predictiva con los 30 datos que no se utilizaron para construir el modelo.
+
+```{r}
+# calidad predictiva del modelo con validación cruzada dejando uno fuera
+fmla = formula("Weight ~ Chest.depth + Hip.Girth + Knees.diameter + Shoulder.Girth")
+weight = train(fmla, data = datos_restantes, method = "lm", trControl = trainControl(method = "LOOCV"))
+modelo_calidad = weight[["finalModel"]]
+
+print(weight[["pred"]])
+print(weight[["results"]])
+```
+
+Finalmente, el modelo presenta una alta calidad predictiva, puesto que el valor $R^2$ es cercano al obtenido con los datos de entrenamiento, lo que indica que el modelo es capaz de predecir el peso de un hombre con una precisión significativamente alta.

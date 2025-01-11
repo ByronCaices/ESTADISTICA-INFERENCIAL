@@ -1,0 +1,301 @@
+---
+title: "EP08 - Grupo 1"
+author: "Yo"
+date: "2024-11-15"
+output: html_document
+---
+
+1. Propongan una pregunta de investigación original, que involucre la comparación de una frecuencia de un evento o característica en dos grupos independientes (más abajo se dan unos ejemplos). Fijando una semilla propia, seleccionen una muestra aleatoria de hogares (100 \< n \< 150) y respondan la pregunta propuesta utilizando una prueba de permutaciones Monte Carlo.
+
+Indicación: creen su propio código, específicamente para este problema, no usen directamente el script del apunte.
+
+La proporción de personas asalariadas en la provincia de Santiago, ¿tiene igual proporción para hombres y mujeres?
+
+Para hacer la evaluación, se seleccionó una muestra aleatoria de n=130 hogares residentes en la provincia de Santiago. A partir de los datos, se definió una variable categórica que clasifica a las personas como "Asalariado" o "No asalariado" según su respuesta a la pregunta laboral ch1.
+
+Para poder contestar a esa pregunta se plantea la siguiente hipótesis nula y alternativa:
+
+$H_O$: Las proporciones de hombres y mujeres que son asalariadas en la provincia de Santiago son iguales.
+$H_A$: La proporción de hombres asalariados es diferente a la proporción de mujeres asalariadas en la provincia de Santiago.
+
+Para evaluar la significancia estadística de la diferencia observada, se empleó una prueba de permutaciones de Monte Carlo con 1000 permutaciones aleatorias. En cada permutación, se reasignó aleatoriamente el género de los individuos, manteniendo fija la clasificación de asalariados. El valor p se calcula como la proporción de permutaciones en las que la diferencia simulada es al menos tan extrema como la diferencia observada.
+
+```{r}
+
+library(boot)
+library(tidyverse)
+
+# Leer los datos y filtrar según el criterio solicitado segun enunciado
+csv <- read.csv("EP08 Datos CASEN 2017.csv")
+
+# Se establece la semilla  para reproducibilidad
+set.seed(123)
+n <- 130
+datos <- csv %>% filter(provincia == "Santiago") %>%
+  mutate(esAsalariado = ifelse(ch1 == "Asalariado", "Si", "No")) %>%
+  select(sexo, esAsalariado) %>%
+  sample_n(n)
+
+# Crear funcion que calcule la diferencia entre las proporciones
+get_proporciones <- function(datos){
+  tabla <- table(datos)
+  proporcionesHombres <- tabla[1,2] / (tabla[1,2] + tabla[1,1])
+  proporcionesMujeres <- tabla[2,2] / (tabla[2,2] + tabla[2,1])
+  return(proporcionesHombres-proporcionesMujeres)
+}
+
+diferencia <- get_proporciones(datos)
+cat("\nLa diferencia entre las proporciones es: ", diferencia, "\n")
+
+# Realizar las permutaciones
+permutaciones <- 1000
+perm <- numeric(permutaciones)
+
+for (i in 1:permutaciones) {
+  datos_permutados <- datos %>%
+  mutate(sexo = sample(sexo)) 
+  perm[i] <- get_proporciones(datos_permutados)
+}
+
+# Calcular valor p
+p_valor <- mean(abs(perm) >= abs(diferencia))
+cat("El valor p es: ", p_valor, "\n")
+
+# Mostrar el histograma de las diferencias bajo permutaciones
+hist(perm, main = "Distribución de diferencias bajo permutaciones",
+     xlab = "Diferencia de proporciones", breaks = 30, col = "lightblue")
+abline(v = diferencia, col = "red", lwd = 2, lty = 2)
+legend("topright", legend = c("Diferencia observada"),
+       col = c("red"), lty = 2, lwd = 2)
+
+```
+
+Dado que se ha obtenido un valor p=0.057, ligeramente superior al nivel de significancia 0.05 no podemos rechazar la hipótesis nula con un nivel de confianza del 95%. Esto significa que no hay suficiente evidencia estadística para concluir que las proporciones de asalariados entre hombres y mujeres sean significativamente diferentes en la provincia de Santiago.
+
+2. Propongan una pregunta de investigación original, que involucre la comparación de las medias de más de dos grupos independientes (más abajo se dan unos ejemplos). Fijando una semilla distinta a la anterior, seleccionen una muestra aleatoria de hogares (200 < n < 300) y respondan la pregunta propuesta utilizando bootstrapping. Solo por ejercicio académico, aplique un análisis post-hoc con bootstrapping aunque este no fuera necesario. Indicación: consideren que el análisis post-hoc debe hacerse con las mismas remuestras usadas para la prueba ómnibus.
+
+¿El promedio de ingreso de las personas mayores de 30 años y que tengan un estado civil soltero, casado, divorciado y viudo es el mismo en la provincia de Santiago?
+
+Basándonos en lo que se quiere analizar, nacen las siguientes hipótesis:
+
+H0: La media de los sueldos de las personas solteros(as), casados(as), divorciados(as) y viudos(as) mayores de 30 años no se pueden observar diferencias significativas, es decir, son iguales.
+
+Reflejado matemáticamente como:
+
+$H_0 : \mu_s{Solteros(as)} = \mu_s{Casados(as)}=\mu_s{Divorciados(as)}=\mu_s{Viudos(as)}$
+
+HA: La media de los sueldos de las personas solteros(as), casados(as), divorciados(as) y viudos(as) de 30 años no son iguales.
+
+Reflejado matemáticamente como:
+
+$H_A : \mu_s{Solteros(as)} \neq \mu_s{Casados(as)} \neq \mu_s{Divorciados(as)} \neq \mu_s{Viudos(as)}$
+
+```{r}
+library(dplyr)
+library(ggpubr)
+library(WRS2)
+library(ez)
+
+# Se establece la semilla  para reproducibilidad y se obtienen lo datos necesarios
+set.seed(123)
+datos <- read.csv("EP08 Datos CASEN 2017.csv")
+datos_santiago <- datos %>% filter(provincia=="Santiago", ecivil %in% c("Soltero(a)","Casado(a)","Divorciado (a)","Viudo(a)") , edad > 30)
+datos_santiago <- datos_santiago %>% select(ecivil,ytot)
+datos_santiago <- na.omit(datos_santiago)
+muestra_santiago <- datos_santiago %>% slice_sample(n = 230, replace = FALSE)
+
+# Realiza la prueba de normalidad sobre los datos
+shapiro.test(muestra_santiago$ytot)
+```
+
+Si nos damos cuenta, no se cumple la distribución normal de los datos, por este motivo se va a utilizar el método de boootstrap para calcular la media y de este modo poder dar respuesta a las hipótesis planteadas.
+
+```{r}
+soltero <- which(muestra_santiago$ecivil == "Soltero(a)")
+casado <- which(muestra_santiago$ecivil == "Casado(a)")
+divorciado <- which(muestra_santiago$ecivil == "Divorciado (a)")
+viudo <- which(muestra_santiago$ecivil == "Viudo(a)")
+
+# Crear funcion para calcular el estadistico F correspondiente al ANOVA para muestras independientes
+sacar_f <- function(datos, muestra1, muestra2, muestra3, muestra4) {
+  i <- c(muestra1, muestra2, muestra3, muestra4)
+  ids <- factor(1:length(i))
+  datos <- cbind(id = ids, datos[i, ])
+  datos$ecivil <- factor(datos$ecivil)
+  anova <- ezANOVA(data = datos, dv = ytot, wid = id, between = ecivil, type = 2) # Utilizar el type 2 para solucionar el problema del desbalance del tamaño de las muestras
+  return(anova$ANOVA$F)
+}
+
+# Obtener el estadistico F para la muestra original
+f_valor <- sacar_f(muestra_santiago, soltero, casado, divorciado, viudo)
+cat("\nEl valor F de la muestra es: ", f_valor, "\n")
+
+```
+
+Para poder realizar el análisis post hoc, se va a realizar un bootstrap para obtener el valor F de las remuestras para que de este modo se pueda comparar con el valor F de la muestra original.
+
+```{r}
+
+# Obtener los datos de la muestra, calcular la media y desviación estándar generales
+media_muestra <- mean(muestra_santiago$ytot)
+sd_muestra <- sd(muestra_santiago$ytot)
+
+# Se obtienen los datos de las medias por estado civil para la muestra
+datos_grupo <- muestra_santiago %>% 
+  group_by(ecivil) %>% 
+  summarise(media = mean(ytot), sd = sd(ytot)) %>% 
+  as.data.frame()
+
+# Desplazar los valores de cada grupo para que tengan la misma media e igual varianza
+muestra_mod <- muestra_santiago
+muestra_mod[soltero,"ytot"] <- media_muestra + 
+  (muestra_mod[soltero,"ytot"] - datos_grupo[1,"media"]) *
+  (sd_muestra / datos_grupo[1,"sd"])
+muestra_mod[casado,"ytot"] <- media_muestra + 
+  (muestra_mod[casado,"ytot"] - datos_grupo[2,"media"]) *
+  (sd_muestra / datos_grupo[2,"sd"])
+muestra_mod[divorciado,"ytot"] <- media_muestra +
+  (muestra_mod[divorciado,"ytot"] - datos_grupo[3,"media"]) *
+  (sd_muestra / datos_grupo[3,"sd"])
+muestra_mod[viudo,"ytot"] <- media_muestra +
+  (muestra_mod[viudo,"ytot"] - datos_grupo[4,"media"]) *
+  (sd_muestra / datos_grupo[4,"sd"])
+
+# Definir los valores para los remuestreos y realizar el bootstrap para cada grupo con reemplazo
+cantidad_muestras <- 2000
+remuestra_soltero <- lapply(1:cantidad_muestras, function(i) sample(soltero, replace = TRUE))
+remuestra_casado <- lapply(1:cantidad_muestras, function(i) sample(casado, replace = TRUE))
+remuestra_divorciado <- lapply(1:cantidad_muestras, function(i) sample(divorciado, replace = TRUE))
+remuestra_viudo <- lapply(1:cantidad_muestras, function(i) sample(viudo, replace = TRUE))
+
+# Luego, se obtiene la distribución de boostrapping para ello se erear una función para obtener el valor F de cada remuestra
+sacar_f_boot <- function(i, datos, verbose = TRUE) {
+  sacar_f(datos, remuestra_soltero[[i]], remuestra_casado[[i]], 
+          remuestra_divorciado[[i]], remuestra_viudo[[i]])
+}
+distribucion <- suppressMessages(suppressWarnings(
+  sapply(1:cantidad_muestras, function(i) sacar_f_boot(i, muestra_mod, verbose = FALSE))
+))
+
+# Realizar el histograma de la distribución de los valores F obtenidos en las remuestras, y agregar la línea vertical correspondiente al valor F de la muestra original
+g <- gghistogram(data.frame(distribucion), x = "distribucion",
+                 xlab = "Estadístico F", ylab = "Frecuencia",
+                  bins = 30, fill = "blue") + geom_vline(xintercept = f_valor, color = "red")
+
+g
+```
+
+Por medio del histograma se puede observar que el valor F de la muestra original se encuentra dentro de la distribución de los valores F obtenidos en las remuestras. Para poder obtener el valor crítico de F y el valor p, se realizan los cálculos correspondientes.
+
+```{r}
+
+F_crit <- quantile(distribucion, 0.95)
+cat("\nEl valor crítico de F es: ", F_crit, ", con un 95% de confianza.\n")
+
+p_valor <- (sum(distribucion > f_valor) + 1) / (cantidad_muestras + 1)
+cat("El valor p es: ", p_valor, "\n")
+```
+Para evaluar la hipótesis nula, se compara el valor F de la muestra original con el valor crítico de F obtenido en las remuestras. Dado que el valor F de la muestra original es menor que el valor crítico de F, no se rechaza la hipótesis nula en favor de la alternativa. Por lo tanto, se concluye con un 95% de confianza, que la media de los sueldos de las personas solteras, casadas, divorciadas y viudas mayores de 30 años no es diferente.
+
+Por consiguiente, no es necesario realizar un análisis post hoc, pero se puede realizar para obtener más información. Para ello se realizarán comparaciones entre pares, utilizando las mismas remuestras utilizadas en la prueba omnibus.
+
+```{r}
+# Crear una funcion que permita obtener la diferencia de medias.
+
+sacar_medias <- function(datos, muestra_1, muestra_2) {
+  media_1 <- mean(datos[muestra_1,"ytot"])
+  media_2 <- mean(datos[muestra_2,"ytot"])
+  return(media_1 - media_2)
+}
+
+# Realizar las comparaciones entre cada par posible
+dif_sol_cas <- sacar_medias(datos_santiago,soltero,casado)
+dif_sol_div <- sacar_medias(datos_santiago,soltero,divorciado)
+dif_sol_viu <- sacar_medias(datos_santiago,soltero,viudo)
+dif_cas_div <- sacar_medias(datos_santiago,casado,divorciado)
+dif_cas_viu <- sacar_medias(datos_santiago,casado,viudo)
+dif_div_viu <- sacar_medias(datos_santiago,divorciado,viudo)
+
+cat("Diferencia de medias entre grupos:\n")
+cat("Soltero - Casado:", round(dif_sol_cas), "\n")
+cat("Soltero - Divorciado:", round(dif_sol_div), "\n")
+cat("Soltero - Viudo:", round(dif_sol_viu), "\n")
+cat("Casado - Divorciado:", round(dif_cas_div), "\n")
+cat("Casado - Viudo:", round(dif_cas_viu), "\n")
+cat("Divorciado - Viudo:", round(dif_div_viu), "\n")
+
+# Luego se procede a obtener las distribuciones boostrap de las diferencias de medias para cada par
+
+boot_dif_sol_cas <- sapply(1:cantidad_muestras, function(i) sacar_medias(muestra_mod,remuestra_soltero[[i]],remuestra_casado[[i]]))
+boot_dif_sol_div <- sapply(1:cantidad_muestras, function(i) sacar_medias(muestra_mod,remuestra_soltero[[i]],remuestra_divorciado[[i]]))
+boot_dif_sol_viu <- sapply(1:cantidad_muestras, function(i) sacar_medias(muestra_mod,remuestra_soltero[[i]],remuestra_viudo[[i]]))
+boot_dif_cas_div <- sapply(1:cantidad_muestras, function(i) sacar_medias(muestra_mod,remuestra_casado[[i]],remuestra_divorciado[[i]]))
+boot_dif_cas_viu <- sapply(1:cantidad_muestras, function(i) sacar_medias(muestra_mod,remuestra_casado[[i]],remuestra_viudo[[i]]))
+boot_dif_div_viu <- sapply(1:cantidad_muestras, function(i) sacar_medias(muestra_mod,remuestra_divorciado[[i]],remuestra_viudo[[i]]))
+
+# Realizar histogramas de las distribuciones de las diferencias de medias para cada par
+g1 <- gghistogram(data.frame(boot_dif_sol_cas)/1000, x = "boot_dif_sol_cas",
+                 xlab = "Diferencia (miles)", ylab = "Frecuencia (S-C)",
+                  bins = 30, fill = "blue") + geom_vline(xintercept = dif_sol_cas/1000, color = "red")
+g2 <- gghistogram(data.frame(boot_dif_sol_div)/1000, x = "boot_dif_sol_div",
+                 xlab = "Diferencia (miles)", ylab = "Frecuencia (S-D)",
+                  bins = 30, fill = "blue") + geom_vline(xintercept = dif_sol_div/1000, color = "red")
+g3 <- gghistogram(data.frame(boot_dif_sol_viu)/1000, x = "boot_dif_sol_viu", 
+                 xlab = "Diferencia (miles)", ylab = "Frecuencia (S-V)",
+                  bins = 30, fill = "blue") + geom_vline(xintercept = dif_sol_viu/1000, color = "red")
+g4 <- gghistogram(data.frame(boot_dif_cas_div)/1000, x = "boot_dif_cas_div", 
+                 xlab = "Diferencia (miles)", ylab = "Frecuencia (C-D)",
+                  bins = 30, fill = "blue") + geom_vline(xintercept = dif_cas_div/1000, color = "red")
+g5 <- gghistogram(data.frame(boot_dif_cas_viu)/1000, x = "boot_dif_cas_viu", 
+                 xlab = "Diferencia (miles)", ylab = "Frecuencia (C-V)",
+                  bins = 30, fill = "blue") + geom_vline(xintercept = dif_cas_viu/1000, color = "red")
+g6 <- gghistogram(data.frame(boot_dif_div_viu)/1000, x = "boot_dif_div_viu", 
+                 xlab = "Diferencia (miles)", ylab = "Frecuencia (D-V)",
+                  bins = 30, fill = "blue") + geom_vline(xintercept = dif_div_viu/1000, color = "red")
+p3 <- ggarrange(g1, g2, g3, g4, g5, g6, ncol = 2, nrow = 3)
+print(p3)
+
+```
+Los gráficos esbozados nos permite visualizar la distribución de las remuestras de las diferencias de medias entre los grupos, donde se visualiza el valor medio de la diferencia de medias de la muestra original. Luego el procedimiento continúa con el cálculo de los valores p y los intervalos de confianza de las diferencias de medias entre los grupos.
+
+```{r}
+# Obtenemos los valores p y los intervalos de confianza de las diferencias de medias entre los grupos
+valor_p_sol_cas <- (sum(abs(boot_dif_sol_cas) > abs(dif_sol_cas)) + 1) / (cantidad_muestras + 1)
+valor_p_sol_div <- (sum(abs(boot_dif_sol_div) > abs(dif_sol_div)) + 1) / (cantidad_muestras + 1)
+valor_p_sol_viu <- (sum(abs(boot_dif_sol_viu) > abs(dif_sol_viu)) + 1) / (cantidad_muestras + 1)
+valor_p_cas_div <- (sum(abs(boot_dif_cas_div) > abs(dif_cas_div)) + 1) / (cantidad_muestras + 1)
+valor_p_cas_viu <- (sum(abs(boot_dif_cas_viu) > abs(dif_cas_viu)) + 1) / (cantidad_muestras + 1)
+valor_p_div_viu <- (sum(abs(boot_dif_div_viu) > abs(dif_div_viu)) + 1) / (cantidad_muestras + 1)
+
+cat("Valores p de las diferencias de medias entre grupos:\n")
+cat("Soltero - Casado:", valor_p_sol_cas, "\n")
+cat("Soltero - Divorciado:", valor_p_sol_div, "\n")
+cat("Soltero - Viudo:", valor_p_sol_viu, "\n")
+cat("Casado - Divorciado:", valor_p_cas_div, "\n")
+cat("Casado - Viudo:", valor_p_cas_viu, "\n")
+cat("Divorciado - Viudo:", valor_p_div_viu, "\n\n")
+
+
+# Calcular los intervalos de confianza de las diferencias de medias entre los grupos utilizando las remuestras
+ci.dif.sol.cas <- quantile(boot_dif_sol_cas, c(0.025, 0.975))
+ci.dif.sol.div <- quantile(boot_dif_sol_div, c(0.025, 0.975))
+ci.dif.sol.viu <- quantile(boot_dif_sol_viu, c(0.025, 0.975))
+ci.dif.cas.div <- quantile(boot_dif_cas_div, c(0.025, 0.975))
+ci.dif.cas.viu <- quantile(boot_dif_cas_viu, c(0.025, 0.975))
+ci.dif.div.viu <- quantile(boot_dif_div_viu, c(0.025, 0.975))
+
+cat("Intervalos de 95% confianza:\n")
+cat("Soltero - Casado    : [", round(ci.dif.sol.cas[1], 2), ", ",
+                                 round(ci.dif.sol.cas[2], 2), "]\n", sep = "")
+cat("Soltero - Divorciado: [", round(ci.dif.sol.div[1], 2), ", ",
+                                 round(ci.dif.sol.div[2], 2), "]\n", sep = "")
+cat("Soltero - Viudo     : [", round(ci.dif.sol.viu[1], 2), ", ",
+                                 round(ci.dif.sol.viu[2], 2), "]\n", sep = "")
+cat("Casado - Divorciado : [", round(ci.dif.cas.div[1], 2), ", ",
+                                 round(ci.dif.cas.div[2], 2), "]\n", sep = "")
+cat("Casado - Viudo      : [", round(ci.dif.cas.viu[1], 2), ", ",
+                                 round(ci.dif.cas.viu[2], 2), "]\n", sep = "")
+cat("Divorciado - Viudo  : [", round(ci.dif.div.viu[1], 2), ", ",
+                                 round(ci.dif.div.viu[2], 2), "]\n", sep = "")
+```
+En relación con la información obtenida por el procedimiento de post hoc, se ha obtenido que todos los valores p de las diferencias son mayores al nivel de significancia de 0.05, lo que indica que no se rechaza la hipótesis nula en favor de la alternativa. Observando los intervalos de confianza, se puede observar que la mayoría contiene el valor de diferencia 0, con excepción de los intervalos de las diferencias de medias entre los grupos de solteros con casados, y casados con divorciados. Por este motivo se puede concluir con un 95% de confianza que no existen diferencias significativas en las medias de los sueldos entre los grupos de personas solteras, casadas, divorciadas y viudas mayores de 30 años en la provincia de Santiago.

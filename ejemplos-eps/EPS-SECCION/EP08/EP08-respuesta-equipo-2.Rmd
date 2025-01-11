@@ -1,0 +1,364 @@
+---
+title: "EP08-respuesta-equipo-2"
+author: "Equipo 2"
+date: "2024-11-18"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(boot)
+library(ggplot2)
+library(ggpubr)
+library(ez)
+library(emmeans)
+```
+
+```{r}
+Datos = read.csv("EP08 Datos CASEN 2017.csv")
+```
+
+1) Propongan una pregunta de investigación original, que involucre la comparación de una frecuencia de un evento o característica en dos grupos independientes (más abajo se dan unos ejemplos). Fijando una semilla propia, seleccionen una muestra aleatoria de hogares (100 < n < 150) y respondan la pregunta propuesta utilizando una prueba de permutaciones Monte Carlo. Indicación: creen su propio código, específicamente para este problema, no usen directamente el script del apunte.
+
+Pregunta 1:
+
+Comparación de una frecuencia en dos grupos independientes
+
+¿La proporción de personas mayores de 18 años (variable: edad > 18) que están casadas (variable: ecivil = "Casado(a)") es similar entre zonas urbanas y rurales (variable: zona)?
+
+H0: Las proporciones de personas casadas en zonas urbanas y rurales son iguales. (ph−pm=0)
+
+Ha: Las proporciones de personas casadas en zonas urbanas y rurales son distintas. (ph−pm != 0)
+
+```{r}
+# Cargar librerías necesarias
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+
+
+# Fijar la semilla para replicabilidad
+set.seed(23)
+#definimos el numero de muestras
+n1 <- 120
+
+# Filtrar los datos según la condición: mayores de 18 años y casados
+datos_filtrados <- Datos %>% 
+  filter(edad > 18) %>% 
+  mutate(casado = ifelse(ecivil == "Casado(a)", 1, 0)) %>% 
+  select( zona, casado)
+
+```
+
+La variable casado, al ser categórica y codificada como 1 (casado) y 0 (no casado), no posee distribución normal. Por tanto, pruebas que asumen normalidad no son apropiadas en este contexto. En su lugar, trabajar con proporciones es una estrategia más eficiente para inferir sobre la media.
+
+Además, los datos al estar representados de forma binaria, pueden estar desequilibrados en sus categorías (es decir, más 1s que 0s o viceversa), lo que complica el uso de pruebas paramétricas tradicionales. Por lo mencionado anteriormente, se realizará una prueba de permutaciones de Monte Carlo.
+
+```{r}
+# Seleccionar una muestra aleatoria completa de 120 filas
+muestra <- datos_filtrados %>%
+  sample_n(n1)
+
+# Función para calcular la diferencia de proporciones entre zonas
+get.prop.dif <- function(df, verbose = FALSE) {
+  # Crear tabla de frecuencias cruzadas entre zona y casado
+  tabla <- table(df$zona, df$casado)
+  
+  if (verbose) {
+    print(tabla)
+  }
+  
+  # Calcular proporciones de personas casadas en zonas rurales y urbanas
+  p_rural <- ifelse("Rural" %in% rownames(tabla), 
+                    tabla["Rural", "1"] / sum(tabla["Rural", ]), 
+                    0)
+  p_urbano <- ifelse("Urbano" %in% rownames(tabla), 
+                     tabla["Urbano", "1"] / sum(tabla["Urbano", ]), 
+                     0)
+  
+  if (verbose) {
+    cat("\nProporción de personas casadas en zonas rurales y urbanas:\n")
+    cat("Rural:", round(p_rural, 4), "\n")
+    cat("Urbano:", round(p_urbano, 4), "\n")
+  }
+  
+  # Retornar la diferencia entre proporciones
+  return(p_rural - p_urbano)
+}
+
+# Calcular la diferencia observada en la muestra
+dif.obs <- get.prop.dif(muestra, verbose = TRUE)
+cat("\nDiferencia de proporciones observada:", round(dif.obs, 3), "\n")
+
+
+#definimos el numero de permutaciones 
+n_perm <- 3000
+
+# Obtenemos las permutaciones, teniendo cuidado de usar una semilla, como indica el enunciado, que nos permita obtener los mismos resultados cada vez que ejecutemos el script.
+set.seed(43)
+permutaciones <- lapply(1:n_perm, function(i) sample(1:n1)) 
+
+# Función para calcular la diferencia de proporciones con las permutaciones
+get.prop.dif.perm <- function(indices, df, verbose = FALSE) {
+  # Crear un nuevo data frame con la variable 'casado' y la variable permutada 'zona'
+  df.new <- data.frame(
+    casado = df$casado,
+    zona = df$zona[indices]
+  )
+  
+  # Calcular la diferencia de proporciones en el data frame permutado
+  get.prop.dif(df.new, verbose)
+}
+
+# Generar las permutaciones (índices permutados)
+permutaciones <- replicate(n_perm, sample(1:n1))
+
+# Calcular las diferencias de proporciones para cada permutación
+distribucion <- apply(permutaciones, 2, get.prop.dif.perm, df = muestra)
+
+
+# Crear histograma para visualizar la distribución
+p1<- gghistogram(data.frame(distribucion), "distribucion", fill= "blue",
+                 title="Distribucion permutada",
+                 xlab="diferencias entre las proporciones ",
+                 ylab="Frecuencia")
+p1<- p1 +geom_vline(xintercept = dif.obs, color = "red", linetype = "dashed")
+print(p1)
+
+# Calcular el intervalo de confianza al 95% para las diferencias permutadas
+conf_int <- quantile(distribucion, c(0.025, 0.975))
+
+# Calcular el valor p
+p_value <- mean(abs(distribucion) >= abs(dif.obs))
+
+# Mostrar los resultados
+cat("\nIntervalo de confianza al 95%:", conf_int, "\n")
+cat("Valor p:", p_value, "\n")
+
+```
+
+Vemos que el valor p resultante es menor a una significancia de 0.05, por lo que rechazamos la hipótesis nula en favor de la alternativa y concluimos que la proporción de personas casadas en zonas rurales y urbanas es distinta.
+
+2) Propongan una pregunta de investigación original, que involucre la comparación de las medias de más de dos grupos independientes (más abajo se dan unos ejemplos). Fijando una semilla distinta a la anterior, seleccionen una muestra aleatoria de hogares (200 < n < 300) y respondan la pregunta propuesta utilizando bootstrapping. Solo por ejercicio académico, aplique un análisis post-hoc con bootstrapping aunque este no fuera necesario. Indicación: consideren que el análisis post-hoc debe hacerse con las mismas remuestras usadas para la prueba ómnibus.
+
+EL TIEMPO DE EJECUCIÓN DE LA PREGUNTA ES DE APROXIMADAMENTE 2 A 3 MINUTOS
+
+Pregunta 2:
+
+Comparación de las medias de más de dos grupos independientes
+¿El ingreso total promedio del hogar (variable: ytot) es similar entre hogares en las comunas de Buin, Melipilla y Providencia (variable: comuna)? 
+
+Para responder a esta pregunta, debemos constrastar las medias de los 3 grupos que son independiente, pero al tener medias distintas, no podemos comparar sus diferencias de manera directa, por lo que en este caso utilizaremos el estadistico F para evaluar su igualdad.
+
+Para lo anterior se plantean las siguiente hipotesis:
+
+H0: El ingreso total promedio del hogar es igual en las comunas de Buin, Melipilla y Providencia. (mu_Buin = mu_Melipilla = mu_Providencia)
+
+Ha: El ingreso total promedio del hogar es distinto en al menos una de las comunas. (∃ i,j ∈ {Buin, Melipilla, Providencia} | mu_i != mu_j)
+
+```{r}
+#Filtrar los datos para las comunas de Buin, Melipilla y Providencia y tomar una muestra de entre 200 y 300 elementos
+datos2 = Datos %>% filter(comuna == "Buin" | comuna == "Melipilla" | comuna == "Providencia")
+set.seed(1234)
+n_muestra = sample(200:300, 1)
+muestra = datos2 %>% sample_n(n_muestra)
+#Calcular y mostrar el tamaño de cada muestra por comuna
+muestra %>%
+  group_by(comuna) %>%
+  summarise(tamano = n()) %>%
+  print()
+
+indices_B = which(muestra$comuna == "Buin")
+indices_M = which(muestra$comuna == "Melipilla")
+indices_P = which(muestra$comuna == "Providencia")
+
+#Graficar las muestra para su analisis
+box <- ggboxplot(
+  data = muestra,
+  x = "comuna",
+  y = "ytot",
+  fill = "comuna",
+  palette = "jco"
+)
+
+box <- box +
+  xlab("Comuna") +
+  ylab("Total Y (ytot)") +
+  ggtitle("Distribución de Ytot por Comuna")
+
+print(box)
+```
+
+Podemos ver que las muestras no estan balanceadas y presentan valores atipicos. En este caso, no es optimo usar un metodo de analisis clasico por lo que utilizaremos el remuestreo con bootstrapping.
+
+```{r}
+#Definimos una funcion para calcular el estadistico f para las muestras originales
+calcular_f = function(df, indices_B, indices_M, indices_P, verbose = FALSE) {
+  #Crear un data frame con las muestras de las comunas
+  indices = c(indices_B, indices_M, indices_P)
+  id = factor(seq_along(indices))
+  datos = cbind(id = id, df[indices, ])
+  
+  #Realizar prueba omnibus con ezANOVA
+  resultado_ez = ezANOVA(
+    data = datos,
+    dv = ytot,          
+    wid = id,           
+    between = comuna,   
+    type = 2            
+  )
+  
+  #Mostrar detalles si verbose es TRUE
+  if (verbose) {
+    print(resultado_ez)
+  }
+  
+  #Retornar F
+  return(resultado_ez[["ANOVA"]][["F"]])
+}
+
+f = calcular_f(muestra, indices_B, indices_M, indices_P, TRUE)
+
+```
+
+```{r}
+#Calcular la media y desviación estándar general
+media_general = mean(muestra$ytot)
+desv_general = sd(muestra$ytot)
+
+#Grupos de las comunas
+grupos = muestra %>%
+  group_by(comuna) %>%
+  summarise(media = mean(ytot), sd = sd(ytot)) %>%
+  as.data.frame()
+
+#Desplazamos las muestras para tener igual media y desviación estándar
+muestra_desplazada = muestra
+muestra_desplazada[indices_B, "ytot"] = media_general +
+  (muestra_desplazada[indices_B, "ytot"] - grupos[1, "media"]) *
+  (desv_general / grupos[1, "sd"])
+muestra_desplazada[indices_M, "ytot"] = media_general +
+  (muestra_desplazada[indices_M, "ytot"] - grupos[2, "media"]) *
+  (desv_general / grupos[2, "sd"])
+muestra_desplazada[indices_P, "ytot"] = media_general +
+  (muestra_desplazada[indices_P, "ytot"] - grupos[3, "media"]) *
+  (desv_general / grupos[3, "sd"])
+
+#Mostrar las medias y desviaciones estándar de las muestras desplazadas
+muestra_desplazada %>%
+  group_by(comuna) %>%
+  summarise(media = mean(ytot), sd = sd(ytot)) %>%
+  print()
+```
+
+```{r}
+#Definimos una funcion para calcular el estadistico f para las muestras desplazadas y remuestreadas
+calcular_f_boot = function(df, indices) {
+  df_boot = df[indices, ]
+  id = factor(seq_along(df_boot$ytot))
+  suppressWarnings(
+    suppressMessages({
+        resultado = ezANOVA(
+            data = cbind(id = id, df_boot),
+            dv = ytot,
+            wid = id,
+            between = comuna,
+            type = 2
+        )
+    })
+  )
+  return(resultado[["ANOVA"]][["F"]])
+}
+
+set.seed(1235)
+#Remuestreamos las muestras desplazadas
+boot_buin = boot(
+  data = muestra_desplazada %>% filter(comuna == "Buin"),
+  statistic = function(data, indices) mean(data$ytot[indices]),
+  R = 1000
+)
+
+boot_melipilla = boot(
+  data = muestra_desplazada %>% filter(comuna == "Melipilla"),
+  statistic = function(data, indices) mean(data$ytot[indices]),
+  R = 1000
+)
+
+boot_providencia = boot(
+  data = muestra_desplazada %>% filter(comuna == "Providencia"),
+  statistic = function(data, indices) mean(data$ytot[indices]),
+  R = 1000
+)
+
+#Mostrar resultados de los remuestreos
+cat("Bootstrapping resultados:\n")
+cat("Buin:\n")
+print(boot_buin)
+
+cat("Melipilla:\n")
+print(boot_melipilla)
+
+cat("Providencia:\n")
+print(boot_providencia)
+
+#Remuestreo para calcular el estadístico F usando todas las comunas
+set.seed(1236)
+boot_f = boot(
+  data = muestra_desplazada,
+  statistic = calcular_f_boot,
+  R = 1000
+)
+
+cat("Estadístico F con remuestreo:\n")
+print(boot_f)
+```
+
+```{r}
+#Crear un data frame con los estadísticos F
+df_boot_f <- data.frame(f_stat = boot_f$t)
+
+#Crear el histograma
+g <- gghistogram(df_boot_f, x = "f_stat",
+                  title = "Distribución boot",
+                  xlab = "Estadístico F", ylab = "Frecuencia",
+                  bins = 30, fill = "blue")
+g <- g + geom_vline(xintercept = f, colour="red")
+print(g)
+
+```
+
+```{r}
+#Calcular el valor p y el F crítico
+F_Critico = quantile(boot_f$t, 0.95)
+cat("F crítico:", F_Critico, "\n")
+valor_p = (sum(boot_f$t > f) +1) / (1000 + 1)
+cat("Valor p:", round(valor_p, 3))
+
+```
+
+Podemos ver que el valor p es menor a una significancia de 0.05, por lo que rechazamos la hipótesis nula en favor de la alternativa y concluimos que el ingreso total promedio del hogar es distinto en al menos una de las comunas. Por lo anterior, se procede a realizar un análisis post-hoc para determinar cuales son las comunas que presentan diferencias significativas.
+
+Para esto, se realizará un análisis post-hoc con la prueba de Tukey para determinar cuales son las comunas que presentan diferencias significativas en el ingreso total promedio del hogar.
+
+```{r}
+#Realizamos prueba omnibus para las muestras originales
+id <- factor(seq_along(muestra$ytot))
+datos_anova <- cbind(id = id, muestra)
+
+resultado_anova <- ezANOVA(
+  data = datos_anova,
+  dv = ytot,
+  wid = id,
+  between = comuna,
+  type = 2
+)
+
+#Crear modelo lineal para post-hoc
+modelo <- lm(ytot ~ comuna, data = muestra)
+
+#Realizar comparaciones post-hoc con emmeans
+comparaciones_posthoc <- emmeans(modelo, pairwise ~ comuna, adjust = "tukey")
+print(comparaciones_posthoc)
+```
+Por los valores p resultantes podemos concluir que hay una diferencia en el ingreso total promedio del hogar entre las comunas de Buin y Providencia, ademas de Melipilla y Providencia, pero no entre Buin y Melipilla.

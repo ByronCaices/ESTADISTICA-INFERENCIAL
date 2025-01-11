@@ -1,0 +1,387 @@
+---
+title: "EP07 Grupo 9"
+date: "`r Sys.Date()`"
+output: html_document 
+---
+
+```{r setup, include=FALSE}
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(tidyr)) install.packages("tidyr")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(WRS2)) install.packages("WRS2")
+if(!require(ggpubr)) install.packages("ggpubr")
+if(!require(car)) install.packages("car")
+if(!require(boot)) install.packages("boot")
+
+# if(!require(ggmosaic)) install.packages("ggmosaic")
+# if(!require(kableExtra)) install.packages("kableExtra")
+# if(!require(ggpattern)) install.packages("ggpattern")
+# if(!require(pwr)) install.packages("pwr")
+# if(!require(tidyverse)) install.packages("tidyverse")
+# if(!require(rcompanion)) install.packages("rcompanion")
+# if(!require(RVAideMemoire)) install.packages("RVAideMemoire")
+# if(!require(ez)) install.packages("ez")
+# if(!require(nlme)) install.packages("nlme")
+# if(!require(emmeans)) install.packages("emmeans")
+# if(!require(DescTools)) install.packages("DescTools")
+```
+
+```{=html}
+<style>
+body {
+text-align: justify}
+</style>
+```
+
+```{r a}
+# Se leen los datos del archivo EP08 Datos CASEN 2017.csv
+datos <- read.csv("EP08 Datos CASEN 2017.csv")
+
+# Se muestran las primeras 6 filas de los datos,
+# para verificar si han sido leídos.
+head(datos)
+
+```
+
+
+## Pregunta 1: 
+
+#### Propongan una pregunta de investigación original, que involucre la comparación de una frecuencia de un evento o característica en dos grupos independientes (más abajo se dan unos ejemplos). Fijando una semilla propia, seleccionen una muestra aleatoria de hogares (100 < n < 150) y respondan la pregunta propuesta utilizando una prueba de permutaciones Monte Carlo. Indicación: creen su propio código, específicamente para este problema, no usen directamente el script del apunte.
+
+### Solución:
+
+#### Pregunta de investigación
+
+¿Existe una diferencia significativa entre las proporciones de hogares que reciben más de ochocientos mil pesos en ingresos totales en las comunas de Peñaflor y Talagante?
+
+#### Datos
+
+1. Se obtiene una muestra aleatoria de hogares (125), que respeta el rango solicitado (100 < n < 150).
+
+2. Como se mostrara a continuación, claramente se observa que los ingresos de las comunas de Peñaflor y Talagante no siguen una distribución normal, por lo que se procédera a realizar alguna de las técnicas de remuestreo, en este caso se realizará una prueba de permutaciones de Monte Carlo.
+
+```{r b}
+# Seteo la semilla
+set.seed(901)
+
+# Selecciono una muestra aleatoria de 125 hogares que sean de peñaflor o maipú
+muestra <- datos %>% distinct(id.vivienda, .keep_all=TRUE) %>%
+  filter(comuna %in% c("Peñaflor", "Talagante")) %>% 
+  sample_n(125)
+
+# Graficamos la distribución de los ingresos totales de los hogares
+g <- ggqqplot(muestra, x = "ytot", y = "comuna", color = "comuna") + facet_wrap(~ comuna)
+g <- g + rremove("x.ticks") + rremove("x.text")
+g <- g + rremove("y.ticks") + rremove("y.text")
+g <- g + rremove("axis.title")
+print(g)
+```
+
+#### Formulación de hipótesis
+
+Primero se define el nivel de significancia $\alpha = 0.05$. Para a continuación plantear las hipótesis nula y alternativa:
+
+* Hipótesis nula: No existe diferencia significativa entre las proporciones de hogares que reciben más de ochocientos mil pesos en ingresos totales en las comunas de Peñaflor y Talagante. [p1 = p2, donde p1 es la proporción de hogares en Peñaflor y p2 es la proporción de hogares en Talagante que reciben más de ochocientos mil pesos en ingresos totales].
+
+* Hipótesis alternativa: Existe una diferencia significativa entre las proporciones de hogares que reciben más de ochocientos mil pesos en ingresos totales en las comunas de Peñaflor y Talagante. [p1 ≠ p2, donde p1 es la proporción de hogares en Peñaflor y p2 es la proporción de hogares en Talagante que reciben más de ochocientos mil pesos en ingresos totales].
+
+#### Estadístico de interés
+
+El estadístico de interés que estudiaremos, será la proporción, en este caso, la proporción de hogares que reciben más de ochocientos mil pesos en ingresos totales.
+
+#### Remuestreo/Realización de prueba
+
+A continuación se realizará la prueba de permutaciones de Monte Carlo para contrastar las hipótesis planteadas.
+
+```{r c}
+datos_penaflor <- (muestra %>% filter(comuna == "Peñaflor"))$ytot
+datos_talagante <- (muestra %>% filter(comuna == "Talagante"))$ytot
+
+# Pongo en 0 los valores menores a 800000 y en 1 los mayores a 800000
+datos_penaflor <- ifelse(datos_penaflor > 800000, 1, 0)
+datos_talagante <- ifelse(datos_talagante > 800000, 1, 0)
+
+R = 5000
+set.seed(901)
+
+obtener_permutacion <- function(i, muestra_1, muestra_2){
+  n_1 <- length(muestra_1)
+  combinada <- c(muestra_1, muestra_2)
+  n <- length(combinada)
+  permutacion <- sample(combinada, n, replace = FALSE)
+  nueva_1 <- permutacion[1:n_1]
+  nueva_2 <- permutacion[(n_1 + 1):n]
+  return(list(nueva_1, nueva_2))
+}
+
+calcular_diferencia <- function(muestras, FUN){
+  muestra_1 <- muestras[[1]]
+  muestra_2 <- muestras[[2]]
+  diferencia <- FUN(muestra_1) - FUN(muestra_2)
+  return(diferencia)
+}
+
+calcular_valor_p <- function(distribucion, valor_observado, repeticiones, alternative){
+  if(alternative == "two.sided"){
+    numerador <- sum(abs(distribucion) > abs(valor_observado))
+    denominador <- repeticiones + 1
+    valor_p <- numerador / denominador
+  }
+  else if(alternative == "greater"){
+    numerador <- sum(distribucion > valor_observado)
+    denominador <- repeticiones + 1
+    valor_p <- numerador / denominador
+  }
+  else if(alternative == "less"){
+    numerador <- sum(distribucion < valor_observado)
+    denominador <- repeticiones + 1
+    valor_p <- numerador / denominador
+  }
+  return(valor_p)
+}
+
+contrastar_hipotesis_permutaciones <- function(muestra_1, repeticiones, muestra_2, FUN, alternative, plot, ...){
+  cat("Prueba de permutaciones\n\n")
+  cat("Hipótesis alternativa:", alternative, "\n\n")
+  observado <- calcular_diferencia(list(muestra_1, muestra_2), FUN)
+  cat("Valor observado:", observado, "\n\n")
+  n_1 <- length(muestra_1)
+  
+  # Generar permutaciones
+  permutaciones <- lapply(1:repeticiones, obtener_permutacion, muestra_1, muestra_2)
+  
+  # Generar distribución
+  distribucion <- sapply(permutaciones, calcular_diferencia, FUN)
+  
+  # Calcular valor p
+  valor_p <- calcular_valor_p(distribucion, observado, repeticiones, alternative)
+  cat("Valor p:", valor_p, "\n\n")
+}
+
+# Hacer prueba de permutacion
+contrastar_hipotesis_permutaciones(datos_penaflor, datos_talagante, 
+                                   repeticiones = R, FUN = mean, 
+                                   alternative = "two.sided")
+
+```
+
+#### Conclusión
+
+Para concluir, el p-value obtenido es 0.5084983, valor claramente mayor a nuestro nivel de significancia alfa = 0.05, por lo que con un 95% de confianza se falla en rechazar la hipótesis nula. Por lo tanto, con un 95% de confianza podemos decir que no existe evidencia suficiente para afirmar que exista una diferencia significativa entre las proporciones de hogares que reciben más de ochocientos mil pesos en ingresos totales en las comunas de Peñaflor y Talagante.
+
+### Pregunta 2:
+
+### Propongan una pregunta de investigación original, que involucre la comparación de las medias de más de dos grupos independientes (más abajo se dan unos ejemplos). Fijando una semilla distinta a la anterior, seleccionen una muestra aleatoria de hogares (200 < n < 300) y respondan la pregunta propuesta utilizando bootstrapping. Solo por ejercicio académico, aplique un análisis post-hoc con bootstrapping aunque este no fuera necesario. Indicación: consideren que el análisis post-hoc debe hacerse con las mismas remuestras usadas para la prueba ómnibus.
+
+### Solución: 
+
+### Pregunta de investigación: 
+
+¿El ingreso promedio de las personas solteras es diferente en las comunas de Estación Central, Recoleta y Quilicura?
+
+### Datos
+
+Se obtiene una muestra aleatoria de hogares (250), que respeta el rango solicitado (200 < n < 300).
+
+Como se mostrara a continuación, claramente se observa que los ingresos de las comunas de Recoleta, Estación Central y Quilicura no siguen una distribución normal, por lo que se procederá a realizar alguna de las técnicas de remuestreo, en este caso se realizará una prueba de comparación de una vía para múltiples grupos independientes mediante bootstrapping.
+
+## 1. tamaños de muestras similar y leneveTest prueba homocedasticidad, pero los grupos no provienen de una poblacón normal
+
+```{r}
+set.seed(900)
+
+muestra <- datos %>% 
+  distinct(id.vivienda, .keep_all = TRUE) %>% 
+  filter(comuna %in% c("Recoleta", "Estación Central", "Quilicura")) %>% 
+  sample_n(250)
+muestra$comuna <- as.factor(muestra$comuna)
+
+recoleta <- (muestra %>% filter(comuna == "Recoleta", ecivil == "Soltero(a)"))$ytot
+quilicura <- (muestra %>% filter(comuna == "Quilicura", ecivil == "Soltero(a)"))$ytot
+estacion_central <- (muestra %>% filter(comuna == "Estación Central", ecivil == "Soltero(a)"))$ytot
+
+# Tamaño de las muestras
+length_recoleta <- length(recoleta)
+length_quilicura <- length(quilicura)
+length_estacion_central <- length(estacion_central)
+
+leveneTest(ytot ~ comuna, data=muestra)
+```
+
+```{r}
+g <- ggqqplot(muestra, x = "ytot", y = "comuna", color = "comuna") + facet_wrap(~ comuna)
+g <- g + rremove("x.ticks") + rremove("x.text")
+g <- g + rremove("y.ticks") + rremove("y.text")
+g <- g + rremove("axis.title")
+print(g)
+```
+
+## 2. calcular ANOVA para datos originales
+
+Primero se define el nivel de significancia $\alpha = 0.05$. Para a continuación plantear las hipótesis nula y alternativa:
+
+* $H_{0}$: No existe una diferencia significativa entre el promedio de los ingresos totales de las personas solteras en las comunas de Estación Central, Recoleta y Quilicura.
+
+* $H_{a}$: Existe una diferencia significativa entre el promedio de los ingresos totales de las personas solteras en las comunas de Estación Central, Recoleta y Quilicura.
+
+```{r}
+# Combinar los tres vectores en un marco de datos
+data_combined <- data.frame(
+  ytot = c(recoleta, quilicura, estacion_central),
+  comuna = rep(c("Recoleta", "Quilicura", "Estación Central"), 
+               times = c(length_recoleta, length_quilicura, length_estacion_central))
+)
+
+# ANOVA
+anova_model <- aov(ytot ~ comuna, data = data_combined)
+summary(anova_model)
+```
+se obtuvo valor F ovservado = 1.246
+
+## 3. calcular media y desviacion estandar
+
+```{r}
+# Media y desviación estándar global
+mean_global <- mean(data_combined$ytot, na.rm = TRUE)
+sd_global <- sd(data_combined$ytot, na.rm = TRUE)
+
+# Media y desviación estándar por grupo
+media_por_grupo <- data_combined %>% 
+  group_by(comuna) %>% 
+  summarise(
+    mean = mean(ytot, na.rm = TRUE), 
+    sd = sd(ytot, na.rm = TRUE)
+  )
+
+cat("datos globales\n")
+cat("mean: ", mean_global)
+cat("\nsd: ", sd_global)
+
+print(media_por_grupo)
+```
+
+## 4. transformar las muestras bajo las hipotesis nulas
+
+```{r}
+# Desplazar las observaciones
+data_combined <- data_combined %>%
+  group_by(comuna) %>%
+  mutate(ytot_centrado = mean_global + ((ytot - mean(ytot, na.rm = TRUE)) * (sd_global/sd(ytot, na.rm = TRUE))))
+```
+
+observamos que muestras desplazadas cumplen con hipotesis nula: igual media e igual desviacion estandar
+```{r}
+# Media y desviación estándar global
+mean_global_desp <- mean(data_combined$ytot_centrado, na.rm = TRUE)
+sd_global_desp <- sd(data_combined$ytot_centrado, na.rm = TRUE)
+
+# Media y desviación estándar por grupo
+media_por_grupo_desp <- data_combined %>% 
+  group_by(comuna) %>% 
+  summarise(
+    mean_desplazada = mean(ytot_centrado, na.rm = TRUE), 
+    sd_desplazada = sd(ytot_centrado, na.rm = TRUE)
+  )
+
+cat("datos globales\n")
+cat("mean desplazada: ", mean_global_desp)
+cat("\nsd desplazada: ", sd_global_desp)
+
+print(media_por_grupo_desp)
+```
+ytot contiene los datos originales
+ytot_centrado contiene los datos H0
+
+## 5 generar remuestras bootstrap
+
+```{r}
+# Función para bootstrap de la media desplazada: calcular media en cada remuestra
+bootstrap_media <- function(data, indices) {
+  d <- data[indices, ]  # Crear remuestra
+  mean(d$ytot_centrado) # Retornar media desplazada
+}
+
+# Aplicar bootstrap por grupo
+resultados_bootstrap <- data_combined %>%
+  group_by(comuna) %>%
+  group_split() %>%
+  lapply(function(df) {
+    boot(df, statistic = bootstrap_media, R = 3000)
+  })
+
+# Gráficas de las distribuciones bootstrap
+par(mfrow = c(1, 3)) # Panel de tres gráficos
+lapply(1:length(resultados_bootstrap), function(i) {
+  hist(resultados_bootstrap[[i]]$t, main = unique(data_combined$comuna)[i],
+       xlab = "Media bootstrap", col = "skyblue")
+})
+```
+## 6
+
+```{r}
+# Valor crítico F y p desde la distribución bootstrap
+ss_between <- summary(anova_model)[[1]]["comuna", "Sum Sq"]
+
+# Función para bootstrap de SS_between
+bootstrap_ss_between <- function(data, indices) {
+  remuestra <- data[indices, ]
+  anova_res <- summary(aov(ytot ~ comuna, data = remuestra))
+  anova_res[[1]]["comuna", "Sum Sq"]
+}
+
+# Aplicar bootstrap
+resultados_bootstrap_ss <- boot(data = data_combined, statistic = bootstrap_ss_between, 
+                                R = 3000)
+```
+
+```{r}
+# Valor p
+p_valor <- mean(resultados_bootstrap_ss$t >= ss_between)
+print(p_valor)
+```
+
+```{r}
+# Función para calcular diferencias de medias
+bootstrap_dif_medias <- function(data1, data2, indices) {
+  d1 <- data1[indices]
+  d2 <- data2[indices]
+  mean(d1) - mean(d2)
+}
+
+# Aplicar bootstrap para cada par de grupos
+pares <- list(
+  "Recoleta vs Quilicura" = list(data1 = recoleta, data2 = quilicura),
+  "Recoleta vs Estación Central" = list(data1 = recoleta, data2 = estacion_central),
+  "Quilicura vs Estación Central" = list(data1 = quilicura, data2 = estacion_central)
+)
+
+resultados_post_hoc <- lapply(pares, function(par) {
+  boot(
+    data = 1:length(par$data1), 
+    statistic = function(data, indices) bootstrap_dif_medias(par$data1, par$data2, indices), 
+    R = 3000
+  )
+})
+
+# Gráficas de las distribuciones de diferencias de medias
+par(mfrow = c(1, 3))
+lapply(names(resultados_post_hoc), function(nombre) {
+  hist(resultados_post_hoc[[nombre]]$t, main = nombre,
+       xlab = "Diferencia de medias", col = "skyblue")
+})
+
+# Valores p para las diferencias
+valores_p_post_hoc <- sapply(resultados_post_hoc, function(res) {
+  mean(res$t >= 0) # Proporción de diferencias positivas
+})
+print(valores_p_post_hoc)
+```
+
+### Conclusión
+
+Dada el valor p significativamente superior a nuestro nivel de significancia de 0.05, se dice que no hay suficiente evidencia para rechazar la hipótesis nula en favor de esta misma, con esto concluimos que:
+
+No es posible descartar que el ingreso promedio de las personas solteras no difiere de forma significativa en las comunas de Estación Central, Recoleta y Quilicura.
+
+Por otro lado, no hay diferencias significativas entre los ingresos entre las comunas en la prueba post-hoc. Entonces, se puede concluir con un 95% de nivel de confianza que no se puede descartar que no existe una diferencia significativa entre el promedio de los ingresos totales de las personas solteras en las comunas de Estación Central, Recoleta y Quilicura.
+

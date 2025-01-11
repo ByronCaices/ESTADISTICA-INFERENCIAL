@@ -1,0 +1,138 @@
+---
+title: "EP04-respuesta-equipo4"
+author: ""
+date: "2024-10-24"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ez)
+library(ggpubr)
+library(dplyr)
+library(nlme)
+library(emmeans)
+```
+
+## Enunciado
+
+Un equipo de investigadores del área de interacción humano-información
+está estudiando si el área temática y el nivel de dificultad del
+problema de información influyen en el tiempo (en segundos) que toma un
+usuario en formular una consulta de búsqueda para resolver dicho
+problema. Para ello, han reclutado a un grupo de participantes
+voluntarios, asignados aleatoriamente a distintos grupos. Cada
+participante debe resolver tres problemas de información con diferentes
+niveles de dificultad: baja, media y alta. A su vez, cada grupo debe
+resolver problemas relacionados a una temática diferente. Los datos
+recolectados contemplan las siguientes variables: 
+
+Variable | Descripción
+id | identificador único de cada participante. 
+
+area | Área temática de los problemas que el participante debe responder. Variable categórica con
+los niveles Arquitectura, Biología, Computación, Economía, Física, Leyes, Literatura, Matemáticas, Música, Pedagogía, Psicología, Química.
+
+dificultad | Nivel de dificultad del problema resuelto. Variable categórica con los niveles Baja, Media y Alta. 
+
+tiempo | Tiempo, en segundos, que toma al participante formular la consulta.
+
+### Pregunta
+
+En este momento, los investigadores buscan determinar si existen
+diferencias en el tiempo que tardan los usuarios en formular consultas
+para problemas con diferente nivel de dificultad en el área de biología.
+
+```{r datos}
+datos = read.csv("EP06 Datos.csv")
+datos = datos %>% filter(area == "Biología")
+```
+
+Como se desea saber si existen diferencias en el tiempo que tardan los
+usuarios en formular consultas para problemas con diferente nivel de
+dificultad en el área de biología.
+
+Las hipótesis son:
+
+-Lenguaje natural:
+
+$H_0$ : En promedio no existen diferencias en el tiempo que tardan los
+usuarios en formular consultas para problemas con diferente nivel de
+dificultad en el área de biología.
+
+$H_a$ : El promedio de las diferencias en el tiempo que tardan los
+usuarios en formular consultas para problemas con diferente nivel de
+dificultad en el área de biología es diferente para al menos un par de
+dificultades.
+
+-Matematicamente:
+
+$H_0 : \mu*{d.baja - d. media} =* \mu{d. media - d. alta} =\mu\_{d.baja - d. alta} = 0$
+
+$H_a : \exists A, B \in$ {d. alta, d.media, d. baja}
+$, A \neq B : \mu_{B-A} \neq 0$
+
+Debido a que los resultados para cada nivel de dificultad son obtenidos de las mismas personas se procede a usar la prueba anova para muestras correlacionadas, ademas se usara un nivel de significancia alfa = 0.05 para obtener conclusiones:
+
+### Comprobación de condiciones
+
+1- Condición de escalas de intervalos iguales: Debido a que la variable dependiente, en este caso, el tiempo que toma al participante formular la consulta, es medido en segundos se concluye que se cumple esta condición.
+
+2- Condición de medición independiente: Del enunciado del problema se puede extraer que se cumple esta condición, debido a que los voluntarios fueron asignados aleatoriamente a distintos grupos y cada voluntario resuelve los 3 problemas en diferentes dificultades.
+
+3- Condición de normalidad:
+```{r norm}
+datos[["id"]] = factor(datos[["id"]])
+datos[["dificultad"]] = factor(datos[["dificultad"]])
+
+g = ggqqplot(datos, x="tiempo", y="dificultad", color = "dificultad")
+g = g + facet_wrap(~ dificultad)
+
+print(g)
+
+datosAlta = datos %>% filter(dificultad == "Alta")
+datosMedia = datos %>% filter(dificultad == "Media")
+datosBaja = datos %>% filter(dificultad == "Baja")
+
+normAlta = shapiro.test(datosAlta$tiempo)
+print(normAlta)
+normMedia = shapiro.test(datosMedia$tiempo)
+print(normMedia)
+normBaja = shapiro.test(datosBaja$tiempo)
+print(normBaja)
+
+
+```
+Como se puede observar en el gráfico y en los valores p obtenidos por aplicar la prueba de shapiro a cada grupo de datos, se puede concluir que los datos fueron obtenidos de una población con una distribución similar a una normal
+
+4- Condición de esfericidad:
+```{r }
+anova = ezANOVA(
+  data=datos,
+  dv=tiempo,
+  within = dificultad,
+  wid= id,
+  return_aov = TRUE
+)
+print(anova$`Mauchly's Test for Sphericity`)
+```
+Como se puede observar el valor p de la prueba de Mauchly de esfericidad es mayor al nivel de significancia, podemos concluir que no hay suficiente evidencia para afirmar que la condición de esfericidad no se cumpla.
+
+### Resultado de la prueba omnibus anova
+```{r }
+print(anova$ANOVA)
+```
+Como el valor p obtenido de la prueba anova es mucho menor que el nivel de significancia, se rechaza la hipótesis nula en favor de la hipótesis alterativa y con un 95% de confianza podemos afirmar que el promedio de las diferencias en el tiempo que tardan los usuarios en formular   para problemas con diferente nivel de dificultad en el área de biología es diferente para al menos un par de dificultades.
+Por lo tanto ahora corresponde realizar una prueba post-hoc, en este caso la prueba HSD de Tukey, debido a que es la con más poder estadistico, para identificar que pares de dificultades presentan diferencias.
+```{r }
+# Creacion modelo mixto
+mixto = lme(tiempo ~ dificultad, data = datos, random = ~1|id)
+medias = emmeans(mixto, "dificultad")
+# Test post-hoc con HSD de Tukey
+postHoc = pairs(medias, adjust = "tukey")
+print(postHoc)
+```
+Después de aplicar la prueba post-hoc y analizar los resultados de esta, podemos concluir con 95% de certeza que todos los pares de dificultades presentan diferencias en el promedio de sus diferencias, esto ya que todos los valores p son menores al nivel de significancia.

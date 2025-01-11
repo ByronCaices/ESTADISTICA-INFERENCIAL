@@ -1,0 +1,148 @@
+---
+title: "EI-EP05-respuesta-equipo-2"
+author: "Equipo 2"
+date: "2024-10-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+En una emocionante competencia de cubos Rubik, participantes de Chile, Argentina, Colombia, Uruguay, Perú y Ecuador demostraron su destreza en resolver tres tipos de cubos: 2x2x2, 3x3x3 y Megaminx.
+
+Después del torneo, un grupo de investigadores de la Asociación Mundial del Cubo, interesado en los tiempos que hicieron las jugadoras y los jugadores en la competencia, decidieron estudiar si el país y el tipo de cubo usado en cada prueba tienen influencia en los segundos que se tardan en resolverlos. Para ello usaron una muestra aleatoria de los datos de la competencia, en la cual participaron más de 2.000 personas, con las siguientes variables:
+
+| Variable | Descripción |
+|:-----------------------------:|:---------------------------------------:|
+| id | Identificador único de cada participante. |
+| pais | País que representa cada participante (Argentina, Chile, Colombia, Ecuador, Perú, Uruguay). |
+| tipo | Tipo de cubo usado en la prueba (2x2x2, 3x3x3, Megaminx). |
+| tiempo | Tiempo, en segundos, que toma al participante en resolver el cubo de la prueba. |
+
+¿Existen diferencias en el tiempo de resolución de cubos 3x3x3 entre participantes de Perú, Uruguay y Ecuador?
+
+En base al enunciado entregado, dado que se pide comparar si es que las **medias** de los tiempos de resolución (variable **dependiente**, medida en **segundos**) asociados a los participantes provenientes de ciertos países (variable independiente, **grupos de tamaño 3:** Perú, Uruguay, Ecuador) **son iguales entre sí o no**; entonces resulta adecuado utilizar el método ANOVA de una vía para muestras independientes, donde se consideran las siguientes hipótesis:
+
+$H_{0}: \text{El tiempo promedio para resolver cubos de 3x3x3 es igual para los tres países}$
+
+$H_{A}: \text{El tiempo promedio para resolver cubos de 3x3x3 es distinto para al menos uno de los tres países}$
+
+Matemáticamente, se denotan como:
+
+$H_{0}: \mu_{Perú}^{3x3x3} = \mu_{Uruguay}^{3x3x3} = \mu_{Ecuador}^{3x3x3}$
+
+$H_{A}: \exists i,j \in {(Perú, Uruguay, Ecuador), i\neq j \ | \ \mu_{i}^{3x3x3} = \mu_{j}^{3x3x3}}$
+
+Para ello, primero se debe verificar si es que se cumplen las condiciones requeridas para poder aplicar dicho método, donde la primera condición indica que **la escala con que se mide la variable dependiente debe tener las propiedades de una escala de intervalos iguales**. En este contexto, se tiene como variable dependiente el tiempo, medido en segundos, el cual representa intrínsecamente una escala de intervalos iguales, al ser una magnitud física.
+
+La segunda condición establece que **las muestras obtenidas deben ser escogidas de manera aleatoria e independiente**, lo cual queda evidenciado en el enunciado del problema, al indicar que se utilizó una **muestra aleatoria de los datos de la competencia**.
+
+Para la tercera condición, que señala que **la población sigue una media muestral**, esto se puede comprobar por medio de la elaboración de un gráfico Q-Q para cada uno de los grupos con los que se trabaja.
+
+```{r}
+library(dplyr)
+library(ggpubr)
+
+# Se lee el archivo
+datos <- read.csv2("EP05 Datos.csv")
+cantDatos <- nrow(datos)
+cat("Cantidad de participantes de la muestra: ")
+cat(cantDatos)
+
+# Se filtran los participantes tal que solamente estén los que pertenecen a Perú, Uruguay o Ecuador, y que hayan resuelto un cubo de 3x3x3
+datos_filtrados <- datos %>%
+  filter(pais %in% c("Perú", "Uruguay", "Ecuador") & tipo == "3x3x3")
+cantDatosFilt <- nrow(datos_filtrados)
+
+# Se muestran los datos obtenidos por pantalla
+cat("\nCantidad de participantes que son de Perú, Uruguay o Ecuador, que hayan resuelto un cubo de 3x3x3: ")
+cat(cantDatosFilt)
+head(datos_filtrados)
+
+# Se genera el gráfico QQ para verificar normalidad
+# Nótese que no es necesario "pivotear" los datos, dado que estos ya se encuentran en formato largo.
+g <- ggqqplot(datos_filtrados,
+              x = "tiempo",
+              color = "pais")
+g <- g + facet_wrap (~ pais)
+g <- g + rremove("x.ticks") + rremove ("x.text")
+g <- g + rremove("y.ticks") + rremove ("y.text")
+g <- g + rremove("axis.title")
+print(g)
+```
+
+Para la cuarta y última condición, la cual establece que en caso de que las muestras **provengan de más de una población, estas deben tener la misma varianza**, es posible comprobar siempre y cuando **la razón entre la máxima y la mínima varianza muestral de los grupos, no sea superior a** $1.5$.
+
+```{r}
+library(dplyr)
+
+# Se calcula la varianza de cada país
+varianza_por_pais <- datos_filtrados %>%
+  group_by(pais) %>%
+  summarize(varianza = var(tiempo)) 
+
+# Mostrar los resultados
+print(varianza_por_pais)
+
+# Encontrar la mayor y menor varianza
+varianzaMax <- max(varianza_por_pais$varianza)
+varianzaMin <- min(varianza_por_pais$varianza)
+
+# Se obtiene la razón entre las varianzas
+razonVarianza <- varianzaMax / varianzaMin
+
+# Se muestra la razón obtenida por pantalla
+print(razonVarianza)
+```
+
+Al calcularlas manualmente, se obtiene que la menor varianza es de $0.0958661$, mientras que la mayor es de $0.1183466$, que al dividirlas entre sí, se obtiene la razón $1.23 < 1.5$, por lo que se comprueba la condición.
+
+Dado que las 4 condiciones se cumplen, es posible llevar a cabo el método ANOVA, considerando un nivel de significancia del $95\%$:
+
+```{r}
+library(ez)
+# Prueba usando función aov()
+prueba <- aov(tiempo ~ pais, data = datos_filtrados)
+print(summary(prueba))
+
+# Prueba usando función ezANOVA()
+prueba2 <- ezANOVA(
+  data = datos_filtrados,
+  dv = tiempo,
+  between = pais,
+  wid = X,
+  return_aov = TRUE
+)
+
+print(prueba2)
+```
+
+Tanto para las funciones `ezANOVA` como `aov`, el `p-value` obtenido $< \alpha = 0.05$, por lo que se rechaza la hipótesis nula en favor de la hipótesis alternativa, es decir, que el tiempo promedio para resolver cubos de 3x3x3 es distinto para al menos uno de los 3 países.
+
+Sin embargo, la conclusión entregada solamente indica que al menos **una** de las medias es distinta, sin entregar mayor detalle al respecto, por lo que se aplica una prueba *post-hoc* para establecer cuales son los grupos que presentan diferencias.
+
+Para poder identificar donde existen esta diferencias, se aplican tanto las correcciones de Holm como la de Bonferroni (siendo este último mucho más conservador que Holm), las cuales distribuyen el nivel de significación y permite realizar múltiples comparaciones.
+
+Utilizando el mismo nivel de significancia del método ANOVA:
+
+```{r}
+alfa <- 0.05
+
+#Se aplica la prueba de Holm
+holm <- pairwise.t.test(datos_filtrados$tiempo, datos_filtrados$pais, p.adjust.method = "holm",pool.sd = TRUE,paired = FALSE,conf.level=1-alfa)
+
+#Se imprime el resultado de la prueba por pantalla
+print(holm)
+
+
+#Se aplica la prueba de Bonferroni
+bonferroni <- pairwise.t.test(datos_filtrados$tiempo, datos_filtrados$pais, p.adjust.method = "bonferroni",pool.sd = TRUE,paired = FALSE,conf.level=1-alfa)
+
+#Se imprime el resultado de la prueba por pantalla
+print(bonferroni)
+```
+
+En base a los resultados obtenidos al realizar las pruebas, se observa que solamente el `p-value` entre las medias de Perú y Uruguay es mayor al nivel de significación considerado, lo cual implica que se rechaza la hipótesis nula en favor de la hipótesis alternativa.
+
+En el contexto del problema actual, esto quiere decir que **si existen diferencias en el tiempo de resolución de cubos 3x3x3 entre participantes de Perú, Uruguay y Ecuador**, las cuales corresponden específicamente a los tiempos de los participantes de Perú y Uruguay.

@@ -1,0 +1,345 @@
+---
+title: "Tarea 9"
+author: "Grupo 10"
+date: "2024-12-02"
+output: html_document
+---
+
+# Preguntas
+
+1.  **Definir la semilla a utilizar, que corresponde a los últimos cuatro dígitos del RUN (sin considerar el dígito verificador) del integrante de menor edad del equipo.**\
+
+  Para ello, preliminarmente se cargan todas las librerías necesarias:
+
+```{r}
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(tidyr)) install.packages("tidyr")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(ggpubr)) install.packages("ggpubr")
+if(!require(ggmosaic)) install.packages("ggmosaic")
+if(!require(kableExtra)) install.packages("kableExtra")
+
+if(!require(pwr)) install.packages("pwr")
+if(!require(tidyverse)) install.packages("tidyverse")
+if(!require(rcompanion)) install.packages("rcompanion")
+if(!require(RVAideMemoire)) install.packages("RVAideMemoire")
+if(!require(ez)) install.packages("ez")
+if(!require(nlme)) install.packages("nlme")
+if(!require(emmeans)) install.packages("emmeans")
+library(car)
+
+```
+
+Una vez hecho lo anterior, se utiliza la semilla $8178$ 
+
+
+2.  **Seleccionar una muestra aleatoria de 100 mujeres (si la semilla es un número par) o 100 hombres (si la semilla es impar), y separar 70 casos para trabajar en la construcción de modelos y 30 para su evaluación en datos no vistos.**
+
+Al trabajar con una semilla par, se seleccionan 100 mujeres, como se muestra a continuación:
+
+```{r}
+# Se leen los datos
+datos = read.csv2("EP09 Datos.csv")
+
+# Se define la semilla previamente definida
+seed_value = 8178
+set.seed(seed_value)
+
+# Se filtran las observaciones correspondientes a mujeres, obteniendo una muestra aleatoria de 100 de ellas
+muestra = datos %>% filter(Gender == 0) %>% sample_n(100)
+
+# De dicha muestra, 70 de ellas se utilizan para construir modelos y 30 para su evaluación
+set.seed(seed_value) #NO BORRAR
+indices_modelo = sample(1:100, 70)
+
+muestra_modelo = muestra[indices_modelo, ]
+muestra_evaluacion = muestra[-indices_modelo, ]
+
+# Se imprime la cantidad de datos para fines de comprobación
+print(nrow(muestra_modelo))  # Debe ser 70
+print(nrow(muestra_evaluacion))  # Debe ser 30
+
+```
+
+3.  **Seleccionar de forma aleatoria ocho posibles variables predictoras.**
+
+```{r}
+set.seed(8178)
+
+# Se define un vector que cuente con todas las variables del modelo, sin contar al peso, que corresponde a la variable de respuesta, ni al sexo, que se filtró previamente
+variables_predictoras <- c("Biacromial.diameter",
+                           "Biiliac.diameter",
+                           "Bitrochanteric.diameter",
+                           "Chest.depth", "Chest.diameter",
+                           "Elbows.diameter",
+                           "Wrists.diameter",
+                           "Knees.diameter",
+                           "Ankles.diameter",
+                           "Shoulder.Girth",
+                           "Chest.Girth",
+                           "Waist.Girth",
+                           "Navel.Girth",
+                           "Hip.Girth",
+                           "Thigh.Girth",
+                           "Bicep.Girth",
+                           "Forearm.Girth",
+                           "Knee.Girth",
+                           "Calf.Maximum.Girth",
+                           "Ankle.Minimum.Girth",
+                           "Wrist.Minimum.Girth",
+                           "Age")
+
+# Se seleccionan ocho variables de forma aleatoria
+variables_aleatorias <- sample(variables_predictoras, 8)
+
+# A ellas, se les agrega la variable de respuesta.
+variables_aleatorias <- c(variables_aleatorias, "Weight")
+print(variables_aleatorias)
+
+```
+
+4.  **Seleccionar, de las otras variables, una que el equipo considere que podría ser útil para predecir la variable Peso (sin considerar la estatura), justificando bien esta selección.**
+
+Para ello, primero se obtiene el resto de variables que no se consideraron en el paso anterior, y se calcula el grado de correlación de cada una de ellas (por medio del coeficiente de correlación $R^2$) con el peso.
+
+```{r}
+set.seed(8178)
+# Agregando tanto las variable asociadas al género (filtrado anteriormente), y la estatura (según el enunciado de la pregunta)
+variables_aleatorias_sin_height <- c(variables_aleatorias, "Height", "Gender")
+variables_restantes <- muestra_modelo %>% select(-all_of(variables_aleatorias_sin_height))
+
+# Se calcula el coeficiente de correlación de Pearson para cada una de las variables restantes con el peso
+correlaciones <- cor(variables_restantes, muestra_modelo$Weight, use = "complete.obs")
+print(correlaciones)
+```
+
+      
+De acuerdo a los resultados obtenidos, se observa que la variable con mayor correlación con el peso es el grosor a la altura de la cintura (Waist.Girth), por lo que se considera que ésta podría ser útil para predecir el peso.
+
+5. **Usando el entorno R y paquetes estándares, construir un modelo de regresión lineal simple con el predictor seleccionado en el paso anterior.**
+
+```{r}
+set.seed(8178)
+# Agregando la variable útil encontrada del paso anterior al conjunto de variables predictoras
+todas_variables <- c(variables_aleatorias, "Waist.Girth")
+
+# Generando una tabla con las variables predictoras seleccionadas y la variable de respuesta para el modelo
+tablas_variables_aleatorias <- muestra_modelo %>% select(all_of(todas_variables))
+
+# Se crea un grafico de dispersion para observar la relación lineal entre Waist.Girth y Weight
+p1 <- ggscatter(tablas_variables_aleatorias, x = "Waist.Girth", y = "Weight",
+                add = "reg.line", add.params = list(color = "blue"))
+print(p1)
+
+# Generando el modelo de regresión lineal simple
+RLS <- lm(Weight ~ Waist.Girth, data = tablas_variables_aleatorias)
+print(summary(RLS))
+
+```
+    
+En base a los valores entregados, se observa que el predictor asociado a la variable `Waist.Girth` tiene un valor $R_{\text{adj}}^2$ ajustado de $0.7746$, lo que indica que el modelo explica alrededor del $77.46 \%$ de la variabilidad de la variable de respuesta. Además, el `p-value` del coeficiente de `Waist.Girth` es menor a 0.05, lo que indica que dicho predictor es **significativo para predecir la variable de respuesta peso**.
+    
+Por otro lado, se observa que el intercepto es negativo, lo cual carece de sentido a primera vista, dado que se está hablando del peso de una persona. Sin embargo, se debe tener en cuenta que el intercepto se obtiene cuando `Waist.Girth = 0`, lo cual es imposible en la realidad, por lo que este valor no tiene un significado práctico y no debería afectar la interpretación del modelo.
+
+
+6.  **Usando herramientas estándares para la exploración de modelos del entorno R, buscar entre dos y cinco predictores de entre las variables seleccionadas al azar en el punto 3, para agregar al modelo de regresión lineal simple obtenido en el paso 5.**
+
+Para ello, se utiliza el método de regresión escalonada para la selección de predictores, el cuál combina los pasos de selección hacia adelante y eliminación hacia atrás; utilizando como cotas inferiores y superiores al modelo simple obtenido en el paso anterior y al modelo completo con todas las variables.
+    
+```{r}
+set.seed(8178)
+# Se define la cota superior como el modelo completo
+completo <- lm(Weight ~ ., data = tablas_variables_aleatorias)
+cat("\nModelo completo:\n")
+print(summary(completo))
+
+# Se ajusta el modelo utilizando el método de regresión escalonada, utilizando el criterio de información de Akaike (AIC) para seleccionar los predictores
+
+cat("\nRegresión escalonada:\n")
+opt <- options(digits = 2, width = 52)
+RLM <- step(RLS, scope = list(lower = RLS, upper = completo),
+               direction = "both",
+               k = log(nrow(tablas_variables_aleatorias)),
+               test = "F",
+               trace = 1)
+options(digits = opt[[1]], width = opt[[2]])
+
+#Mostramos los coeficientes del modelo conseguido
+cat("\nModelo de regresión múltiple obtenido:\n")
+print(RLM[["coefficients"]])
+cat("\n")
+print(summary(RLM))
+```
+    
+En base a los resultados mostrados por pantalla, se observa que los predictores seleccionados fueron `Waist.Girth`, `Hip.Girth`, `Knee.Girth`, `Chest.Girth` y `Chest.depth`, los cuales generan un modelo de regresión lineal múltiple con un coeficiente de determinación ajustado $R_{\text{adj}}^2$ de valor $0.9338$, lo que indica que el modelo explica el $93.38 \%$ de la variabilidad de la variable de respuesta.
+    
+Además, dado que todos los `p-values` de los predictores son menores a $0.05$, se puede concluir que todos los predictores son **significativos para predecir la variable de respuesta peso**.
+
+De igual manera que para el RLS, el intercepto también es negativo, pero tomando en cuenta la explicación del paso anterior, no debería afectar la interpretación del modelo.
+
+7.  **Evaluar la bondad de ajuste (incluyendo el análisis de casos atípicos y casos influyentes) y la generalidad (condiciones para RLM) de los modelos y “arreglarlos” en caso de que presenten algún problema.**
+    
+A continuación se verificará el cumplimiento de las condiciones para garantizar que ambos modelos obtenidos sean confiables:
+
+a) Modelo de regresión simple:
+
+Primero, se evalúa la relación lineal entre el predictor `Waist.Girth` y la variable de respuesta, a través de la prueba de no aditividad de Tukey, y se analizan los residuos obtenidos.
+
+```{r}
+# Evaluando la observación de casos atípicos y casos influyentes
+residualPlots(RLS, type = "rstandard",
+              id= list(method = "r", n =3, cex = 0.7, location = "lr"), 
+              col = "blue", pch = 19, cex = 0.7, lwd = 2)
+```
+
+A partir de la prueba, se observa que el predictor `Waist.Girth` se relaciona de manera lineal con la variable de respuesta, según su `p-value` de la prueba de no aditividad de Tukey. Por otro lado si observamos los gráficos obtenidos de los residuos, se podria decir que los datos se encuentran agrupados hacia el sector izquierdo del gráfico y que la linea de regresión presenta una curvatura pronunciada, por ende, es necesario realizar pruebas de normalidad y autocorrelación de los residuos para reafirmar la confiabilidad del modelo.
+
+```{r}
+print(durbinWatsonTest(RLS))
+print(shapiro.test(RLS$residuals))
+```
+
+En base a los `p-value` obtenidos, los cuales son mayores al nivel de significancia de $0.05$ en ambos casos, se puede concluir que no hay evidencia de autocorrelación entre los residuos y que no hay evidencia de que los residuos no sigan una distribución normal. Luego, se procede a evaluar los puntos influyentes en el modelo.
+  
+```{r}
+influencia = influencePlot(RLS, id = list(cex = 0.4))
+print(influencia)
+```
+
+En base a los resultados obtenidos, identifican los valores atípicos asociados a las participantes con los identificadores 7, 46, 17, 55 y 9, de las que se observa que sus valores `Hat` son distintos a 1, lo que sugiere que no hay apalancamiento, mientras que para la distancia de Cook se encuentran por debajo del umbral 1, por lo que se puede concluir que no hay valores influyentes. En consecuencia, el modelo obtenido RLS parece confiable, ya que se han verificado diversas condiciones necesarias para garantizar su confiabilidad.
+  
+b) Modelo de regresión múltiple:
+  1.  La variable de respuesta debe ser cuantitativa y continua, sin restricciones para su variabilidad.
+    
+  Lo anterior queda demostrado puesto que el peso, medido en kilogramos, es de tipo numérico, además de ser una variable continua.
+    
+  Esto se refuerza por medio de la función `class()`:
+    
+```{r}
+class(muestra_modelo$Weight)
+```
+    
+  2. Los predictores deben ser cuantitativos o dicotómicos.
+    
+  Para evaluar esta condición, se utiliza la función `sapply()` para obtener el tipo de dato de cada predictor:
+    
+```{r}
+sapply(tablas_variables_aleatorias, class)
+```
+    
+  3. Los predictores deben tener algún grado de variabilidad, es decir, no ser constantes.
+    
+  Para ello, se calcula la varianza de cada uno de los predictores, a través de la función `apply()`:
+    
+```{r}
+apply(tablas_variables_aleatorias, 2, var)
+```
+    
+  4. Cada predictor debe estar relacionado linealmente con la respuesta.
+    
+  Para evaluar la linealidad de los predictores del modelo, se utilizan gráficos de residuos, a través de la función `residualPlots()`:
+    
+```{r}
+residualPlots(RLM, type = "rstandard",
+              id= list(method = "r", n =3, cex = 0.7, location = "lr"), 
+              col = "blue", pch = 19, cex = 0.7, lwd = 2)
+```
+    
+  De dicha función, se observa que solamente la variable `Chest.depth` sugiere que no se relaciona de manera lineal con la variable de respuesta, según su `p-value` de la prueba de no aditividad de Tukey, lo cuál se ve reforzado por su gráfico de residuos, donde se observa que los datos se agrupan en el sector izquierdo del gráfico en conjunto con una curvatura pronunciada en la línea de regresión.
+    
+  5. La distribución de los residuos debe ser cercana a la normal centrada en el cero.
+    
+  Para evaluar la normalidad de los residuos, se utiliza la función `shapiro.test()`:
+    
+```{r}
+shapiro.test(RLM$residuals)
+```
+  
+  A partir de la prueba de Shapiro-Wilk, se obtiene un `p-value` mayor al nivel de significancia de $0.05$, lo que sugiere que los residuos siguen una distribución normal.
+    
+  6. La variabilidad de los residuos deber ser aproximadamente constante (homocedasticidad).
+    
+  Para evaluar la homocedasticidad de los residuos, se utiliza la función `ncvTest()` (Non-constant Variance Score Test):
+    
+```{r}
+print(ncvTest(RLM))
+```
+
+  Dado que entrega un `p-value` mayor a $0.05$, se puede concluir que la varianza de los residuos es constante, por lo que los residuos son homocedásticos.    
+    
+  7. Los residuos deben ser independientes entre sí.
+    
+  Para evaluar la independencia de los residuos, se utiliza la función `durbinWatsonTest()`:
+    
+```{r}
+print(durbinWatsonTest(RLM))
+```
+    
+  En base al `p-value` obtenido, el cual es mayor a $0.05$, se puede concluir que no hay evidencia de autocorrelación entre los residuos, por lo que se cumple con la condición de independencia.
+    
+  8. No debe existir multiconlinealidad.
+    
+  Lo anterior se realiza a través de la función `vif()`, que calcula el factor de inflación de la varianza de cada predictor:
+    
+```{r}
+print(vif(RLM))
+```
+    
+  Por una parte, los VIF de `Chest.depth`, `Knee.Girth` y `Hip.Girth` se encuentran entre 1 y 5, por lo que existe un grado de multicolinealidad en dichas variables, que podría afectar ligeramente los resultados; mientras que para `Chest.Girth` y `Waist.Girth`, sus valores se encuentran entre 5 y 10, los que en su lugar si podrían afectar considerablemente los resultados, por lo que se debe indagar más a fondo y efectuar acciones correctivas.
+    
+  9. Las estimaciones de los coeficientes del modelo no deben estar alteradas por unas pocas observaciones influyentes.
+    
+  Para estudiar la presencia de posibles valores atípicos que puedan influir sobre el ajuste del modelo, se utiliza la función `influencePlot()`:
+    
+```{r}
+influencia = influencePlot(RLM, id = list(cex = 0.4))
+print(influencia)
+```
+    
+  En base a los resultados obtenidos, identifican los valores atípicos asociados a las participantes con los identificadores 7, 3, y 75, de las que se observa que sus valores `Hat` son distintos a 1, lo que sugiere que no hay apalancamiento, mientras que para la distancia de Cook se encuentran por debajo del umbral 1, por lo que se puede concluir que no hay valores influyentes.
+    
+8. **Evaluar el poder predictivo del modelo con los datos no utilizados para construirlo.**
+    
+  Para evaluar la calidad predictiva del modelo de regresión multiple, se utiliza validación cruzada simple, comparando los valores de RMSE obtenidos con los datos de entrenamiento y de evaluación, a través de la función `resid()` y `predict()`:
+  
+```{r}
+set.seed(8178)
+# Se calcula el RMSE con los datos de prueba
+rmse_rls_entrenamiento <- sqrt(mean(resid(RLS)^2))
+rmse_rlm_entrenamiento <- sqrt(mean(resid(RLM)^2))
+cat(paste("El valor del RMSE para el RLS es de: ", rmse_rls_entrenamiento))
+cat(paste("\nEl valor del RMSE para el RLM es de: ", rmse_rlm_entrenamiento))
+
+# Se crea una tabla con las variables predictoras y la variable de respuesta para los datos de evaluación
+tablas_variables_aleatorias_evaluacion <- muestra_evaluacion %>% select(all_of(todas_variables))
+
+# Se obtienen las predicciones tanto del RLS como del RLM con los datos de evaluación
+predicciones_rls <- predict(RLS, newdata = tablas_variables_aleatorias_evaluacion)
+predicciones_rlm <- predict(RLM, newdata = tablas_variables_aleatorias_evaluacion)
+cat("\nPredicciones del RLS:\n")
+predicciones_rls
+cat("\nPredicciones del RLM:\n")
+predicciones_rlm
+
+# Se calcula el RMSE de ambos modelos con los datos de evaluación
+rmse_rls_evaluacion <- sqrt(mean((muestra_evaluacion$Weight - predicciones_rls)^2))
+rmse_rlm_evaluacion <- sqrt(mean((muestra_evaluacion$Weight - predicciones_rlm)^2))
+cat(paste("\nEl valor del RMSE del RLS es de: ", rmse_rls_evaluacion))
+cat(paste("\nEl valor del RMSE del RLM es de: ", rmse_rlm_evaluacion))
+
+
+cat("\nDiferencia entre los RMSE de entrenamiento y evaluación para el RLS: ", abs(rmse_rls_entrenamiento - rmse_rls_evaluacion))
+
+cat("\nDiferencia entre los RMSE de entrenamiento y evaluación para el RLM: ", abs(rmse_rlm_entrenamiento - rmse_rlm_evaluacion))
+```
+  
+  De los resultados obtenidos, mientras que se observa que la diferencia entre los valores del RMSE para el modelo lineal es de alrededor de $1.21$, para el modelo múltiple es de un $0.64$, lo que indica que el modelo múltiple resulta ser más preciso en la predicción del peso de las personas. 
+  
+Lo anterior se refuerza por medio del siguiente análisis de varianza entre ambos modelos.
+
+```{r}
+print(anova(RLS, RLM))
+```
+
+Debido a que el `p-value` es menor a $0.05$, se rechaza la hipótesis nula en favor de la alternativa, lo que implica que el modelo RLM presenta una reducción significativa de la varianza de los datos con respecto al modelo de RLS.
+

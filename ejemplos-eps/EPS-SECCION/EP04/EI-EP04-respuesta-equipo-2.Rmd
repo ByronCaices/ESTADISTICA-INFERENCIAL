@@ -1,0 +1,247 @@
+---
+title: "EI-EP04-respuesta-equipo-2"
+author: "Equipo 2"
+date: "2024-10-14"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+
+```
+
+`{knitr::opts_chunk$set(echo = TRUE)}`
+
+**Pregunta 1**
+
+Un estudio reciente reveló que muchos espectadores y espectadoras
+experimentan niveles elevados de estrés antes de ver películas de
+suspenso. Para abordar este problema, un estudio piloto implementó un
+nuevo programa de preestreno diseñado para reducir el estrés y mejorar
+la experiencia de la audiencia. Para evaluar la efectividad de este
+programa, se reclutó a un grupo de 40 personas a quienes se les midió el
+nivel de estrés (alto o bajo) antes y después de participar en el
+programa de preestreno. Los resultados se presentan a continuación:
+
+-   8 personas no mostraron estrés ni antes ni después.
+-   14 personas que inicialmente estaban estresados dejaron de estarlo.
+-   18 personas mantuvieron un elevado nivel de estrés.
+
+¿Qué se puede concluir acerca de la efectividad del nuevo programa de
+preestreno para reducir el estrés en los espectadores y espectadores de
+películas de suspenso?
+
+Para este problema, lo solicitado también puede entenderse como si hubo
+**un cambio significativo con respecto a los niveles de estrés entre los
+espectadores antes y después del pre-estreno**.
+
+Lo anterior puede modelarse a través de una **prueba de McNemar**, dado
+que se pide
+
+Luego, se definen las hipótesis a docimar:
+
+$$H_{0}: \text{No hubo un cambio significativo en los niveles de estrés antes y después del pre-estreno}$$
+$$H_{A}: \text{Si hubo un cambio significativo en los niveles de estrés antes y después del pre-estreno}$$
+Y considerando un nivel de significancia del $95 \%$, se lleva a cabo la
+prueba usando la función `mcnemar.test`:
+
+```{r}
+espectadores <- seq(1:40)
+antes_funcion <- c(rep("NO", 8), c(rep("SI", 14)), c(rep("SI", 18)))
+despues_funcion <- c(rep("NO", 8), c(rep("NO", 14)), c(rep("SI", 18)))
+datos <- data.frame(espectadores, antes_funcion, despues_funcion)
+tabla <- table(antes_funcion, despues_funcion)
+print(tabla)
+
+prueba_1 <- mcnemar.test(tabla)
+print(prueba_1)
+```
+
+Dado que el `p-value` obtenido de la prueba $< \alpha=0.05$, entonces se
+rechaza la hipótesis nula en favor de la hipótesis alternativa,
+concluyendo así que con un $95 \%$ de confianza que **si hubo un cambio
+significativo** .
+
+**Pregunta 2**
+
+En un evento deportivo, las y los participantes tienen la opción de
+inscribirse en una carrera de velocidad o en una carrera de resistencia.
+Después de la inscripción, se sabe que, de los 11 hombres y 15 mujeres
+que participaron, 8 hombres eligen inscribirse en la carrera de
+velocidad y 12 mujeres prefieren la carrera de resistencia. ¿Tiene
+relación el sexo de las personas que participan del evento deportivo e
+inscribirse en la carrera de velocidad o en la carrera de resistencia?
+
+En base al enunciado entregado, dado que se pide verificar si es que
+**existe alguna relación** entre el tipo de carrera, y el sexo de los
+participantes, donde ambas variables son **dicotómicas** (velocidad,
+resistencia, y masculino, femenino respectivamente), y donde es posible
+asumir que los participantes **fueron escogidos al azar**, al no haber
+sido seleccionados bajo ningún criterio; entonces resulta favorable
+llevar a cabo una **prueba exacta de Fisher**.
+
+|          |             |               |     Carrera     |           |
+|----------|-------------|:-------------:|:---------------:|:---------:|
+|          |             | **Velocidad** | **Resistencia** | **TOTAL** |
+|          | **Hombres** |       8       |        3        |    11     |
+| **Sexo** | **Mujeres** |       3       |       12        |    15     |
+|          | **TOTAL**   |      11       |       15        |    26     |
+
+Luego, se definen las hipótesis a docimar:
+
+$$H_{0}: \text{El sexo de los participantes y la carrera a la que se inscribieron son independientes.}$$
+$$H_{A}: \text{El sexo de los participantes y la carrera a la que se inscribieron están relacionados.}$$
+
+Y considerando un nivel de significancia del $95 \%$, se lleva a cabo la
+prueba usando la función `fisher.test`:
+
+```{r}
+# Nivel de confianza
+alpha <- 0.05
+
+#Creando la tabla de contingencia
+carrera <- c(8, 3)
+sexo <- c(3, 12)
+
+tabla_contingencia_2 <- as.table(rbind(carrera, sexo))
+dimnames(tabla_contingencia_2) <- list(sexo=c("Hombres", "Mujeres"),
+                                       carrera= c("Velocidad", "Resistencia"))
+#Se imprime la tabla de contingencia
+print(tabla_contingencia_2)
+
+#Llevando a cabo la prueba
+prueba_2 <- fisher.test(tabla_contingencia_2, conf.level = 1 - alpha)
+
+#Se imprimen los resultados de la prueba
+print(prueba_2)
+
+```
+
+Dado que el `p-value` obtenido de la prueba $< \alpha=0.05$, entonces se
+rechaza la hipótesis nula en favor de la hipótesis alternativa,
+concluyendo así que con un $95 \%$ de confianza que **el sexo de los
+participantes y la carrera a la que se inscribieron están
+relacionados**.
+
+**Pregunta 3**
+
+Una agencia de marketing desea determinar si hay una diferencia
+significativa en la efectividad de tres estrategias publicitarias
+utilizadas para promocionar un nuevo producto. Para ello, se ha
+recopilado información de personas que fueron expuestas a las tres
+estrategias publicitarias, registrando si mostraron una aceptación (A) o
+rechazo (R) a cada una de ellas. ¿Qué puede concluir la agencia de
+marketing sobre la efectividad de las estrategias publicitarias para
+promover el nuevo producto? Indicación: obtenga la muestra de 50
+personas a partir del archivo “EP04 Datos.csv” que se encuentra en el
+directorio compartido, usando la semilla 500. Considere un nivel de
+significación $\alpha=0.05$.
+
+```{r}
+#La hipotesis nula y alternativa para la prueba de Cochran es la siguiente:
+#Ho : No existe diferencia significativa en la efectividad de las tres estrategias publicitarias.
+#Ha : Existe diferencia significativa en la efectividad de las tres estrategias publicitarias.
+library("tidyverse")
+library("RVAideMemoire")
+
+datos <- read.csv2("EP04 Datos.csv")
+
+set.seed(500)
+muestra <- sample_n(datos, 50)
+
+id <- c(muestra$id)
+estrategia1 <- c(muestra$estrategia_1)
+estrategia2 <- c(muestra$estrategia_2)
+estrategia3 <- c(muestra$estrategia_3)
+#Siguiendo el ejemplo encontrado en la lectura
+datos <- data.frame(id, estrategia1, estrategia2, estrategia3)
+
+datos <- datos %>% pivot_longer(cols = c(estrategia1, estrategia2, estrategia3), names_to = "Estrategia", values_to = "Respuesta")
+datos[["id"]] <- factor(datos[["id"]])
+datos[["Estrategia"]] <- factor(datos[["Estrategia"]])
+
+prueba <- cochran.qtest(Respuesta ~ Estrategia | id, data = datos, alpha = 0.05)
+print(prueba)
+
+
+```
+
+Dado que el `p-value` obtenido es mayor al nivel de significancia,
+$< \alpha=0.05$, no se rechaza la hipótesis nula , es decir, se concluye
+con un 95% de confianza que no existe una diferencia significativa en la
+efectividad de las tres estrategias publicitarias.
+
+**Pregunta 4**
+
+Un supermercado está interesado en determinar si la distribución de la
+clientela que prefieren pagar con diferentes métodos de pago es la misma
+en dos sucursales que están ubicadas en zonas de la cuidad con situación
+socioeconómica dispares (sucursal LC3 y sucursal LP2). Se seleccionaron
+aleatoriamente 30 personas de cada sucursal y se registró el método de
+pago utilizado por cada una. Se registraron que 7 personas pagaron con
+efectivo, 11 con tarjeta de crédito y 12 con tarjeta de débito en la
+sucursal LC3, mientras que 5 personas pagaron con efectivo, 18 con
+tarjeta de crédito y 7 con tarjeta de débito en la sucursal LP2. ¿Existe
+evidencia de que la proporción de clientes y clientas que prefieren
+pagar con diferentes métodos de pago sea la misma en ambas sucursales?
+
+| Preferencia  | Efectivo | Crédito | Débito | Total |
+|:------------:|:--------:|:-------:|:------:|:-----:|
+| Sucursal LC3 |    7     |   11    |   12   |  30   |
+| Sucursal LP2 |    5     |   18    |   7    |  30   |
+|    Total     |    12    |   29    |   19   |  60   |
+
+Para resolver lo anterior, dado que se espera encontrar proporciones
+similares entre ambas muestras, es necesario verificar que la diferencia
+entre la cantidad de personas observadas por sucursal que utilicen un
+cierto tipo de pago, en comparación con las esperadas sean lo
+suficientemente grandes para asegurar que las preferencias sean
+disimiles.
+
+Utilizando la formula $E_{i,j}=\frac{n_{i} \cdot n_{j}}{n}$, se
+construye la tabla de frecuencias esperadas:
+
+| Preferencia  | Efectivo | Crédito | Débito | Total |
+|:------------:|:--------:|:-------:|:------:|:-----:|
+| Sucursal LC3 |    6     |  14.5   |  9.5   | 30.0  |
+| Sucursal LP2 |    6     |  14.5   |  9.5   | 30.0  |
+|    Total     |    12    |   29    |   19   | 60.0  |
+
+Dado que se cumple que la cantidad de observaciones esperadas por grupo
+es mayor a 5, y tomando en cuenta que la muestra corresponde al $10 \%$
+del total de personas que acuden a la sucursal, entonces es posible
+llevar a cabo la prueba paramétrica $\chi^{2}$ de homogeneidad.
+
+Para ello, se definen las siguientes hipótesis:
+
+$$\begin{gathered}
+H_{0}:\text{No hay diferencia entre las proporciones de la clientela que paga con distintos métodos de pago en ambas sucursales} \\
+H_{A}:\text{Existe una diferencia entre las proporciones de la clientela que paga con distintos métodos de pago en ambas sucursales}
+\end{gathered}$$
+
+Y considerando un nivel de significancia del $95 \%$, se lleva a cabo la
+prueba usando la función `chisq.test`:
+
+```{r}
+#Se va a utilizar un nivel de significancia de 0.05, es decir, un 95% de confianza.
+
+locales <- c(rep("LC3", 30), rep("LP2", 30))
+
+pagos <- c(rep("Efectivo", 7), rep("Tarjeta de crédito", 11), rep("Tarjeta de débito", 12),
+         rep("Efectivo", 5), rep("Tarjeta de crédito", 18), rep("Tarjeta de débito", 7))
+
+
+tabla <- table(locales, pagos)
+tabla
+
+chi <- chisq.test(tabla)
+print(chi)
+```
+
+Dado que el `p-value` obtenido es mayor al nivel de significancia,
+$< \alpha=0.05$, no se rechaza la hipótesis nula, por lo tanto, se puede
+concluir con un 95% de confianza, que no se ve una diferencia
+significativa entre las proporciones en la clientela que paga con
+distintos métodos de pago en ambas sucursales.

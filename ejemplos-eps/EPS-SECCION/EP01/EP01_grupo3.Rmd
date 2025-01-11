@@ -1,0 +1,85 @@
+---
+title: "EP1_grupo3"
+author: "Diego Fernandez, Víctor Duarte, Alonso Henriquez"
+date: "2024-09-24"
+output: pdf_document
+---
+
+```{r}
+#Importaciones de librerías
+library(dplyr)
+```
+
+
+# Lectura de datos
+```{r}
+
+datos <- read.csv2("EP01 Datos Casen 2017.csv")
+print(head(datos))
+
+```
+
+Las variables utilizadas para responder las preguntas son:
+  zona: Es de tipo chr, que indica el área geográfica de la persona. Este dato es de tipo categórico nominal. Los posibles zonas son: Urbano y Rural.
+        
+  ch1 : Es de tipo chr, que indica la situación ocupacional de una persona. Este dato es de tipo categorico nominal. Las posibles ocupaciones son: "Asalariado", "Niño de 12 anios", "Familiar no remunerado/Inactivos y Desocupados" y "Patrón o empleador/ Trabajador cuenta propia".
+
+
+Primero se separan los datos en hombres que viven en zonas rurales y hombres que viven en zonas urbanas de la RM
+```{r}
+hombres <- datos  %>% filter(sexo == "Hombre")
+HombresRural <- hombres %>% filter(zona=="Rural")
+HombresUrbano <- hombres %>% filter(zona=="Urbano")
+```
+
+# Gráficos
+
+A continuación se presentan gráficos de barra de las ocupaciones de hombres que viven en zonas rurales y urbanas. Además se presentan gráficos de torta para mostrar los porcentajes de las proporciones de estos datos.
+```{r}
+#Grafico de barras Rural/ Ocupacion
+barplot(table(HombresRural[["ch1"]]),
+        ylab = "Frecuencia Rural",
+        xlab = "Ocupacion",
+        )
+#Gradico de barras Urbano/ Ocupacion
+barplot(table(HombresUrbano[["ch1"]]),
+        ylab = "Frecuencia Urbano",
+        xlab = "Ocupacion")
+
+#Hombres rural
+num_rural <- table(HombresRural$ch1)
+porcentaje_rural <- round(100* num_rural / sum(num_rural), 1)
+nombres_rural <- paste(names(num_rural), porcentaje_rural,  "%")
+pie(table(HombresRural$ch1), labels =  nombres_rural, main = "Ocupacion hombres rurales")
+
+#Hombres urbano
+num_urbano <- table(HombresUrbano$ch1)
+porcentaje_urbano <- round(100* num_urbano / sum(num_urbano), 1)
+nombres_urbano <- paste(names(num_urbano), porcentaje_urbano, "%")
+pie(table(HombresUrbano$ch1), labels = nombres_urbano, main = "Ocupacion hombres urbanos")
+
+```
+
+# Tablas
+
+A continuación se presentan las tablas para mostrar la cantidad de hombres en cada ocupación.
+
+```{r}
+##Tablas 
+tabla1 <- table(HombresRural[["ch1"]])
+tabla2 <- table(HombresUrbano[["ch1"]])
+
+print("Hombres que viven en zonas rurales.\n")
+print(tabla1)
+print("Hombres que viven en zonas urbanas.\n")
+print(tabla2)
+
+```
+
+# Pregunta
+
+¿Se distribuye de igual manera la situación ocupacional de los hombres que viven en áreas rurales y quienes viven en áreas urbanas de la RM?
+
+# Respuesta
+
+Desde los gráficos de torta de puede ver que, cuentan con una distribución muy similar ya que la diferencia más grande de % sigue siendo pequeña, por lo cual gracias al análisis del gráfico podemos decir que se distribuye la situación ocupacional de igual manera entre hombres rurales y urbanos.

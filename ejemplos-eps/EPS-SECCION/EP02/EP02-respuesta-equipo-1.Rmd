@@ -1,0 +1,242 @@
+---
+title: "Ejercicio Practico N°2"
+author: "Equipo 1"
+date: "2024-10-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+El Comité Olímpico de una gran potencia del atletismo está estudiando el programa de entrenamiento de varones para la competencia de 100 metros planos, por lo que ha recopilado datos de una muestra aleatoria de atletas, en donde se recaban los siguientes datos:
+
+| Variable  | Descripción                                                                                                                     |
+|:-----------------------------------|:-----------------------------------|
+| Id        | Identificador único para cada atleta                                                                                            |
+| Raza      | Raza del atleta, de tipo categórica (Blanca, Negra, Oriental)                                                                   |
+| Previo    | Mejor tiempo registrado por el atleta antes de ingresar al programa de entrenamiento (numérica, medida en segundos)             |
+| Posterior | Mejor tiempo registrado por el atleta durante los primeros 6 meses del programa de entrenamiento (numérica, medida en segundos) |
+
+```{r}
+library(ggpubr)
+library(dplyr)
+
+datos <- read.csv2("EP02 Datos.csv")
+head(datos)
+```
+
+En base a dichos datos, se deben responder las siguientes preguntas:
+
+1.  **El Comité Olímpico cree que el mejor tiempo medio de los atletas de raza negra después de ingresar al programa de entrenamiento es superior a 12,4 segundos. ¿Soportan los datos esta afirmación?**
+
+En base a lo anterior, y considerando $\mu$ como "la media del mejor tiempo de los atletas de raza negra después de ingresar al programa de entrenamiento"; es necesario primero filtrar desde la tabla `datos`, a todos los atletas de raza negra:
+
+```{r}
+# Primero se filtrara la tabla para obtener los atletas de raza negra
+atletas_raza_negra <- datos %>% filter(Raza == "Negra")
+print(atletas_raza_negra)
+```
+
+Con los datos de los atletas de raza negra ya filtrados, se definen las hipótesis en cuestión:
+
+$H_{0}$: El mejor tiempo medio de los atletas de raza negra después de ingresar al programa de entrenamiento es menor o igual a 12,4 segundos.
+
+$H_{a}$ El mejor tiempo medio de los atletas de raza negra después de ingresar al programa de entrenamiento es mayor a 12,4 segundos.
+
+Expresadas matemáticamente:
+
+$$\begin{gathered} H_{0}: \mu = 12.4 \\ H_{a}: \mu > 12.4 \end{gathered}$$
+
+Para ello, se utilizará la prueba `t-student` para una muestra, debido a que tanto el tamaño de la muestra es menor a 30, y que el dato de la varianza $\sigma^{2}$ es desconocido; además que se cumple que las observaciones son independientes entre sí, al ser seleccionadas al azar, y que la distribución de la muestra sigue aproximadamente una distribución normal.
+
+Esto último queda evidenciado tanto por su respectivo gráfico Q-Q, y los resultados del test de Shapiro-Wilk:
+
+```{r}
+grafica <- ggqqplot(atletas_raza_negra, x = "Previo", color = "red")
+print(grafica)
+
+shapiro.test(atletas_raza_negra$Posterior)
+
+```
+
+A continuación, considerando un nivel de confianza del $95 \%$, se lleva a cabo la prueba:
+
+```{r}
+# Se declaran las variables a utilizar
+valorNulo <- 12.4
+n <- length(atletas_raza_negra$Posterior)
+gradosLibertad <- n-1
+
+# Se calcula el valor estadistico de la muestra
+media <- mean(atletas_raza_negra$Posterior)
+dest <- sd(atletas_raza_negra$Posterior)
+error <- dest/sqrt(n)
+t <- (media - valorNulo)/error
+
+# Ahora se calcula el p-value
+p <- pt(t, df = gradosLibertad, lower.tail = FALSE)
+print(p)
+```
+
+Dado que el p-value obtenido de la prueba $> 0.05$, entonces se falla en rechazar $H_{0}$ ya que no hay suficiente evidencia; concluyendo así que con un $95 \%$ de confianza, que no es posible afirmar que después de ingresar al programa de entrenamiento, los atletas de raza negra tengan un tiempo medio mejor a $12.4$ segundos.
+
+2.  **¿Sugieren los datos que la mejor marca de los atletas de raza blanca se reduce en promedio 3,5 segundos tras el entrenamiento?**
+
+En base a lo anterior, y considerando $\mu$ como "la media de las mejores marcas de los atletas de raza blanca tras el entrenamiento"; es necesario entonces filtrar desde la tabla `datos`, a todos los atletas de raza blanca:
+
+```{r}
+#Primero, se filtran los datos de los atletas de raza blanca 
+razaBlanca <- datos %>% filter(Raza == "Blanca")
+```
+
+Con lo anterior hecho, se definen las hipótesis en cuestión:
+
+$H_{0}:$ Las mejores marcas (Previa-Posterior) de los atletas de raza blanca se reduce en promedio $3.5$ segundos tras el entrenamiento.\
+$H_{a}:$ Las mejores marcas (Previa-Posterior) de los atletas de raza blanca no se reduce en promedio $3.5$ segundos tras el entrenamiento.
+
+Esto se expresa en forma matemática como:
+
+$$\begin{gathered} H_{0}: \mu = 3.5 \\ H_{a}: \mu \neq 3.5 \end{gathered}$$
+
+Para ello, se utilizará la prueba `t-student` para dos muestras pareadas, debido a que se pide trabajar con **la diferencia** entre cada par de observaciones, además que se cumple que las observaciones son independientes entre sí, al ser seleccionadas al azar, y que las distribuciones se acercan a la normal, viéndose esto último reforzado a partir del gráfico Q-Q y el test Shapiro-Wilk para ambas.
+
+```{r}
+grafica <- ggqqplot(razaBlanca, x = "Previo", color = "red")
+print(grafica)
+
+grafica2 <- ggqqplot(razaBlanca, x = "Posterior", color = "blue")
+print(grafica2)
+
+
+shapiro.test(atletas_raza_negra$Previo)
+shapiro.test(atletas_raza_negra$Posterior)
+
+```
+
+A continuación, considerando un nivel de confianza del $95 \%$, se lleva a cabo la prueba:
+
+```{r}
+diferencia <- razaBlanca$Previo - razaBlanca$Posterior
+
+#Se verifica si la distribución obtenida se acerca a la normal.
+normalidad <- shapiro.test(diferencia)
+print(normalidad)
+
+alfa <- 0.05
+valorNulo <- 3.5
+
+prueba <- t.test(diferencia,
+                 alternative="two.sided",
+                 mu = valorNulo,
+                 conf.level = 1- alfa)
+print(prueba)
+
+```
+
+Dado que el p-value obtenido de la prueba $< 0.05$, entonces se rechaza $H_{0}$ en favor de $H_{A}$; concluyendo así que con un $95 \%$ de confianza, la mejor marca de los atletas de raza blanca no se reduce en promedio 3,5 segundos tras el entrenamiento.
+
+3.  **¿Es posible afirmar que, en promedio, los atletas de raza blanca superaban a los de raza oriental por menos de 3 segundos antes del entrenamiento?**
+
+En base a lo anterior, y considerando $\mu_{blanco}$ y $\mu_{oriental}$ como "la media de las mejores marcas de los atletas previo al entrenamiento" para los atletas de raza blanca y oriental respectivamente; es necesario filtrar desde la tabla `datos`, a todos los atletas de raza blanca, y de la raza oriental:
+
+```{r}
+raza_blanca <- datos %>% filter(Raza == "Blanca")
+raza_oriental <- datos %>% filter(Raza == "Oriental")
+```
+
+Con los datos ya filtrados, se definen las hipótesis en cuestión:
+
+$H_{0}$: Los atletas de raza blanca superan en promedio a los atletas de raza oriental por 3 o mas segundos antes del entrenamiento.
+
+$H_{A}$: Los atletas de raza blanca superan en promedio a los atletas de raza oriental por menos de 3 segundos antes del entrenamiento.
+
+Matemáticamente, quedan expresadas como:
+
+$$\begin{gathered} H_{0}: \mu_{blanco} - \mu_{oriental} = 3 \\ H_{A}: \mu_{blanco} - \mu_{oriental} < 3\end{gathered}$$
+
+Para ello, se utilizará la prueba `t-student` para dos muestras independientes, donde ambas muestras son independientes entre sí, al ser seleccionadas al azar, y ambas distribuciones seleccionadas se acercan a la normal, viéndose esto último reforzado a partir del gráfico Q-Q y el test Shapiro-Wilk para ambas.
+
+```{r}
+grafica <- ggqqplot(raza_blanca, x = "Previo", color = "purple")
+print(grafica)
+
+grafica2 <- ggqqplot(raza_oriental, x = "Previo", color = "green")
+print(grafica2)
+```
+
+```{r}
+normalidad_blanca <- shapiro.test(raza_blanca[["Previo"]])
+print(normalidad_blanca)
+
+normalidad_oriental <- shapiro.test(raza_oriental[["Previo"]])
+print(normalidad_oriental)
+
+```
+
+A continuación, considerando un nivel de confianza del $95 \%$, se lleva a cabo la prueba:
+
+```{r}
+alfa <- 0.05
+
+prueba <- t.test(x=raza_blanca[["Previo"]], y=raza_oriental[["Previo"]],
+                 alternative="less", paired=FALSE, conf.level=1-alfa)
+print(prueba)
+```
+
+Dado que el p-value obtenido de la prueba $< 0.05$, entonces se rechaza $H_{0}$ en favor de $H_{A}$; concluyendo así que con un $95 \%$ de confianza, los atletas de raza blanca superan en, al menos, 3 segundos a los atletas de raza oriental antes del entrenamiento.
+
+4.  **¿Será cierto que hay más atletas de raza oriental que redujeron sus mejores marcas en al menos 4,3 segundos que atletas de raza negra que lo hicieron en al menos 1,4 segundos?**
+
+En base a lo anterior, y considerando a los estimadores $p_{oriental}$ y $p_{negra}$ como "la media de "; es necesario filtrar desde la tabla `datos`, a todos los atletas de raza negra, y de la raza oriental:
+
+```{r}
+raza_negra <- datos %>% filter(Raza == "Negra")
+raza_oriental <- datos %>% filter(Raza == "Oriental")
+```
+
+Con los datos ya filtrados, se definen las hipótesis en cuestión:
+
+$H_{0}:$ La cantidad de atletas de raza oriental que redujeron sus mejores marcas al menos 4,3 segundos es la misma que la cantidad de atletas de raza negra que redujeron sus mejores marcas al menos 1,4 segundos. 
+
+$H_{A}:$ Hay mas cantidad de atletas de raza oriental que redujeron sus mejores marcas al menos 4,3 segundos que cantidad de atletas de raza negra que redujeron sus mejores marcas al menos 1,4 segundos.
+
+Las hipótesis en forma matemática, se expresan:
+
+$$\begin{gathered}H_{0}: p_{oriental} - p_{negra} = 0 \\ H_{A}: p_{oriental} - p_{negra} > 0\end{gathered}$$
+
+Para ello, se utilizará la prueba `Wilson` para dos muestras, debido a que se pide trabajar con la frecuencia de los datos, lo cual se puede trabajar usando proporciones; pero solamente uno de los dos estimadores se distribuye de manera cercana a la normal, dado que si bien ambas muestras son independientes, no se cumple la condición de éxito-fracaso para la proporción de atletas orientales, como se observa a continuación:
+
+```{r}
+#Primero, se obtienen los valores de la proporciones de atletas de raza negra y oriental, identificados como p1 y p2
+diferencia_raza_negra <- raza_negra$Previo - raza_negra$Posterior
+raza_negra$diferencia <- diferencia_raza_negra
+
+muestra_exitos_raza_negra <- raza_negra %>% filter(diferencia >= 1.4)
+p1 <- nrow(muestra_exitos_raza_negra)/nrow(raza_negra)
+
+raza_oriental <- datos %>% filter(Raza == "Oriental")
+diferencia_raza_oriental <- raza_oriental$Previo - raza_oriental$Posterior
+raza_oriental$diferencia <- diferencia_raza_oriental
+
+muestra_exitos_raza_oriental <- raza_oriental %>% filter(diferencia >= 4.3)
+p2 <- nrow(muestra_exitos_raza_oriental)/nrow(raza_oriental)
+
+```
+
+$$\begin{gathered}n_{negra} \cdot p_{negra} = 28 \cdot 0.607 = 17 \geq 10 \\ n_{negra} \cdot (1-p_{negra}) = 28\cdot 0.3928 = 11 \geq 10 \\ n_{oriental} \cdot p_{oriental} = 27 \cdot 0.963 = 26 \geq 10 \\ n_{oriental} \cdot (1-p_{oriental}) = 27 \cdot 0.037 = 1 \geq 10\end{gathered}$$
+
+Dado que no se puede afirmar que el estimador $p_{oriental}$ se distribuya de manera similar a la normal por lo mencionado anteriormente, sería recomendable no llevar a cabo la prueba; sin embargo, para efectos del problema, si se llevará a cabo, usando para ello un nivel de confianza del $99 \%$.
+
+```{r}
+n <- c(nrow(raza_negra), nrow(raza_oriental))
+
+exitos <- c(nrow(muestra_exitos_raza_negra), nrow(muestra_exitos_raza_oriental))
+
+alfa = 0.01
+
+prueba <- prop.test(exitos, n = n, alternative="greater", conf.level=1-alfa)
+prueba
+```
+
+Por ende, se falla en rechazar la hipótesis nula ya que no hay evidencia suficiente; concluyendo **teóricamente** que con un $99\%$ de confianza no hay más atletas de la raza oriental que hayan reducido sus mejores marcas en 4,3 segundos, que atletas de la raza negra que hayan reducido sus mejores marcas en 1,4 segundos; sin embargo, es importante recordar que los resultados de esta prueba están sujetos a errores, dado que una de las muestras no sigue una distribución normal.

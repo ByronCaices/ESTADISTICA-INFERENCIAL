@@ -1,0 +1,392 @@
+---
+title: "EP09"
+author: "Grupo 6"
+date: "2024-12-02"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(car)
+library(ggpubr)
+library(ggfortify)
+library(ggplot2)
+```
+
+Como grupo 6 se nos asignó realizar una actividad que cumpla con los siguientes 8 puntos:
+
+1.-Definir la semilla a utilizar, que corresponde a los últimos cuatro dígitos del RUN (sin considerar el dígito verificador) del integrante de menor edad del equipo.
+
+2.-Seleccionar una muestra aleatoria de 100 mujeres (si la semilla es un número par) o 100 hombres (si la semilla es impar), y separar 70 casos para trabajar en la construcción de modelos y 30 para su evaluación en datos no vistos.
+
+3.-Seleccionar de forma aleatoria ocho posibles variables predictoras.
+
+4.-Seleccionar, de las otras variables, una que el equipo considere que podría ser útil para predecir la variable Peso (sin considerar la estatura), justificando bien esta selección.
+
+5.-Usando el entorno R y paquetes estándares, construir un modelo de regresión lineal simple con el predictor seleccionado en el paso anterior.
+
+6.-Usando herramientas estándares1 para la exploración de modelos del entorno R, buscar entre dos y cinco predictores de entre las variables seleccionadas al azar en el punto 3, para agregar al modelo de regresión lineal simple obtenido en el paso 5.
+
+7.-Evaluar la bondad de ajuste (incluyendo el análisis de casos atípicos y casos influyentes) y la generalidad (condiciones para RLM) de los modelos y “arreglarlos” en caso de que presenten algún problema.
+
+8.-Evaluar el poder predictivo del modelo con los datos no utilizados para construirlo.
+
+Todos estos puntos se ven realizados en lo que resta del documento.
+
+Considerando al integrante menor del grupo, la semilla resulta 6555 aparte vemos que esta es impar, por lo cual el estudio se realizará sobre los hombres.
+
+# Filtrado de datos
+
+```{r}
+set.seed(6555)
+#Lectura de datos
+datos = read.csv2("EP09 Datos.csv")
+
+#Filtrado para obtener solo hombres
+
+hombres = datos %>% filter(Gender == 1)
+
+hombres <- hombres %>% select(-Gender)
+
+#Muestra aleatoria de tamaño 100
+
+muestra = sample_n(hombres, 100)
+
+#Separación de 70 casos para construcción 
+numeros = sample(1:nrow(muestra), 0.7*nrow(muestra))
+construccion = muestra[numeros,]
+
+#30 para evaluación
+
+evaluacion = muestra[-numeros, ]
+```
+Para la selección aleatoria de 8 predictores, se realizó un sample de 8 para todos los predictores posibles, excepto weight, que es la respuesta de este ejercicio.
+
+```{r}
+
+set.seed(6555)
+
+#Predictores posibles
+
+nombres = c("Biacromial.diameter", "Biiliac.diameter", "Bitrochanteric.diameter", "Chest.depth", "Chest.diameter", "Elbows.diameter", "Wrists.diameter", "Knees.diameter", "Ankles.diameter", "Shoulder.Girth", "Chest.Girth", "Waist.Girth", "Navel.Girth", "Hip.Girth", "Thigh.Girth", "Bicep.Girth", "Forearm.Girth", "Knee.Girth", "Calf.Maximum.Girth", "Ankle.Minimum.Girth", "Wrist.Minimum.Girth", "Age", "Height")
+
+#Selección de 8 predictores de forma aleatoria
+
+predictores = sample(nombres, 8)
+predictores
+```
+
+Los predictores seleccionados de forma aleatoria son Bitrochanteric.diameter, Knee.Girth, Ankles.diameter, Chest.Girth, Shoulder.Girth, Wrists.diameter, Elbows.diameter y Navel.Girth los cuales consideraremos para la RLM.
+
+Para seleccionar una variable restante del grupo no seleccionado para la construcción del modelo de RLS, evaluaremos la correlación de estas con Weight.
+
+```{r}
+
+#Todos los posibles predictores no seleccionados
+
+nombres_resto = construccion %>% select(!all_of(predictores))
+respuesta_resto <- which(colnames(nombres_resto) == "Weight")
+
+#Cor de los predictores restantes 
+correlacion <- cor(nombres_resto[-respuesta_resto], y  = nombres_resto[["Weight"]])
+
+cat("Correlaciones con Weight \n")
+correlacion
+```
+
+Vemos de los resultados que el predictor con mayor correlación resulta Hip.Girth, lo cual tiene sentido ya que el grosor de las caderas puede significar distintos rangos de peso, por lo cual haremos de este predictor para el modelo de RLS.
+
+
+# Regresion Lineal Simple
+
+Antes de pasar directamente al modelo, realizaremos un análisis de los datos.
+
+```{r}
+#Datos de Hip.Girth con Weight
+datos_graf_1 <- construccion %>% select(all_of(c("Hip.Girth", predictores, "Weight")))
+
+# Gráfico de dispersión
+graf_1 <- ggscatter(datos_graf_1, x = "Hip.Girth" , y = "Weight",
+                add = "reg.line", add.params = list(color = "blue"))
+print(graf_1)
+```
+Del gráfico podemos apreciar que existe una relación lineal positiva entre Hip.Girth y Weight.
+
+Con este análisis pasamos a formular el modelo de RLS utilizando Hip.Girth como predictor.
+
+```{r}
+#Contruccion del modelo
+
+cat("Modelo de regresión lineal simple para Weight ~ Hip.Girth\n")
+modelo = lm(Weight ~ Hip.Girth, construccion)
+summary(modelo)
+
+```
+
+Vemos que el uso de Hip.Girth como predictor resulta significativo, ya que contamos con un p-value mucho menor a 0.05. Aparte, vemos que el modelo explica un 82% de la varianza en los datos.
+
+Ahora procedemos a realizar los gráficos para el análisis de residuos generados.
+
+```{r}
+#Gráficos de residuos
+
+residuos_RLS_Graf <- autoplot(modelo, which = 1:2) + theme_pubr()
+print(residuos_RLS_Graf)
+```
+Vemos que no hay patrón identificable en los residuos y que los residuos parecen repetirse de forma aleatoria arriba y abajo de la línea de regresión. Lo único a recalcar es la forma particular de la línea de regresión, pero esto no debería significar un problema. El gráfico Q-Q muestra algunas desviaciones, pero nada muy drástico. Para salir de dudas realizaremos un test de normalidad y un histograma.
+
+```{r}
+#Histograma de Residuos
+His_RLS <- gghistogram(data.frame(Residuos = resid(modelo)), x = "Residuos", bins = 9) 
+print(His_RLS)
+```
+
+```{r}
+Shapiro_RLS <- shapiro.test(resid(modelo))
+cat("Test de Normalidad los residuos del modelo RLS de Weight ~ Hip.Girth:")
+print(Shapiro_RLS)
+```
+Del histograma se logra observar cierta asimetría, pero gracias al test de Shapiro-Wilk no podemos descartar que los residuos siguen una distribución normal al contar con un p-value mayor a 0.05.
+
+Ahora lo que sigue faltando es evaluar los estadísticos de influencia del modelo RLS obtenido, para lo cual se realizan los siguientes análisis: 
+
+### Residuos estandarizados
+
+```{r}
+Res_Stand <- which(abs(rstandard(modelo)) > 1.96)
+cat("Residuos estandarizados fuera del 95% esperado: ")
+cat(paste(Res_Stand, collapse = ", "), "\n")
+```
+Vemos que tan solo hay 2 datos que se encuentran fuera del 95% de los residuos estandarizados entre -1.96 y 1.96, estos 2 valores son aproximadamente el 2.85% de los datos.
+
+### DFBETA
+
+```{r}
+DfBeta <- which(apply(dfbeta(modelo) >= 1, 1, any))
+names(DfBeta) <- NULL
+cat("Residuos con DFBeta mayor que 1: ")
+cat(paste(DfBeta, collapse = ", "), "\n")
+```
+Vemos que también resultan datos con DFBeta mayor a 1, por lo cual tendríamos que revisarlos.
+
+### influencePlot
+
+```{r}
+influencePlot(modelo)
+```
+
+Vemos que hay apalancamiento, ya que hay 2 observaciones con Hat mayor a 1. Por otro lado, todas las distancias Cook resultan menores a 1, por lo cual no hay observaciones que sean inaceptables.
+
+A pesar de que algunas observaciones parecieran ser atípicas, ninguna tiene indicadores de influencia altos y tampoco están tan fuera del rango aceptable, por lo cual no resulta de gran importancia realizar modificaciones a los datos.
+
+En conclusión, este modelo de RLS parece ser confiable, ya que se generan residuos aleatorios, pareciera seguir una distribución normal, como predictor Hip.Girth, el cual parece presentar una relación lineal con Weight y no se identificaron observaciones que tengan una influencia grande sobre el modelo.
+
+Otro aspecto a considerar es que la bondad del ajuste resulta alta, ya que explica el 82% de la variabilidad de la variabilidad de la predicción.
+
+# Regresion Lineal Multiple
+
+Para seleccionar de 2 a 5 predictores, haremos uso de step. Donde nuestro modelo RLS será el modelo mínimo y el modelo máximo será el que se utilice una cantidad de predictores que como grupo acordemos.
+
+```{r}
+#Modelo RLM de prueba
+
+RLM_Todo_Predictor <- lm(Weight ~ Bitrochanteric.diameter + Knee.Girth + Ankles.diameter + Chest.Girth + Shoulder.Girth + Wrists.diameter + Elbows.diameter + Navel.Girth + Hip.Girth , data = construccion)
+
+#Para evaluar cuáles son los mejores predictores
+
+rlm <- step(modelo, scope = list(lower = modelo, upper = RLM_Todo_Predictor), direction = "both")
+
+```
+
+Finalmente, como grupo decidimos utilizar 3 predictores, los cuales resultan ser Elbows.diameter, Shoulder.Girth y Knee.Girth; ahora con estos predictores y Hip.Girth pasamos a realizar el modelo.
+
+```{r}
+#Modelo RLM
+
+modelo_M = lm(Weight ~ Hip.Girth + Elbows.diameter + Shoulder.Girth + Knee.Girth  , construccion)
+summary(modelo_M)
+```
+
+Vemos de los resultados que todos son significativos, pues todos los predictores generan un valor p menor a 0.05.
+
+Otro aspecto a considerar es que la bondad del ajuste resulta muy alta, ya que explica el 91% de la variabilidad de la variabilidad de la predicción.
+
+Para hacer uso de una RLM tenemos que cumplir con 9 condiciones:
+
+### Linealidad
+
+```{r}
+#Grafico de dispersión
+
+pred_rlm <- attr(rlm$terms, "term.labels")
+datos_largos <- construccion |>
+  select(all_of(c("Weight", "Knee.Girth", "Hip.Girth", "Elbows.diameter", "Shoulder.Girth"))) |>
+  pivot_longer(cols = -Weight, names_to = "predictores", values_to = "valores")
+
+p <- ggscatter(datos_largos, x = "valores", y = "Weight",
+                          color = "predictores", add = "reg.line")
+p<- p + facet_wrap(~ predictores, scales = "free_x")
+
+print(p)
+
+```
+De los gráficos podemos ver que existe una relación lineal positiva entre todos los predictores con la variable Weight.
+
+### Homocedasticidad
+
+```{r}
+#Gráfico de residuos
+p_respuesta <- autoplot(modelo_M, which = 1:2) + theme_pubr()
+print(p_respuesta)
+```
+Vemos que, al igual que en el modelo de regresión lineal simple, no hay un patrón identificable en los residuos y que estos parecen repetirse de forma aleatoria arriba y abajo de la línea de regresión y que, nuevamente, lo único a recalcar es la línea de la regresión, que tampoco debería significar un gran problema. Además, el gráfico Q-Q muestra también algunas desviaciones no muy drásticas, pero para salir de dudas sobre la normalidad, realicemos pruebas de normalidad e histogramas.
+
+### Normalidad
+
+```{r}
+#Histograma de Residuos
+His_RLM <- gghistogram(data.frame(Residuos = resid(modelo_M)), x = "Residuos", bins = 9) 
+print(His_RLM)
+```
+
+Del histograma se puede ver una distribución cercana a la normal, pero de igual manera confirmaremos la idea de normalidad con la prueba de Shapiro-Wilk.
+
+```{r}
+# Test de normalidad
+
+Shapiro_RLM <- shapiro.test(resid(modelo_M))
+cat("Test de Normalidad los residuos del modelo RLM de Weight ~ Hip.Girth + Elbows.diameter + Shoulder.Girth + Knee.Girth:")
+print(Shapiro_RLM)
+```
+Podemos ver que la prueba de Shapiro entrega un valor p mayor a 0.05, por lo cual no podemos descartar que los residuos siguen una distribución normal.
+
+### Independencia de residuos
+
+```{r}
+cat("Independencia de residuos\n")
+print(durbinWatsonTest(modelo_M))
+```
+Por la prueba de Durbin-Watson podemos concluir que no existe evidencia suficiente para descartar la independencia entre los residuos.
+
+### Residuos estandarizados
+
+Ahora veamos cuántos residuos estandarizados se encuentran fuera del 95% esperado.
+
+```{r}
+valores1 <- which(abs(rstandard(modelo_M)) > 1.96)
+cat("Residuos estandarizados fuera del 95% esperado: ")
+cat(paste(valores1, collapse = ", "), "\n")
+```
+Al obtenerse como resultado 20, 32, 58, 70, podemos decir que se cumple con la condición de residuos estandarizados, pues solo 4 de los 70 datos se encuentran fuera del 95% esperado.
+
+### DFBETA
+```{r}
+valores4 <- which(apply(dfbeta(modelo_M) >= 1, 1, any))
+names(valores4) <- NULL
+cat("Residuos con DFBeta mayor que 1: ")
+cat(paste(valores4, collapse = ", "), "\n")
+```
+También podemos ver algunos casos a revisar con este criterio.
+
+### InfluencePlot
+
+```{r}
+influencePlot(modelo_M)
+```
+Vemos que hay apalancamiento, ya que hay 2 observaciones con Hat mayor a 1. Por otro lado, todas las distancias Cook resultan mayores a 1, pero a pesar de esto las observaciones no resultan inaceptables.
+
+A pesar de que algunas observaciones parecieran ser atípicas, ninguna tiene indicadores de influencia altos y tampoco están tan fuera del rango aceptable, por lo cual no resulta de gran importancia realizar modificaciones a los datos.
+
+En conclusión, este modelo de RLM parece ser confiable, ya que se generan residuos aleatorios, que parecieran seguir una distribución normal. Para los predictores Knee.Girth, Hip.Girth, Elbows.diameter y Shoulder.Girth, los cuales parecen presentar una relación lineal con Weight y no presentan problemas de residuos o dependencia, tampoco se identificaron observaciones que tengan una influencia grande sobre el modelo.
+
+# Confiabilidad de los modelos
+
+Ahora, finalmente, vamos a evaluar el modelo construido haciendo uso de los datos no considerados en la construcción del modelo.
+```{r}
+##############################################################################
+#                              RLS
+##############################################################################
+
+predicciones_RLS <- predict(modelo, newdata = evaluacion)
+valores_reales <- evaluacion$Weight
+
+# Error Cuadrático Medio (MSE)
+MSE_RLS <- mean((valores_reales - predicciones_RLS)^2)
+
+# Raíz del Error Cuadrático Medio (RMSE)
+RMSE_RLS <- sqrt(MSE_RLS)
+
+# Coeficiente de Determinación (R²)
+R2_RLS <- 1 - sum((valores_reales - predicciones_RLS)^2) / sum((valores_reales - mean(valores_reales))^2)
+
+# Mostrar resultados
+cat("Resultados del modelo RLS:\n")
+cat("MSE: ", round(MSE_RLS, 2), "\n")
+cat("RMSE: ", round(RMSE_RLS, 2), "\n")
+cat("R2: ", round(R2_RLS, 2), "\n\n")
+
+grafico_datos_RLS <- data.frame(
+  Valores_Reales = valores_reales,
+  Predicciones = predicciones_RLS
+)
+
+grafico_RLS <- ggplot(grafico_datos_RLS, aes(x = Valores_Reales, y = Predicciones)) +
+  geom_point(color = "blue", size = 2) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") + 
+  labs(
+    title = "Modelo RLS: Predicciones y Valores Reales",
+    x = "Peso Real",
+    y = "Predichos"
+  ) +
+  theme_minimal()
+
+print(grafico_RLS)
+
+##############################################################################
+#                                   RLM
+##############################################################################
+
+
+evaluacion[["predicciones"]] <- predict(modelo_M, newdata = evaluacion)
+
+MSE <- mean((evaluacion[["Weight"]] - evaluacion[["predicciones"]])^2)
+RMSE <- sqrt(MSE)
+
+# Coeficiente de Determinación
+SST <- sum((evaluacion[["Weight"]] - mean(evaluacion[["Weight"]]))^2)
+SSE <- sum((evaluacion[["Weight"]] - evaluacion[["predicciones"]])^2)
+R2 <- 1 - (SSE / SST)
+
+cat("Resultados de la evaluación:\n")
+cat("MSE: ", round(MSE, 2), "\n")
+cat("RMSE: ", round(RMSE, 2), "\n")
+cat("R2: ", round(R2, 2), "\n")
+
+ggplot(evaluacion, aes(x = Weight, y = predicciones)) +
+  geom_point(color = "blue") +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Modelo RLM: Valores Predichos y Reales",
+       x = "Peso Real",
+       y = "Peso Predicho") +
+  theme_minimal()
+
+
+```
+El modelo de RLS, basado únicamente en Hip.Girth, tiene un MSE de 41.44 y un RMSE de 6.44. Esto indica que el promedio de los errores cuadrados MSE y la raíz del error cuadrático medio RMSE son significativamente mayores en comparación con el modelo de RLS.
+
+El modelo RLM, que incluye varios predictores seleccionados de manera óptima, presenta un MSE de 17.04 y un RMSE de 4.13. Estos resultados muestran que el modelo RLM tiene un ajuste más preciso y errores más pequeños en sus predicciones.
+
+El R^2 del modelo RLS es 0.69, lo que significa que este modelo explica el 69% de la variabilidad en los datos. Si bien esto indica una relación significativa entre Hip.Girth y Weight, no es suficiente para capturar toda la complejidad de los datos.
+
+En contraste, el R^2 del modelo RLM es 0.87, lo que significa que este modelo explica el 87% de la variabilidad en los datos, un valor significativamente superior. Esto refleja la capacidad del modelo de capturar más relaciones entre los predictores y el peso, gracias al uso de variables adicionales.
+
+El modelo RLS, aunque más simple y con una interpretación directa, tiene un desempeño considerablemente menor en términos de precisión y poder explicativo. Su limitación principal es la dependencia de un solo predictor, lo cual no es suficiente para capturar la complejidad del fenómeno estudiado.
+
+El modelo RLM, al incluir múltiples predictores, es más complejo, pero su mejor ajuste justifica esta complejidad. El menor MSE y RMSE junto con el mayor R^2 indican que el modelo es más eficiente y preciso para predecir el peso.
+
+# Conclusiones
+
+Finalmente, concluimos que el mejor modelo resulta ser el RLM, el cual considera los predictores Hip.Girth, Elbows.diameter, Shoulder.Girth y Knee.Girth, ya que presenta un mejor ajuste y menor MSE, RMSE a comparación del RLM, aparte de contar con un R^2 mayor, y aunque este modelo tenga algunos datos que resulten algo extraños, no resultan lo suficientemente significativos como para desacreditar el modelo. Por lo cual este resulta útil para explicar la variación del peso de los hombres mediante el estudio de los predictores seleccionados.
+
+

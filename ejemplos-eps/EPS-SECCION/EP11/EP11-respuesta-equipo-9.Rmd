@@ -1,0 +1,635 @@
+---
+title: "EP11-respuesta-equipo-9.Rmd"
+author: "Grupo 9"
+date: "2024-12-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Importación de librerías utilizadas
+```{r}
+library(dplyr)
+library(ggpubr)
+library(car)
+library(leaps)
+library(caret)
+library(ggpubr)
+```
+
+1. Definir la semilla a utilizar, que corresponde a los primeros cinco dígitos del RUN del integrante de mayor edad del equipo.
+```{r}
+set.seed(2572)
+```
+
+2. Seleccionar una muestra de 100 personas, asegurando que la mitad tenga estado nutricional “sobrepeso” y la otra mitad “no sobrepeso”.
+
+```{r}
+set.seed(2572)
+datos <- read.csv2("EP09 Datos.csv")
+head(datos)
+
+columnas <- colnames(datos)
+
+datos$IMC <- datos$Weight / (datos$Height/100 * datos$Height/100)
+#1 si tiene sobrepeso y 0 si no tiene
+datos$EN <- ifelse(datos$IMC < 23.2,0,1)
+
+muestra_sobrepeso <- datos %>% filter(EN == 1)
+muestra_sinsobrepeso <- datos %>% filter(EN == 0)
+
+muestra_sobrepeso <- muestra_sobrepeso %>% sample_n(50);
+muestra_sinsobrepeso <- muestra_sinsobrepeso %>% sample_n(50);
+
+muestra <- rbind(muestra_sinsobrepeso,muestra_sobrepeso)
+```
+3. Usando las herramientas del paquete leaps, realizar una búsqueda exhaustiva para seleccionar entre dos y ocho predictores que ayuden a estimar la variable Peso (Weight), obviamente sin considerar las nuevas variables IMC ni EN, y luego utilizar las funciones del paquete caret para construir un modelo de regresión lineal múltiple con los predictores escogidos y evaluarlo usando bootstrapping
+
+```{r}
+set.seed(2572)
+
+muestra3 <- muestra %>% select(all_of(colnames(muestra))) %>% slice(sample(n())) %>% select(1:23,25)
+
+combinaciones <- regsubsets(Weight ~ .,data = muestra3,nbest=3,nvmax= 8,method = "exhaustive")
+
+# Graficar los resultados
+plot(combinaciones)
+
+# Extraer los mejores subconjuntos
+comb_summary <- summary(combinaciones)
+i_min_bic <- which.min(comb_summary[["bic"]])
+i_max_r2a <- which.max(comb_summary[["adjr2"]])
+
+mejor_comb_bic <- comb_summary[["which"]][i_min_bic, ]
+mejor_comb_r2a <- comb_summary[["which"]][i_max_r2a, ]
+
+# Extraer las variables seleccionadas
+comb_mejor_bic <- names(mejor_comb_bic[mejor_comb_bic == TRUE])
+comb_mejor_r2a <- names(mejor_comb_r2a[mejor_comb_r2a == TRUE])
+
+# Eliminar variables indicadoras
+nombres_mejor_bic <- unique(gsub("^(.*)\\d$", "\\1", comb_mejor_bic))
+nombres_mejor_r2a <- unique(gsub("^(.*)\\d$", "\\1", comb_mejor_r2a))
+
+# Obtener las fórmulas
+pred_mejor_bic <- paste(nombres_mejor_bic[-1], collapse = " + ")
+pred_mejor_r2a <- paste(nombres_mejor_r2a[-1], collapse = " + ")
+
+fmla_mejor_bic <- as.formula(paste("Weight", pred_mejor_bic, sep = " ~ "))
+fmla_mejor_r2a <- as.formula(paste("Weight", pred_mejor_r2a, sep = " ~ "))
+
+# Construir y mostrar los mejores modelos
+modelo_mejor_bic <- lm(fmla_mejor_bic, data = muestra3)
+modelo_mejor_r2a <- lm(fmla_mejor_r2a, data = muestra3)
+
+cat("Modelo que minimiza el BIC:\n")
+cat("----------------------------\n")
+print(modelo_mejor_bic)
+cat("\n")
+cat("Modelo que maximiza el coeficiente de determinación ajustado:\n")
+cat("-----------------------------------------------\n")
+print(modelo_mejor_r2a)
+
+```
+
+```{r}
+cat("Modelo que minimiza el BIC:\n")
+
+modelo_mejor_bic$coefficients
+```
+
+```{r}
+cat("Modelo que maximiza el coeficiente de determinación ajustado:\n")
+
+modelo_mejor_r2a$coefficients
+```
+
+```{r}
+set.seed(2572)
+control <- trainControl(method = "boot", number = 1000)
+modelo_mejor_train <- train(fmla_mejor_bic, data = muestra3,method = "lm", trControl = control)
+modelo_final <- modelo_mejor_bic[["finalModel"]]
+
+modelo_mejor_train
+```
+
+##### Evaluar las condiciones para RLM
+
+**Condición 1:** La variable *Weight* efectivamente es cuantitativa y continua, por lo que cumple con la condición.
+
+**Condición 2:** Todos los predictores utilizados son cuantitativos, cumpliendo la condición.
+
+**Condición 3:** Se observa que los datos de cada predictor varían en cada observación, cumpliendo la condición.
+
+Para evaluar las **condiciones 4, 5 y 6** se realizarán los gráficos de residuos y marginales asociados a cada predictor del modelo, incluyendo la prueba de homocedasticidad para la condición 6:
+
+```{r}
+residualPlots(modelo_mejor_bic)
+```
+
+Dado a que no se cumple la que cada predictor esta relacionado linealmente con la respuesta se considerara el segundo mejor modelo
+
+```{r}
+# Obtener los índices ordenados de los BIC
+bic_ordenados <- order(comb_summary[["bic"]])
+
+# El segundo mejor índice de BIC (el segundo más bajo)
+i_segundo_mejor_bic <- bic_ordenados[2]
+
+# Obtener el segundo mejor subconjunto de variables
+segundo_mejor_comb_bic <- comb_summary[["which"]][i_segundo_mejor_bic, ]
+
+# Extraer las variables seleccionadas del segundo mejor modelo
+comb_segundo_mejor_bic <- names(segundo_mejor_comb_bic[segundo_mejor_comb_bic == TRUE])
+
+# Eliminar variables indicadoras (si es necesario)
+nombres_segundo_mejor_bic <- unique(gsub("^(.*)\\d$", "\\1", comb_segundo_mejor_bic))
+
+# Obtener la fórmula del segundo mejor modelo
+pred_segundo_mejor_bic <- paste(nombres_segundo_mejor_bic[-1], collapse = " + ")
+fmla_segundo_mejor_bic <- as.formula(paste("Weight", pred_segundo_mejor_bic, sep = " ~ "))
+
+# Construir el segundo mejor modelo según BIC
+modelo_segundo_mejor_bic <- lm(fmla_segundo_mejor_bic, data = muestra3)
+
+# Mostrar el resumen del modelo
+summary(modelo_segundo_mejor_bic)
+
+```
+
+Una vez conseguido el segundo mejor modelo se analiza su confiabilidad
+
+**Condición 8:** Para evaluar esto se utilizará la función factor de inflación de varianza (VIF) sobre el modelo para evaluar la multicolinealidad:
+Se busca aquel modelo que cumpla la condición de no existir multicolinealidad
+```{r}
+# Verificar multicolinealidad
+vif(modelo_segundo_mejor_bic)
+```
+
+```{r}
+coeficientes <- names(coef(modelo_segundo_mejor_bic))[-1]
+coeficientes <- coeficientes[coeficientes != "Forearm.Girth"]
+# Se crear la fórmula con las variables restantes
+formulaActualizada <- as.formula(paste("Weight ~", paste(coeficientes, collapse = " + ")))
+modelo_Actualizado <- lm(formulaActualizada, data = muestra3)
+vif(modelo_Actualizado)
+```
+
+```{r}
+coeficientes <- names(coef(modelo_segundo_mejor_bic))[-1]
+coeficientes <- coeficientes[coeficientes != "Waist.Girth"]
+# Se crear la fórmula con las variables restantes
+formulaActualizada1 <- as.formula(paste("Weight ~", paste(coeficientes, collapse = " + ")))
+modelo_nuevo1 <- lm(formulaActualizada, data = muestra3)
+vif(modelo_nuevo1)
+```
+
+```{r}
+coeficientes <- names(coef(modelo_segundo_mejor_bic))[-1]
+coeficientes <- coeficientes[coeficientes != "Shoulder.Girth"]
+# Se crear la fórmula con las variables restantes
+formula_Actualizada <- as.formula(paste("Weight ~", paste(coeficientes, collapse = " + ")))
+modelo_nuevo <- lm(formula_Actualizada, data = muestra3)
+vif(modelo_nuevo)
+```
+Tras identificar el predictor que generaba una multicolinealidad significativa en el modelo y eliminarlo, se evaluaron las demás condiciones para determinar la confiabilidad del nuevo modelo ajustado.
+
+**Condición 4:**
+```{r}
+residualPlots(modelo_nuevo)
+```
+Dado a que ninguno presenta un Pr menor al valor de significancia de 0.05, se cumple la condición de estar relacionados linealmente con la respuesta
+
+**Condición 5:**
+```{r}
+marginalModelPlots(modelo_nuevo, sd = TRUE,
+                   id = list(method = "r", n = 3, cex = 0.7, location = "lr"),
+                   col = "steelblue", pch = 20, col.line = c("steelblue", "red"))
+```
+
+La distribución de los residuos muestra ser cercana a la normal centrada en cero
+
+**Condición 6:**
+```{r}
+# verificar homocedasticidad
+ncvTest(modelo_nuevo)
+```
+
+Dada a que el p valor es mayor a 0.05 no hay suficiente evidencia como para decir que no hay homocedasticidad
+
+**Condición 7:**
+```{r}
+
+# verificar independencia de los datos
+durbinWatsonTest(modelo_nuevo)
+```
+
+Dado a que el p valor es mayor que 0.05 no hay suficiente evidencia para decir que los residuos no son independientes entre si
+
+**Condición 9:**
+
+```{r}
+# verificar influencia
+influencePlot(modelo_nuevo)
+```
+
+Dado que los valores obtenidos para los casos que podrían ser influyentes son bastante bajos, se concluye que no hay influencia significativa.
+
+Evaluar poder predictivo
+```{r}
+set.seed(2572)
+control3 <- trainControl(method = "boot", number = 1000)
+modelo_nuevo_train <- train(formula_Actualizada, data = muestra3,method = "lm", trControl = control3)
+
+modelo_nuevo_train
+```
+
+Finalmente se observa que el modelo generado por búsqueda exahustiva no es confiable dado a que no cumple las condiciones de confiabilidad sin embargo el modelo encontrado mediante la eliminación del predictor que permitía que los valores de VIF fueran menores que 5 es confiable y posee un buen poder predictivo con R-squared 0.95853 un valor muy cercano a uno.
+
+4.  Haciendo un poco de investigación sobre el paquete caret, en particular cómo hacer Recursive Feature Elimination (RFE), construir un modelo de regresión lineal múltiple para predecir la variable IMC que incluya entre 10 y 20 predictores, seleccionando el conjunto de variables que maximice R2 y que use cinco repeticiones de validación cruzada de cinco pliegues para evitar el sobreajuste (obviamente no se debe considerar las variables Peso, Estatura ni estado nutricional –Weight, Height, EN respectivamente).
+
+```{r}
+set.seed(2572)
+# Filtramos los datos a utilizar
+muestra4 <- muestra %>% select(all_of(colnames(muestra))) %>% slice(sample(n())) %>% select(1:22,25:26)
+
+# Utilizamos  Recursive Feature Elimination (RFE) para seleccionar el mejor modelo
+# Definimos el control de RFE, utilizando validación cruzada de 5 pliegues repetida 5 veces
+# con el método repeatedcv, para utilizar una validación cruzada simple y que se repite varias veces
+control <- rfeControl(functions = lmFuncs, method = "repeatedcv",
+                           number = 5, repeats = 5)
+# Aplicamos RFE
+modelRFE <- rfe(reformulate(termlabels = ".", response = "IMC"), data = muestra4, rfeControl = control, sizes = 10:20, metric = "Rsquared")
+
+# Graficamos los resultados
+grafico <- ggplot(modelRFE) + theme_pubr()
+print(grafico)
+
+# Obtenemos el mejor modelo
+RlmRFE <- modelRFE[["fit"]]
+
+# Se muestran las variables seleccionadas
+print(summary(RlmRFE))
+
+# Calculamos vif
+cat("Inflación de la varianza:\n")
+print(vif(RlmRFE))
+
+```
+
+Podemos observa que hay muchos predicadores tienen una inflación de varianza mayor a 5, por lo que se puede decir que hay multicolinealidad en el modelo, el cual llega a ser severa debido que algunos superan el valor de 10. Eliminar los predictores mas grandes, uno a uno, hasta que el modelo ya no posea multicolinealidad, manteniendo la condición de que la cantidad de esto no sea inferior a 10.
+
+Primero observamos que el predictor Forearm.Girth es el que tiene el mayor valor de inflación de varianza, por lo que se eliminara este predictor y se ajustara el modelo nuevamente.
+
+```{r}
+# Se obtienen las variables seleccionadas por RFE
+variables <- names(coef(RlmRFE))[-1]
+# Se elimina el predictor Forearm.Girth
+variables <- variables[variables != "Forearm.Girth"]
+# Se crear la fórmula con las variables restantes
+formulaActualizada <- as.formula(paste("IMC ~", paste(variables, collapse = " + ")))
+
+# Ajustamos el modelo
+RlmRFE2 <- lm(formulaActualizada, data = muestra4)
+
+# Se ve el resumen del modelo
+summary(RlmRFE2)
+
+# Calculamos vif
+cat("Inflación de la varianza:\n")
+print(vif(RlmRFE2))
+```
+
+Se observa que el predictor Chest.Girth es el que tiene el mayor valor de inflación de varianza, por lo que se eliminara este predictor y se ajustara el modelo nuevamente.
+
+```{r}
+# Se obtienen las variables seleccionadas por RFE
+variables <- names(coef(RlmRFE2))[-1]
+# Se elimina el predictor Chest.Girth
+variables <- variables[variables != "Chest.Girth"]
+# Se crear la fórmula con las variables restantes
+formulaActualizada <- as.formula(paste("IMC ~", paste(variables, collapse = " + ")))
+
+# Se ajusta el modelo
+RlmRFE3 <- lm(formulaActualizada, data = muestra4)
+
+# Se ve el resumen del modelo
+summary(RlmRFE3)
+
+# Calculamos vif
+cat("Inflación de la varianza:\n")
+print(vif(RlmRFE3))
+```
+```{r}
+# Se obtienen las variables seleccionadas por RFE
+variables <- names(coef(RlmRFE3))[-1]
+# Se elimina el predictor Hip.Girth
+variables <- variables[variables != "Hip.Girth"]
+# Se crear la fórmula con las variables restantes
+formulaActualizada <- as.formula(paste("IMC ~", paste(variables, collapse = " + ")))
+
+# Se ajusta el modelo
+RlmRFE4 <- lm(formulaActualizada, data = muestra4)
+
+# Ver resumen del nuevo modelo RLM
+summary(RlmRFE4)
+
+# Calculamos vif
+cat("Inflación de la varianza:\n")
+print(vif(RlmRFE4))
+```
+
+Se observa que el predictor Wrist.Minimum.Girth es el que tiene el mayor valor de inflación de varianza, por lo que se eliminara este predictor y se ajustara el modelo nuevamente.
+
+```{r}
+# Se obtienen las variables seleccionadas por RFE
+variables <- names(coef(RlmRFE4))[-1]
+# Se elimina el predictor Wrist.Minimum.Girth
+variables <- variables[variables != "Wrist.Minimum.Girth"]
+# Se crear la fórmula con las variables restantes
+formulaActualizada <- as.formula(paste("IMC ~", paste(variables, collapse = " + ")))
+
+# Se ajusta el modelo
+RlmRFE5 <- lm(formulaActualizada, data = muestra4)
+
+# Ver resumen del nuevo modelo RLM
+summary(RlmRFE5)
+
+# Calculamos vif
+cat("Inflación de la varianza:\n")
+print(vif(RlmRFE5))
+```
+
+Se observa que el predictor Gender es el que tiene el mayor valor de inflación de varianza, por lo que se eliminara este predictor y se ajustara el modelo nuevamente.
+
+```{r}
+# Se obtienen las variables seleccionadas por RFE
+variables <- names(coef(RlmRFE5))[-1]
+# Se elimina el predictor Gender
+variables <- variables[variables != "Gender"]
+# Se crear la fórmula con las variables restantes
+formulaActualizada <- as.formula(paste("IMC ~", paste(variables, collapse = " + ")))
+
+# Se ajusta el modelo
+RlmRFE6 <- lm(formulaActualizada, data = muestra4)
+
+# Ver resumen del nuevo modelo RLM
+summary(RlmRFE6)
+
+# Calculamos vif
+cat("Inflación de la varianza:\n")
+print(vif(RlmRFE6))
+```
+
+Se observa que el predictor Elbows.diameter es el que tiene el mayor valor de inflación de varianza, por lo que se eliminara este predictor y se ajustara el modelo nuevamente.
+
+```{r}
+# Se obtienen las variables seleccionadas por RFE
+variables <- names(coef(RlmRFE6))[-1]
+# Se elimina el predictor Elbows.diameter
+variables <- variables[variables != "Elbows.diameter"]
+# Se crear la fórmula con las variables restantes
+formulaActualizada <- as.formula(paste("IMC ~", paste(variables, collapse = " + ")))
+
+# Se ajusta el modelo
+RlmRFE7 <- lm(formulaActualizada, data = muestra4)
+
+# Ver resumen del nuevo modelo RLM
+summary(RlmRFE7)
+
+# Calculamos vif
+cat("Inflación de la varianza:\n")
+print(vif(RlmRFE7))
+```
+
+Finalmente, despues de eliminar los predictores que generaban multicolinealidad, se obtiene un modelo con 11 predictores y un R2 de 0.9025, el cual tiene multicolinealidad moderada pero no es motivo de preocupacion.
+
+ahora observaremos el gráfico de residuos y la linealidad del modelo final.
+.
+```{r}
+# Se crear un grafico de residuos y marginal
+residualPlots(RlmRFE7, ask = FALSE)
+```
+Se puede observar que el p-value de los predictores es mucho menor que el nivel de significancia de 0.05, por lo que se puede decir que el modelo no cumple con la condicion de relacion lineal entre algunos predictores. Para intentar resolver esto se eliminara el predictor con menor p-value de manera que el modelo se vuelva a ajustar
+
+```{r}
+# Se obtienen las variables seleccionadas por RFE
+variables <- names(coef(RlmRFE7))[-1]
+# Se elimina el predictor Knee.Girth
+variables <- variables[variables != "Knee.Girth"]
+# Se crear la fórmula con las variables restantes
+formulaActualizada <- as.formula(paste("IMC ~", paste(variables, collapse = " + ")))
+
+# Se ajusta el modelo
+RlmRFE8 <- lm(formulaActualizada, data = muestra4)
+
+# Ver resumen del nuevo modelo RLM
+summary(RlmRFE8)
+
+# Se muestra el grafico de residuos
+residualPlots(RlmRFE8, ask = FALSE)
+```
+
+Finalmente podemos observar que el modelo ajustado todavía mantiene algunos predictores con un p-value menor a 0.05, por lo que se puede decir que el modelo no cumple con la condición de relación lineal entre algunos predictores. Esto sumado a que se llego a tener 10 predictores, ya no es posible seguir eliminando estos sin incumplir la cantidad mínima solicitada en el enunciado, por lo tanto este modelo no es confiable.
+
+A pesar de que el modelo no es confiable se evaluara el poder predictivo, asumiendo que si fuese confiable. Ya que no se aparto una muestra de prueba, se utilizara el método bootstrap al igual que en el modelo anterior.
+```{r}
+# Se extraer los nombres de los predictores del modelo
+predictores <- all.vars(formulaActualizada)
+
+# Se filtran las columnas de 'muestra4' que correspondan a los predictores
+muestra4_predictores <- muestra4[, predictores]
+
+# Se evaluamos el poder predictivo del modelo
+control3 <- trainControl(method = "boot", number = 500)
+Entrenamiento <- train(formulaActualizada, data = muestra4_predictores, method = "lm", trControl = control3)
+
+# Finalmente se muestra el resultado
+Entrenamiento
+```
+Se puede apreciar que el poder predictivo es considerablemente bueno, pues el Rsqueare es de 0.8025917, lo cual es muy cercano a 1.
+
+5. Usando RFE, construir un modelo de regresión logística múltiple para la variable EN que incluya el conjunto de predictores, entre dos y seis, que entregue la mejor curva ROC y que utilice validación cruzada dejando uno fuera para evitar el sobreajuste (obviamente no se debe considerar las variables Peso, Estatura –Weight y Height respectivamente– ni IMC).
+
+```{r}
+# Preparación de los datos para el modelo
+muestra <- muestra %>% select(all_of(colnames(muestra))) %>% slice(sample(n()))
+
+set.seed(2572)
+muestra_ext <- muestra %>% select(-Weight, -Height, -IMC)
+respuesta_binaria <- "EN"  # Variable de respuesta
+rlogitm_df <- muestra_ext
+rlogitm_fmla <- formula(paste(respuesta_binaria, ".", sep = " ~ "))
+
+# Configuración de RFE para regresión logística
+lrFuncs[["summary"]] <- twoClassSummary
+rlogitm_rfe_control <- rfeControl(
+  functions = lrFuncs, 
+  method = "LOOCV", 
+  saveDetails = TRUE, 
+  returnResamp = "all", 
+  verbose = FALSE
+)
+rlogitm_train_control <- trainControl(
+  method = "none", 
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary
+)
+
+# Convertir EN a factor para clasificación
+rlogitm_df$EN <- factor(rlogitm_df$EN, levels = c(0, 1), labels = c("No", "Si"))
+
+# Modelo de RFE
+set.seed(2572)
+rlogitm_rfe <- suppressWarnings(
+  rfe(
+    x = rlogitm_df %>% select(-EN),
+    y = as.factor(rlogitm_df$EN),
+    sizes = 2:6,  # De 2 a 6 predictores
+    metric = "ROC",
+    rfeControl = rlogitm_rfe_control,
+    trControl = rlogitm_train_control
+  )
+)
+
+# Modelo final
+rlogitm <- rlogitm_rfe[["fit"]]
+
+# Resumen del modelo
+cat("Modelo de regresión logística múltiple:\n")
+print(summary(rlogitm))
+```
+```{r}
+# Visualización del proceso RFE
+rlogitm_rfe_p <- ggplot(rlogitm_rfe) + theme_pubr()
+print(rlogitm_rfe_p)
+```
+Se puede observar que el valor más alto de la curva de ROC se obtiene con 6 predictores, donde alcanza un valor superior a 0,9 indicando que el modelo tiene un buen desempeño.
+
+Verificación de las condiciones para evaluar la confiabiliadad del modelo
+
+Prueba de independencia
+```{r prueba Dubin Watson RLogitM, results='hold'}
+cat("Prueba de la independencia de los residuos para el modelo de RLogitM:\n")
+print(durbinWatsonTest(rlogitm))
+```
+
+Prueba de multicolinealidad
+```{r}
+cat("Factores de inflación de la varianza (VIF):\n")
+print(vif(rlogitm))
+```
+Vemos que todos los predictores poseen valores entre 1 y 5, por lo que existe multicolinealidad moderada, pero esta no es motivo de preocupación.
+
+Información incompleta
+Los predictores numéricos seleccionados presentan más de 15 observaciones, además el predictor categórico "Gender" posee más de 15 observaciones por nivel, por lo que no hay información incompleta.
+
+Relación lineal entre predictores y Validación cruzada
+```{r}
+# Ajuste del modelo final sin validación cruzada
+rlogitm_seleccion <- predictors(rlogitm)
+rlogitm_sel_text <- paste(rlogitm_seleccion, collapse = " + ")
+rlogitm_fmla <- formula(paste(respuesta_binaria, rlogitm_sel_text, sep = " ~ "))
+
+# Ajuste del modelo final usando glm sin validación cruzada
+rlogitm_equiv <- glm(rlogitm_fmla, data = rlogitm_df, family = binomial(link = "logit"))
+
+# Diagnóstico de residuos (residuos estandarizados)
+cat("Diagnóstico de residuos (residuos estandarizados):\n")
+residualPlots(rlogitm_equiv, linear = TRUE, ask = FALSE)
+```
+Vemos que todos los predictores cumplen con la normalidad de los residuos, por lo que no hay problemas con la distribución de los residuos. Cabe destacar que el valor 1 de Gender es una variable categórica dicotómica, por lo que no presenta valores intermedios, lo que limita la capacidad de detectar relaciones en los residuos.
+
+
+Casos influyentes
+```{r}
+# Diagnóstico de influencia con el gráfico de influencia
+rlogitm_inf_estad <- influencePlot(rlogitm_equiv, id = list(n = 3))
+```
+
+```{r}
+# Mostrar los casos notorios
+print(rlogitm_inf_estad)
+```
+De los casos influyentes encontrados, se puede observar que ninguno de ellos presenta una distancia de Cook superior a 1, lo que indica que ninguno de estos casos es potencialmente influyentes en el modelo.
+
+```{r}
+# Impacto en los coeficientes
+cat("Evaluación del impacto de los casos notorios en los coeficientes:\n")
+rlogitm_inf_ids <- as.integer(rownames(rlogitm_inf_estad))  # Identificar los casos notorios
+
+# Comparar coeficientes del modelo original con el modelo ajustado después de eliminar cada caso de alta influencia
+rlogitm_comp_list <- lapply(rlogitm_inf_ids, function(id) {
+  # Reajustar el modelo eliminando el caso de alta influencia
+  updated_model <- glm(rlogitm_fmla, data = rlogitm_df[-id, ], family = binomial(link = "logit"))
+  
+  # Comparar los coeficientes del modelo original y el modelo ajustado
+  compareCoefs(rlogitm, updated_model)
+})
+
+# Comparar los coeficientes después de excluir casos notorios
+cat("Comparación de coeficientes tras excluir los casos notorios:\n")
+print(rlogitm_comp_list)
+```
+Vemos que los coeficientes no presentan cambios significativos al excluir los casos influyentes, lo que indica que estos casos no afectan significativamente el modelo.
+
+Validación cruzada dejando uno fuera para evaluar el desempeño del modelo
+```{r}
+# Validación cruzada y ajuste del modelo final
+set.seed(2572)
+rlogitm_train <- train(
+  rlogitm_fmla, 
+  data = rlogitm_df, 
+  method = "glm", 
+  family = binomial(link = "logit"),
+  metric = "ROC",
+  trControl = rlogitm_train_control
+)
+
+# Modelo final ajustado con validación cruzada
+rlogitm <- rlogitm_train[["finalModel"]]
+
+# Resumen del modelo con validación cruzada
+cat("Resumen del modelo con validación cruzada:\n")
+print(summary(rlogitm))
+```
+El modelo muestra que las variables circunferencia de la cintura (Waist.Girth), diámetro de los tobillos (Ankles.diameter) y circunferencia del muslo (Thigh.Girth) son predictores significativos de la variable dependiente, mientras que el género y el diámetro bitrocanterico no tienen un impacto relevante. Además el modelo tiene un buen ajuste, reflejado en la reducción de la deviance.
+
+Rendimiento del modelo obtenido
+
+```{r}
+# Función para ver desempeño
+metricas <- function(matriz) {
+  exactitud <- sum(diag(matriz)) / sum(matriz)
+  sensibilidad <- matriz[2, 2] / sum(matriz[, 2]) # TP / (TP + FN)
+  especificidad <- matriz[1, 1] / sum(matriz[, 1]) # TN / (TN + FP)
+  cat(sprintf("Exactitud: %.2f\n", exactitud))
+  cat(sprintf("Sensibilidad: %.2f\n", sensibilidad))
+  cat(sprintf("Especificidad: %.2f\n", especificidad))
+}
+```
+
+```{r}
+# Predicciones para el conjunto de entrenamiento
+probabilidades <- predict(rlogitm, muestra, type = "response")
+pred_entrenamiento <- ifelse(probabilidades >= 0.05, 1, 0)
+
+# Matrices de confusión
+matriz_conf_ent <- table(Predicho = pred_entrenamiento, Observado = muestra$EN)
+
+# Mostrar las matrices de confusión
+cat("Matriz de confusión para los datos de entrenamiento:\n")
+print(matriz_conf_ent)
+```
+```{r}
+# Métricas de desempeño
+cat("Métricas de desempeño para los datos de entrenamiento:\n")
+metricas(matriz_conf_ent)
+```
+Finalizando el análisis del modelo, se concluye que este es confiable, puesto que cumple con las condiciones necesarias para un modelo RLOG. Además su desempeño es mayoritariamente positivo, destacándose en sensibilidad, logrando identificar correctamente las instancias positivas. Además la exactitud del modelo es moderada, alcanzando un valor de 0,79. Por otro lado su especificidad de 0,58 indica un desempeño limitado para distinguir correctamente las instancias negativas.
+
+6. Pronunciarse sobre la confiabilidad y el poder predictivo de los modelos obtenidos.
+
+Tras el análisis particular de todos los modelos, se observa que solamente el modelo final de la pregunta 3 y el modelo de la pregunta 5 son confiables, ya que cumplen con las condiciones necesarias para ser considerados como tal. Donde el modelo 3 destaca por su Poder predictivo por sobre los demás. Por otro lado el modelo final de la pregunta 4 no cumple las condiciones para ser un modelo confiable, pero tiene un buen poder predictivo.

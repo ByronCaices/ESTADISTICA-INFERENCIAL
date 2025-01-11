@@ -1,0 +1,293 @@
+---
+title: "EP04"
+author: "Grupo 9"
+date: "2024-10-14"
+output: html_document
+---
+
+***Importante***
+
+Antes de comenzar con el análisis solicitado, se hará la importación de las siguientes librerías clave para poder llevar a cabo el estudio, donde estas son: *kableExtra*, *RVAideMemoire*, *dplyr*, *tidyr*.
+
+```{r, echo = F, message = F}
+library(kableExtra)
+library(RVAideMemoire)
+library(dplyr)
+library(tidyr)
+```
+
+#### Diccionario
+
+-   Variable Dicotómica: variable que posee solo 2 niveles.
+
+#### Contexto
+
+Trabajo de hipótesis con proporciones a través de pruebas no paramétricas.
+
+#### Preguntas
+
+Antes de comenzar, se hará una lectura de los datos a través de la función nativa de R, *read.csv2*. Una vez realizado esto, se procederá.
+
+```{r, echo = F}
+data <- read.csv2("EP04 Datos.csv")
+```
+
+##### 1.- En un evento deportivo, las y los participantes tienen la opción de inscribirse en una carrera de velocidad o en una carrera de resistencia. Después de la inscripción, se sabe que, de los 11 hombres y 12 mujeres que participaron, 9 hombres y 4 mujeres prefieren inscribirse en la carrera de velocidad.¿Tiene relación el sexo de las personas que participan del evento deportivo e inscribirse en la carrera de velocidad o en la carrera de resistencia?
+
+R: En particular la frase clave que nos da el vistazo a la prueba a usar es *relación entre el sexo y la inscripción*, donde se nos pide comprobar si efectivamente existe una relación entre variables. De esa forma, se presume usar una ***prueba Chi-Cuadrado de Independencia***.
+
+Así, esta prueba necesita ciertas condiciones para poder ser aplicada, donde estas son:
+
+-   Observaciones independientes
+
+-   Al menos 5 observaciones esperadas
+
+En particular respecto a la primera condición, como estamos hablando de distintas personas tanto del sexo masculino como femenino, se puede suponer que estas no están relacionadas entre sí para su selección. Por lo tanto son independientes.
+
+Respecto de la segunda condición, podemos presentar la siguiente tabla representativa de los datos:
+
+```{r, echo = F}
+hombres <- c(9, 2, 11)
+mujeres <- c(4, 8, 12)
+
+tabla <- as.table(rbind(hombres, mujeres))
+
+dimnames(tabla) <- list(tipo = c("hombre", "mujer"))
+colnames(tabla) <- c("Inscritos Velocidad", "Inscritos Resistencia", "Totales")
+
+tabla <- kable(tabla, 
+               caption = "Tabla 1. Datos") %>%
+                kable_styling(full_width = F) %>%
+              column_spec(1, bold = T, border_right = T)
+tabla
+```
+
+Donde, se hará el cálculo de los valores esperados, obteniendo así, la siguiente tabla:
+
+```{r, echo = F}
+total <- 11 + 12
+
+E1 <- ((9 + 4) * 11) / total
+E2 <- ((4 + 9) * 12) / total
+E3 <- ((2 + 8) * 11) / total
+E4 <- ((2 + 8) * 12) / total
+
+vector1 <- c(E1, E2)
+vector2 <- c(E3, E4)
+
+tabla <- as.table(rbind(vector1, vector2))
+
+dimnames(tabla) <- list(tipo = c("hombre", "mujer"))
+colnames(tabla) <- c("Inscritos Velocidad", "Inscritos Resistencia")
+
+tabla <- kable(tabla, 
+               caption = "Tabla 2. Valores esperado") %>%
+                kable_styling(full_width = F) %>%
+              column_spec(1, bold = T, border_right = T)
+tabla
+```
+
+Como se puede apreciar en la tabla, ambas frecuencias esperadas no todas son mayores a 5, es por esto que no se cumple la segunda condición.
+
+Así, en reemplazo de la prueba que se presumía aplicar, se aplicará la **prueba Exacta de Fisher**.
+
+Una vez cumplidas, se definirá la H0 y HA:
+
+-   **Hipótesis nula (H0): Las variables sexo e inscripción son independientes**
+
+-   **Hipótesis alternativa (HA): Las variables sexo e inscripción están relacionadas**
+
+Donde se procederá a aplicar la prueba, con un nivel de significancia del 0.05, obteniendo el siguiente resultado:
+
+```{r, echo = F}
+hombres <- c(9, 2)
+mujeres <- c(4, 8)
+
+tabla <- as.table(rbind(hombres, mujeres))
+dimnames(tabla) <- list(sexo = c("hombres", "mujeres"),
+                        carrera = c("velocidad", "resistencia"))
+alpha <- 0.05
+
+prueba <- fisher.test(tabla,
+                      conf.level = alpha)
+prueba
+```
+
+Donde se obtiene un valor p de igual a `r prueba$p`.
+
+Obteniendo un valor de p menor a nuestro nivel de significancia, se rechaza H0 en favor de HA, así, con un 95% de confianza se puede decir que existe una relación entre las variables sexo e inscripción.
+
+##### 2.- Una agencia de marketing desea determinar si hay una diferencia significativa en la efectividad de tres estrategias publicitarias utilizadas para promocionar un nuevo producto. Para ello, se ha recopilado información de personas que fueron expuestas a las tres estrategias publicitarias, registrando si mostraron una aceptación (A) o rechazo (R) a cada una de ellas. ¿Qué puede concluir la agencia de marketing sobre la efectividad de las estrategias publicitarias para promover el nuevo producto? Indicación: obtenga la muestra de 50 personas a partir del archivo "EP04 Datos.csv" que se encuentra en el directorio compartido, usando la semilla 326. Considere un nivel de significación α=0,05.
+
+R: Se reconocen las siguientes variables:
+
+-   Estrategia: variable independiente categorica de 3 niveles apareada
+    -   estrategia_1 estrategia_2 estrategia_3
+-   Respuesta: variable categorica dicotomica
+    -   aceptación (A) rechazo (R)
+
+Viendo las condiciones que se deben cumplir para realizar una prueba de Cochran:
+
+-   **variable de respuesta es dicotomica.**
+
+-   **variable independiente es categorica.**
+
+-   **observaciones son independientes entre si.** 
+
+Se asumira que las personas fueron escojidas al azar.
+
+-   **el tamaño de la muestra es suficientemente grande.**
+particularmente, sean 50 personas en la muestra la cantidad de bloques *b*, y 3 estrategias la cantidad de tratamientos *k*, *b* x *k* = *50* x *3* = *150* \>= 24, indica que la muestra es suficientemente grande.
+
+Se considera entonces que la prueba es adecuada dado el contexto.
+
+Las hipotesis correspondientes serian las siguientes, apropiadas para responder a la agencia de marketing:
+
+-   **Hipótesis nula (H0): La proporción de personas que mostraron aceptacion es la misma para las 3 estrategias publicitarias**
+
+-   **Hipótesis alternativa (HA): La proporción de personas que mostraron aceptacion es distinta en por lo menos una de las 3 estrategias publicitarias**
+
+Finalmente, se realiza la prueba:
+
+```{r, echo = F}
+# obtener 50 personas, usando la semilla 326
+set.seed(326)
+indices <- sample(nrow(data), size=50, replace = F)
+data_f <- data[data$id %in% indices, ]
+
+# formato de la matriz debe ser largo
+data_l <- data_f %>% pivot_longer(c("estrategia_1","estrategia_2","estrategia_3"),
+                                  names_to = "estrategia",
+                                  values_to = "respuesta")
+data_l[["id"]] <- factor(data_l[["id"]])
+data_l[["estrategia"]] <- factor(data_l[["estrategia"]])
+
+# Prueba de Cochran
+cochran.qtest(respuesta ~ estrategia| id, data = data_l,alpha = 0.05)
+```
+
+P-value = 0.889 mucho mayor a alfa = 0.05, por lo que se falla en rechazar la hipotesis nula.
+
+En conclusión, se favorece la hipotesis nula: la proporción de personas que mostraron aceptacion es la misma para las 3 estrategias publicitarias, es decir, la efectividad de estas es equivalente.
+
+##### 3.- Una investigación reciente en un laboratorio de Kanto se enfocó en analizar el efecto de una nueva técnica de entrenamiento en el rendimiento del ataque inicial de criaturas Pokémon. Para ello, se seleccionaron aleatoriamente 25 criaturas y registró su poder de ataque inicial. Luego, a este grupo se les sometió al entrenamiento nuevo y, al finalizar, se les registró nuevamente los niveles de ataque inicial. Los resultados se presentan a continuación: 2 criaturas tenían un nivel bajo de ataque antes y después del entrenamiento.8 criaturas con nivel bajo de ataque inicial mostraron un aumento en su ataque después del entrenamiento. 12 criaturas mantuvieron un alto nivel de ataque antes y después del entrenamiento. 3 criatura mostró un nivel alto de ataque inicial, pero se redujo después del entrenamiento. ¿Hay evidencia de que el nuevo entrenamiento tiene un efecto significativo en el rendimiento del ataque inicial de las criaturas Pokémon?
+
+R:
+
+En este análisis, nos interesa evaluar el **nivel de ataque** de Pokémon, que se presenta como una variable dicotómica. Compararemos el rendimiento del ataque inicial antes y después del entrenamiento, lo que genera dos instancias diferentes del mismo grupo. Debido a esta configuración, utilizaremos la ***prueba de McNemar*** para el análisis.
+
+Definiremos las siguientes hipótesis:
+
+-   **Hipótesis nula (H0)**: No hay un efecto significativo en el rendimiento del ataque inicial de los Pokémon al aplicar el entrenamiento.
+-   **Hipótesis alternativa (HA)**: Hay un efecto significativo en el rendimiento del ataque inicial de los Pokémon al aplicar el entrenamiento.
+
+Para llevar a cabo la prueba, primero construiremos una tabla de contingencia a partir de los datos recopilados, obteniendo así, la siguiente tabla:
+
+```{r, echo = F}
+criaturas <- seq(1:25)
+original <- c(rep("Bajo", 10), rep("Alto", 15))
+entrenamiento <- c(rep("Bajo", 2), rep("Alto", 20), rep("Bajo", 3))
+datos <- data.frame(criaturas, entrenamiento, original)
+
+tabla <- table(entrenamiento, original)
+kable(tabla, 
+               caption = "Tabla 3. Contingencia") %>%
+                kable_styling(full_width = F) %>%
+              column_spec(1, bold = T, border_right = T)
+```
+
+A continuación, aplicaremos la prueba de McNemar a la tabla de contingencia:
+
+```{r, echo = F}
+prueba_1 <- mcnemar.test(tabla)
+prueba_1
+```
+
+También aplicaremos la prueba de McNemar directamente a las muestras, obteniendo los siguientes resultados:
+
+```{r, echo = F}
+prueba_2 <- mcnemar.test(entrenamiento, original)
+prueba_2
+```
+
+Al final, obtendremos un valor p de `r prueba_1$p.value`. Dado que este valor es mayor que nuestro nivel de significancia (0.05), se falla en rechazar la hipótesis nula. Esto sugiere que no hay evidencia suficiente para afirmar que existe una diferencia significativa en el rendimiento del ataque inicial de los Pokémon al aplicar el entrenamiento.
+
+##### 4.- Un supermercado está interesado en determinar si la distribución de la clientela que prefieren pagar con diferentes métodos de pago es la misma en dos sucursales que están ubicadas en zonas de la cuidad con situación socioeconómica dispares (sucursal LC3 y sucursal LP2). Se seleccionaron aleatoriamente 20 personas de cada sucursal y se registró el método de pago utilizado por cada una. Se registraron que 6 personas pagaron con efectivo, 6 con tarjeta de crédito y 8 con tarjeta de débito en la sucursal LC3, mientras que 10 personas pagaron con efectivo, 5 con tarjeta de crédito y 5 con tarjeta de débito en la sucursal LP2. ¿Existe evidencia de que la proporción de clientes y clientas que prefieren pagar con diferentes métodos de pago sea la misma en ambas sucursales?
+
+R: En primer lugar, se hará un recopilatorio de los datos clave del enunciado, obteniendo los siguientes:
+
+La muestra es de 20 por cada sucursal, donde existen 2:
+
+-   Sucursal LC3
+-   Sucursal LP2
+
+Existencia de 3 métodos de pago:
+
+-   Efectivo (6 LC3, 10 LP2)
+-   Tarjeta de Crédito (6 LC3, 5 LP2)
+-   Tarjeta de Débito (8 LC3, 5 LP2)
+
+Donde se mostrará tabla resumen, siendo esta la siguiente:
+
+```{r, echo = F}
+sucursalLC3 <- c(6, 6, 8, 20)
+sucursalLP2 <- c(10, 5, 5, 20)
+
+tabla_datos <- as.table(rbind(sucursalLC3, sucursalLP2))
+dimnames(tabla_datos) <- list(sucursal = c("LC3", "LP2"),
+                        pago = c("Efectivo", "Crédito", "Débito", "Total"))
+kable(tabla_datos, 
+               caption = "Tabla 4. Resumen de Datos") %>%
+                kable_styling(full_width = F) %>%
+              column_spec(1, bold = T, border_right = T)
+```
+
+En particular, se presume usar una **prueba Chi-Cuadrado de Homogeneidad** debido a que tenemos la presencia de dos variables donde una de ellas es dicotómica.
+
+Así, se deben cumplir las siguientes condiciones para poder aplicar la prueba:
+
+-   Observaciones independientes entre sí.
+-   Al menos 5 observaciones esperadas.
+
+Respecto de la primera condición, como estamos hablando de clientes que no poseen relación y además están en posiciones socioeconómicas dispares, podemos presumir que las observaciones no están relacionadas entre sí, es por esto que diremos que son independientes.
+
+De la segunda condición, se hará la siguiente tabla de frecuencias esperadas para poder hacer la verificación:
+
+```{r, echo = F}
+total <- 40
+
+E1 <- (16 * 20) / total
+E2 <- (11 * 20) / total
+E3 <- (13 * 20) / total
+E4 <- (16 * 20) / total
+E5 <- (11 * 20) / total
+E6 <- (13 * 20) / total
+
+esperadaLC3 <- c(E1, E2, E3)
+esperadaLP2 <- c(E4, E5, E6)
+
+tabla <- as.table(rbind(esperadaLC3, esperadaLP2))
+dimnames(tabla) <- list(sucursal = c("LC3", "LP2"),
+                        pago = c("Efectivo", "Crédito", "Débito"))
+kable(tabla, 
+               caption = "Tabla 4. Resumen de Datos") %>%
+                kable_styling(full_width = F) %>%
+              column_spec(1, bold = T, border_right = T)
+```
+
+Donde se puede apreciar que para cada valor esperado, este es mayor a 5, por lo tanto se puede proceder.
+
+De esa forma, se definen las hipótesis como las siguientes:
+
+**Hipótesis nula (H0): La proporción de clientes que prefieren pagar con distintos métodos es la misma para ambas sucursales**
+
+**Hipótesis alternativa (HA): La proporción de clientes que prefieren pagar con distintos métodos es distinta para ambas sucursales**
+
+Así, se obtiene la siguiente prueba para un nivel de 0.05:
+
+```{r, echo = F}
+prueba <- chisq.test(tabla_datos)
+prueba
+```
+
+Donde se puede apreciar que se obtiene un valor p de `r prueba$p.value`, mayor a nuestro nivel de significancia, por lo que se falla en rechazar la hipótesis nula y la evidencia nos sugiere que con un 95% de confianza que la proporción para ambas sucursales es la misma.

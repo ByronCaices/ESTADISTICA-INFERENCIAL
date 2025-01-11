@@ -1,0 +1,117 @@
+---
+title: "EP06 Grupo 10"
+date: "`r Sys.Date()`"
+output: html_document 
+        
+---
+
+```{r}
+#Librerias
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(tidyr)) install.packages("tidyr")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(ggpubr)) install.packages("ggpubr")
+if(!require(ggmosaic)) install.packages("ggmosaic")
+if(!require(kableExtra)) install.packages("kableExtra")
+if(!require(ggpattern)) install.packages("ggpattern")
+if(!require(pwr)) install.packages("pwr")
+if(!require(tidyverse)) install.packages("tidyverse")
+if(!require(rcompanion)) install.packages("rcompanion")
+if(!require(RVAideMemoire)) install.packages("RVAideMemoire")
+if(!require(ez)) install.packages("ez")
+if(!require(nlme)) install.packages("nlme")
+if(!require(emmeans)) install.packages("emmeans")
+```
+
+##Pregunta: Los investigadores buscan determinar si existen diferencias en el tiempo que tardan los usuarios en formular consultas para problemas con diferente nivel de dificultad en el área de música.
+
+*H0: Existen diferencias en el tiempo que tardan los usuarios en formular consultas para problemas con diferente nivel de dificultad en el área de música.
+
+*HA: No existen diferencias en el tiempo que tardan los usuarios en formular consultas para problemas con diferente nivel de dificultad en el área de música.
+
+*Verificacion de condiciones para ANOVA
+
+1) La escala con que se mide la variable dependiente tiene las propiedades de una escala de intervalos iguales.
+
+* Lo anterior sí se cumple, ya que el tiempo que tardan los usuarios en formular consultas es una variable continua que se mide en segundos, y se puede considerar que la diferencia entre 1 y 2 segundos es la misma que entre 2 y 3 segundos.
+
+2) Las k muestras son obtenidas de manera aleatoria e independiente desde las poblaciones de origen.
+
+* Por el mismo enunciado se menciona que los datos son obtenidos de una reclutacion aleatoria de individuos en grupos, por lo que se puede considerar que los datos son obtenidos de manera aleatoria e independiente.
+
+3) Se puede suponer que las poblaciones de origen siguen una distribución normal.
+
+* Para lo anterior se realizará un gráfico Q-Q plot para verificar si los datos siguen una distribución normal:
+
+```{r}
+# Obtengo los datos
+datos <- read.csv("EP06 Datos.csv")
+
+# Recopilo los datos de tiempo de resolución de cubos Megaminx, dejandolos en formato largo
+datos <- datos %>% filter(area == 'Música') %>% select(dificultad, tiempo)
+
+# Realizo un Q-Q plot
+g <- ggqqplot(datos, x = "tiempo", y = "dificultad",color = "dificultad") + facet_wrap(~ dificultad) 
+g <- g + rremove("x.ticks") + rremove("x.text")
+g <- g + rremove("y.ticks") + rremove("y.text")
+g <- g + rremove("axis.title")
+print(g)
+```
+
+El gráfico qqplot muestra que los datos están dentro de la normalidad, por lo tanto se verifica que los datos siguen una distribucion normal
+
+4) La matriz de varianzas-covarianzas es esférica. Esta condicion establece que las varianzas entre los diferentes niveles de las medidas repetidas deben ser iguales.
+
+* Para verificar esta condicion se usa el test ezANOVA
+```{r}
+datos[["dificultad"]] <- factor(datos[["dificultad"]])
+datos[["instancias"]] <- rep(1:(nrow(datos)/3), each = 3)
+```
+
+Aplicamos anova con ezANOVA
+```{r}
+prueba <- ezANOVA(data = datos,
+                   dv = tiempo,
+                   within = dificultad,
+                   wid = instancias,
+                   return_aov = TRUE,
+                   type = 2)
+
+print(prueba)
+```
+
+Con este resultado obtenido y con un intervalo de confianza del 95% podemos decir que se cumple la 4rta condición de esfericidad. Ya que el test de Mauchly nos entrega un p value de 0.72 y nosotros planteamos un valor de significancia del 0.05, por lo cual, como el valor p,es mayor a nuestro valor de significancia, entonces no hay evidencia suficiente para rechazar la hipotesis nula cumpliendo con la esfericidad.
+
+Y con este resultado también podemos concluir que efectivamente, podemos apreciar que el p-value es menor al valor de significancia, por lo cual, hay evidencia suficiente para rechazar la hipotesis alternativa en favor de la hipotesis nula, por lo cual, hay diferencias entre los tiempos que tardan los usuarios en formular consultas. 
+
+Ahora como sabemos que hay diferencia entre los grupos, pero desconocemos en cuales grupos hay diferencias, por lo cual, se procede a aplicar pruebas de corrección para determinar con más certeza cuales son diferentes.
+
+Aplicamos Prueba Post-Hoc de Bonferroni
+```{r}
+bonferroni <- pairwise.t.test(datos[["tiempo"]], datos[["dificultad"]], p.adj = "bonferroni", paired = TRUE)
+
+cat("Corrección de Bonferroni\n")
+print(bonferroni)
+
+holm <- pairwise.t.test(datos[["tiempo"]], datos[["dificultad"]], p.adj = "holm", paired = TRUE)
+
+cat("\n\nCorrección de Holm\n")
+print(holm)
+
+
+# Procedimiento post-hoc HSD de Tukey.
+mixto <- lme(tiempo ~ dificultad, data = datos, random = ~1|instancias)
+medias <- emmeans(mixto, "dificultad")
+tukey <- pairs(medias, adjust = "tukey")
+
+cat("\n\nPrueba HSD de Tukey\n\n")
+print(tukey)
+
+# Procedimiento post-hoc de Scheffé
+cat("\n\nComparación de Scheffé\n")
+scheffe <- pairs(medias, adjust = "scheffe")
+print(scheffe)
+```
+**Como se puede apreciar en los resultados, en los tres constrastes de los pares se puede apreciar que hay diferencia entre los grupos ya que en los tres grupos el p value es menor al valor de significancia, por lo tanto, se rechaza la hipotesis nula en favor de la hipotesis alternativa.**
+
+**Se puede apreciar que la diferencia es significativa en los 3 grupos, pero esta diferencia se puede apreciar más entre los contraste de alta media y alta baja.**

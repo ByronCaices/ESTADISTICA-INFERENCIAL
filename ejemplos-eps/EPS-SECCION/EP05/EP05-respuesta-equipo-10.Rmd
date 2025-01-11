@@ -1,0 +1,182 @@
+---
+title: "EP-05: ANOVA para muestras independientes"
+author: "Grupo N°10"
+date: "2024-10-24"
+output: pdf_document
+---
+
+# Pregunta
+
+¿Existen diferencias en el tiempo de resolución de cubos 2x2x2 entre 
+participantes de Uruguay, Perú y Ecuador?
+
+Para empezar, se importan las librerías a utilizar para resolver el problema
+anteriormente planteado:
+
+```{r}
+library(tidyverse)
+library(ggpubr)
+library(DescTools)
+library(ez)
+```
+
+Después se leen los datos del problema, se filtran por el tipo de competencia 
+(en este caso, es de 2x2x2) y se transforman estos en formato ancho como en 
+formato largo.
+
+```{r}
+# Se leen los datos del archivo "EP05 Datos.csv, se filtra por el tipo 
+# y se comprueba si está leído correctamente mostrando los primeros 6 datos.
+datos = read.csv2("EP05 Datos.csv")
+Comp = datos %>% filter(tipo == "2x2x2")
+head(Comp)
+
+# Se obtienen los datos en formato largo 
+comp2 = Comp %>% filter(pais=="Perú" | pais=="Uruguay" | pais == "Ecuador")
+comp2[["pais"]] <- factor(comp2[["pais"]])
+comp2[["id"]] <- factor(1:nrow(comp2))
+
+# Se comprueba que sea en formato largo
+head(comp2)
+
+# Se transforma los datos en formato ancho
+comp3 <- comp2 %>% 
+  pivot_wider(names_from = pais,   
+              values_from = tiempo) 
+
+# Comprobar que los datos están en formato ancho
+head(comp3)
+
+```
+
+Las hipótesis del problema planteado son las siguientes en lenguaje natural: 
+
+$H_0$: El tiempo promedio de resolucion de cubos 2x2x2 entre participantes de Uruguay,
+Perú y Ecuador son iguales.
+
+$H_a$: Existe al menos un tiempo promedio de resolución de cubos 2x2x2 distinto al resto.
+
+En forma matemática, se expresan de la siguiente manera:
+
+$H0: \mu{Ecuador} = \mu{Uruguay} = \mu{Perú}$
+$H_a: \exists i, j \in {Ecuador, Uruguay, Perú}, i \neq j \mid \mu_i \neq \mu_j$
+
+# Condiciones de ANOVA
+
+1. La escala de medida de la variable dependiente es de escala de intervalos 
+iguales.
+2. Las k muestras obtenidas de manera aleatoria e independiente desde las 
+poblaciones de origen.
+3. Se puede suponer razonablemente que las poblaciones de origen siguen una 
+distribución normal.
+4. Si las muestras provienen de mas de una población, estas tienen las mismas 
+varianzas.
+
+La primera condición se cumple porque la variable dependiente es el tiempo, la 
+cual se mide en una escala de intervalos iguales, e incluso en una escala de 
+razón, ya que posee un cero absoluto.
+
+La segunda condición se cumple debido a que k muestras fueron obtenidas de manera 
+aleatoria e independiente de cada una de las poblaciones de origen. Esto garantiza 
+que cada participante de la competencia tiene la misma probabilidad de ser 
+seleccionado, y que los datos de un individuo no influyen en la selección de otro. 
+La independencia entre las muestras es crucial para asegurar que los resultados 
+no estén sesgados y que las conclusiones sean representativas de las poblaciones 
+estudiadas.
+
+En la tercera condición se debe hacer un grafico Q-Q para poder suponer que las
+pobllaciones de origen siguen una distribución normal.
+
+```{r}
+# Cargar la función ggqqplot para crear un gráfico QQ
+g <- ggqqplot(comp2,
+               x="tiempo",
+               y="pais",     
+               color = "pais" 
+)
+
+# Dividir el gráfico en paneles según la variable 'pais'
+g <- g + facet_wrap(~ pais)
+
+# Se hacen ajustes para remover títulos y etiquetas en eje x e y
+g <- g + rremove("x.ticks") 
+g <- g + rremove("x.text")
+g <- g + rremove("y.ticks") 
+g <- g + rremove("y.text")
+g <- g + rremove("axis.title")
+
+# Mostrar el gráfico final
+g
+```
+
+Para la tercera condición, luego de realizar el gráfico Q-Q, se puede suponer 
+razonablemente que las poblaciones de origen siguen una distribución normal.
+
+En la cuarta condición, se tiene que verificar la homocedasticidad y esto
+se hace mediante la razón de la varianza máxima y miníma entre los grupos 
+de la siguiente manera:
+
+```{r}
+# Calcular la varianza de 'tiempo' agrupada por 'pais'
+varianzas <- comp2 %>% 
+  group_by(pais) %>%                  
+  summarise(varianza = var(tiempo))   
+
+# Calcular la media de 'tiempo' agrupada por 'pais'
+medias <- comp2 %>% 
+  group_by(pais) %>%              
+  summarise(media = mean(tiempo))     
+
+# Calcular la razón entre la varianza máxima y la varianza mínima
+razon <- max(varianzas$varianza) / min(varianzas$varianza) 
+```
+
+Como la razón de la varianza máxima y mínima entre los grupos es de 1,304 se 
+puede verificar la homocedasticidad, ya que este valor es menor a 1,5.
+
+Como las cuatro condiciones se cumplen, entonces se puede aplicar una prueba de 
+ANOVA para muestras independientes. 
+
+```{r}
+# Se realiza ANOVA para muestras independientes del problema planteado 
+# utilizando la función ezANOVA
+prueba_ez <- ezANOVA(data = comp2,               
+                     dv = tiempo,                 
+                     between = pais,             
+                     wid = id,                   
+                     return_aov = TRUE)          
+
+# Mostrar el resultado de la prueba del problema planteado
+summary(prueba_ez$aov)
+
+```
+
+Con $p > 0.01$, se rechaza la hipótesis nula en favor de la hipótesis alternativa, 
+por lo tanto se puede afirmar con un 99% de confianza que existe al menos un país 
+que su tiempo promedio de resolución de cubos 2x2x2 es distinto al resto.
+
+Para este resultado si es necesario realizar un análisis post-hoc, debido a que 
+existe una diferencia entre al menos un grupo y el resto, por lo tanto queremos 
+saber en donde se encuentra la diferencia.
+
+Se eligió la prueba HSD de Tukey porque se necesita identificar específicamente 
+dónde se encuentran las diferencias, y esta prueba ofrece mayor poder estadístico 
+en comparación con las pruebas de Holm y Bonferroni. Se descartó la prueba de 
+Scheffé ya que no estamos enfocados en probar hipótesis basadas en combinaciones 
+lineales.
+
+```{r}
+# Realizar un análisis post-hoc del problema planteado
+# utilizando la prueba de Tukey
+post_hoc <- TukeyHSD(prueba_ez$aov,         
+                     "pais",                  
+                     ordered = TRUE,           
+                     conf.level = 0.99)        
+
+# Imprimir los resultados de la prueba de Tukey
+print(post_hoc)
+```
+
+Como se puede observar, todos los valores de p son menores a 0,01, por lo tanto 
+se puede asegurar con un 99% de confianza que existen diferencias significativas 
+en el promedio de tiempos entre todos los países.

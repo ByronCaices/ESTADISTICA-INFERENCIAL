@@ -1,0 +1,421 @@
+---
+title: "Tarea 10"
+author: "Grupo 10"
+date: "2024-12-10"
+output: html_document
+---
+
+# Preguntas
+
+1. **Definir la semilla a utilizar, que corresponde a los últimos cuatro dígitos del RUN (sin considerar el dígito verificador) del integrante de mayor edad del equipo.**
+
+Se utilizará la semilla 7709.
+
+2. **Seleccionar una muestra de 150 mujeres (si la semilla es un número par) o 150 hombres (si la semilla es impar), asegurando que la mitad tenga estado nutricional “sobrepeso” y la otra mitad “no sobrepeso” en cada caso. Dividir esta muestra en dos conjuntos: los datos de 100 personas (50 con EN “sobrepeso”) para utilizar en la construcción de los modelos y 50 personas (25 con EN “sobrepeso”) para poder evaluarlos.**
+
+```{r, warning=FALSE, message=FALSE}
+library(car)
+library(dplyr)
+library(ggpubr)
+library(gridExtra)
+library(leaps)
+library(tidyr)
+library(pROC)
+# Se leen los datos
+datos = read.csv2("EP09 Datos.csv")
+
+# Se define la semilla
+set.seed(7709)
+
+# Se crean las columnas solicitadas, donde la columna IMC es auxiliar para la creación de la columna EN
+datos_modificados <- datos %>% mutate( 
+    IMC = Weight / ((Height/100)^2),
+    EN = ifelse(IMC >= 23.2, "sobrepeso", "no sobrepeso"))
+
+# Se convierten las columnas en factores
+datos_modificados[["Gender"]] <- factor(datos_modificados[["Gender"]])
+datos_modificados[["EN"]] <- factor(datos_modificados[["EN"]])
+
+# Se filtran las observaciones correspondientes a hombres, obteniendo 75 muestras aleatorias para ambas categorías.
+muestra_sobrepeso = datos_modificados %>% filter(Gender == 1 & EN == "sobrepeso" ) %>% sample_n(75, replace = FALSE)
+muestra_sinSobrepeso = datos_modificados %>% filter(Gender == 1 & EN == "no sobrepeso" ) %>% sample_n(75, replace = FALSE)
+
+# Se obtienen las muestras para entrenamiento y prueba, para este caso, sin considerar la variable "gender" para los datos de entrenamiento y prueba, además de mezclar las observaciones para evitar sesgos asociados a la selección de las observaciones.
+i_separador = sample(1:75, 50)
+muestras_entrenamiento = rbind(muestra_sobrepeso[i_separador,], muestra_sinSobrepeso[i_separador,]) %>% select(-Gender) %>% sample_frac(1L)
+muestras_prueba = rbind(muestra_sobrepeso[-i_separador,], muestra_sinSobrepeso[-i_separador,]) %>% 
+  select(-Gender) %>% sample_frac(1L)
+```
+
+3. **Recordar las ocho posibles variables predictoras seleccionadas de forma aleatoria en el ejercicio anterior.**
+
+```{r}
+# Se obtienen las 8 variables predictoras seleccionadas de forma aleatoria provenientes del ejercicio anterior.
+predictores = c("Chest.depth","Hip.Girth", "Wrists.diameter", "Wrist.Minimum.Girth", "Chest.Girth", "Navel.Girth", "Knee.Girth", "Bitrochanteric.diameter", "Weight")
+              
+```
+
+4. **Seleccionar, de las otras variables, una que el equipo considere que podría ser útil para predecir la clase EN, justificando bien esta selección (idealmente con literatura).**
+
+```{r}
+# Se define la variable respuesta
+nombre_respuesta = "EN"
+# Se busca entre las variables restantes, una que pueda ser útil para predecir la clase EN
+otras = colnames(muestras_entrenamiento)[! colnames(muestras_entrenamiento) %in% predictores]
+
+# Se definen relaciones entre variables y la variable respuesta EN
+p1_dfl <- muestras_entrenamiento |> select(all_of(otras)) %>%
+  pivot_longer(-all_of(nombre_respuesta), names_to = "Variable", values_to = "Valor") %>%
+  mutate(Variable = factor(Variable))
+
+p1 <- ggboxplot(p1_dfl, x = "Variable", y = "Valor", color = nombre_respuesta)
+p1 <- p1 +  facet_wrap( ~ Variable, ncol = 4, scales = "free") 
+print(p1)
+
+```
+
+A partir de los gráficos obtenidos, se observa que la variable "Waist.Girth" podría ser un buen predictor, ya que se observa una clara diferencia en la distribución de la variable entre las categorías de la variable respuesta "EN".
+
+5. **Usando el entorno R, construir un modelo de regresión logística con el predictor seleccionado en el paso anterior y utilizando la muestra obtenida.**
+
+```{r}
+# Seleccionamos la variable "Waist.Girth" y realizamos el modelo de regresión logística simple
+set.seed(7709)
+
+rlogits = glm(EN ~ Waist.Girth, data = muestras_entrenamiento, family = binomial(link = "logit"))
+cat("Modelo de regresión logística simple\n")
+print(summary(rlogits))
+```
+El modelo obtenido presenta un valor de $p-value$ asociado a la variable "Waist.Girth" menor al nivel de significancia de $0.05$, lo que indica que el predictor es significativo para predecir la variable de respuesta "EN". 
+
+6. **Usando estas herramientas para la exploración de modelos del entorno R1, buscar entre dos y cinco predictores de entre las variables seleccionadas al azar, recordadas en el punto 3, para agregar al modelo obtenido en el paso 5.**
+
+Para explorar los modelos de regresión logística múltiple, se utilizará la función `regsubsets()` para seleccionar las variables predictoras que mejor se ajusten al modelo, a partir de los predictores que presenten un valor de criterio de informacion bayesiano (BIC) menor, que es el criterio utilizado para evaluar y comparar los modelos que se construyen con diferentes combinaciones de las variables predictoras.
+
+```{r}
+set.seed(7709)
+# Se seleccionan las variables predictoras, exceptuando la variable respuesta y la variable "Waist.Girth"
+i_respuesta <- match("EN", otras)
+i_predictor <- match("Waist.Girth", otras)
+
+# Se seleccionan las variables predictoras restantes
+fuera <- otras[-c(i_respuesta, i_predictor)]
+
+# Se seleccionan las variables predictoras restantes y realizamos el modelo de regresión logística múltiple
+predictoras_restantes <- muestras_entrenamiento %>% select(-all_of(fuera))
+
+# Se utiliza la función regsubsets para seleccionar las variables predictoras, tal que el predictor "Waist.Girth" se encuentre siempre en el modelo a ajustar.
+predictoresMejor = regsubsets(EN ~ ., data = predictoras_restantes, nbest = 1, nvmax = 5, 
+                 force.in = match("Waist.Girth", colnames(predictoras_restantes)),
+                 method = "exhaustive")
+plot(predictoresMejor)
+```
+A partir del resultado obtenido, se puede visualizar que el modelo con menor bic corresponde a la combinación de las variables predictoras "Bitrochanteric.diameter", "Hip.Girth" y "Wrist.Minimum.Girth", en conjunto con la variable "Waist.Girth".
+
+```{r}
+# Se construye el modelo de regresión logistica multiple
+rlogitm = glm(EN ~ Waist.Girth + Bitrochanteric.diameter + Hip.Girth + Wrist.Minimum.Girth, data = muestras_entrenamiento, family = binomial(link = "logit"))
+
+cat("Modelo de regresión logística múltiple\n")
+print(summary(rlogitm))
+```
+7. **Evaluar la confiabilidad de los modelos (i.e. que tengan un buen nivel de ajuste y son generalizables) y “arreglarlos” en caso de que tengan algún problema.**
+
+Para ello, primero se evalúa la bondad de ajuste de ambos modelos, utilizando la función `anova()`, con el fin de determinar si es que ambos son capaces de explicar de manera significativa el comportamiento de la variable de respuesta "EN", y cuál de ellos se ajusta mejor a los datos observados.
+
+```{r}
+set.seed(7709)
+cat("Comparación de modelos\n\nBondad de ajuste del modelo de regresión logística simple\n")
+# Evaluando el modelo nulo
+print(anova(rlogits, test = "LRT"))
+
+cat("\nBondad de ajuste del modelo de regresión logística múltiple\n")
+print(anova(rlogits, rlogitm, test = "LRT"))
+
+```
+
+Se observa que el modelo simple obtiene un valor de $p-value$ asociado a la prueba de razón de verosimilitud menor al nivel de significancia de $0.05$, en conjunto con una reducción del estadístico asociado a la devianza con respecto al modelo nulo. Por otro lado, el modelo múltiple también se reduce significativamente con respecto al simple, lo que indica que el modelo de regresión logística múltiple se ajusta mejor a los datos observados.
+
+A continuación, se evalúa la confiabilidad de ambos modelos, verificando que se cumplan las siguientes condiciones:
+
+a. *Debe existir una relación lineal entre los predictores y la respuesta transformada.*
+
+Para ello, se utiliza la función 'residualPlots()' de la librería 'car', la cual permite visualizar los residuos estandarizados del modelo, con respecto a los valores ajustados, además de tener las pruebas de curvatura.
+
+```{r}
+# Evaluando el modelo de regresión logística lineal
+cat("Para el modelo de regresión logístico simple:\n")
+residualPlots(rlogits, type="rstandard", fitted=FALSE,
+              id=list(method="r", n=3, cex=0.7, location="lr"),
+              col="blue", pch=20, cex=0.7, lwd=2) 
+
+cat("\nPara el modelo de regresión logística múltiple:\n")
+# Evaluando el modelo de regresión logística múltiple
+residualPlots(rlogitm, type="rstandard", fitted=FALSE,
+              id=list(method="r", n=3, cex=0.7, location="lr"),
+              col="blue", pch=20, cex=0.7, lwd=2) 
+```
+
+Para el modelo simple, se observa que la linea de tendencia de los residuos estandarizados no aparenta ser una linea recta, pero si se observa la prueba de curvatura, cuyo `p-value` es mayor al nivel de significancia, lo que indica que se cumple la condición de linealidad entre el predictor y la respuesta transformada. 
+
+Por otro lado, para el modelo múltiple, se observa que la linea de tendencia de los residuos estandarizados representa algo más cercano a una linea recta, lo cual se refuerza de acuerdo al `p-value` obtenido de la prueba de curvatura, al ser mayor al nivel de significancia, lo que indica que se cumple la condición de linealidad entre los predictores y la respuesta transformada.
+
+b. *Los residuos deben ser independientes entre sí.*
+
+Para ello, se utiliza la prueba de Durbin-Watson:
+
+```{r}
+set.seed(7709)
+cat("Para el modelo de regresión logístico simple:\n\n")
+print(durbinWatsonTest(rlogits))
+
+cat("\nPara el modelo de regresión logística múltiple:\n\n")
+print(durbinWatsonTest(rlogitm))
+```
+
+En base a los `p-value` obtenidos, que son mayores al nivel de significancia de $0.05$, se puede concluir que no hay evidencia de autocorrelación entre los residuos, por ello se puede afirmar que son independientes entre sí.
+
+c. *No debe haber multicolinealidad entre los predictores.*
+
+Dado que el factor de inflación de la varianza solamente sirve para modelos que cuentan con más de un predictor, solo se calcula dicho factor para el modelo de regresión logística múltiple, por medio de la función `vif()`:
+
+```{r}
+set.seed(7709)
+cat("\nPara el modelo de regresión logística múltiple:\n\n")
+print(vif(rlogitm))
+```
+
+De acuerdo a los valores obtenidos, que oscilan entre 1 y 5, se puede afirmar que existe un cierto grado de multicolinealidad entre los predictores, pero que solo afecta ligeramente a los resultados cumpliéndose dicha condición.
+
+d. *No debe haber información incompleta, en relación a la cantidad de observaciones disponibles para todas las posibles combinaciones de predictores.*
+
+Para ello, se debe comprobar que cada modelo cuente con, al menos, 10 a 15 observaciones por cada predictor numérico y cada nivel de las variables predictoras, lo cual se cumple al observar los datos de entrenamiento.
+
+e. *No debe haber una separación perfecta entre las clases, por parte de los predictores.*
+
+Para evaluar dicha condición, se general los siguientes gráficos de dispersión:
+
+```{r}
+
+# Filtramos las columnas relevantes y creamos el índice de las observaciones para los gráficos
+p2_dfl <- muestras_entrenamiento |> 
+  select(Waist.Girth, Bitrochanteric.diameter, Hip.Girth, Wrist.Minimum.Girth, EN) |> 
+  mutate(Id = 1:n())
+
+# Función para crear el gráfico de dispersión con separación para cada predictor
+plot_separation <- function(data, predictor) {
+  grafico <- ggscatter(data, x = "Id", y = predictor, color = "EN") +
+    geom_hline(yintercept = median(data[[predictor]]), linetype = "dashed", color = "green") +
+    labs(title = paste("Evaluación de Separación Perfecta para", predictor), 
+         x = "Observaciones", 
+         y = predictor) +
+    scale_color_manual(values = c("red", "blue"))
+  print(grafico)
+}
+
+# Mostrar los gráficos de separación perfecta para cada predictor
+plot_separation(p2_dfl, "Waist.Girth")
+plot_separation(p2_dfl, "Bitrochanteric.diameter")
+plot_separation(p2_dfl, "Hip.Girth")
+plot_separation(p2_dfl, "Wrist.Minimum.Girth")
+
+```
+
+En ellos, se puede observar que no es posible separar las clases asociadas a los niveles de la variable respuesta "EN" para cada uno de los predictores, cumpliendo con dicha condición enunciada.
+
+f. *Las estimaciones de los coeficientes del modelo no deben estar dominadas por observaciones influyentes.*
+
+Para estudiar la presencia de posibles valores atípicos que puedan influir sobre el ajuste del modelo, se utiliza la función `influencePlot()`:
+
+```{r}
+set.seed(7709)
+# Evaluando la presencia de valores atípicos en el modelo de regresión logística simple
+influencia_rlogits = influencePlot(rlogits, id = list(cex = 0.4))
+print(influencia_rlogits)
+
+# Evaluando la presencia de valores atípicos en el modelo de regresión logística múltiple
+influencia_rlogitm = influencePlot(rlogitm, id = list(cex = 0.4))
+print(influencia_rlogitm)
+```
+
+En ambos modelos se observa la presencia de valores atípicos que pueden influir en el ajuste del modelo, pero que no afectan significativamente los resultados obtenidos, al observar los resultados del análisis de influencia, al no haber valores $Hat=1$ que sugieran un posible apalancamiento, y dado que los valores para la distancia de Cook se encuentran por debajo del valor umbral igual a 1, cumpliendo con dicha condición.
+
+8. **Usando código estándar, evaluar el poder predictivo de los modelos con los datos de las 50 personas que no se incluyeron en su construcción en términos de sensibilidad y especificidad.**
+
+Para ello, se evalúa si existe alguna diferencia en los modelos con respecto al conjunto de entrenamiento, calculando la curva ROC y su valor AUC asociado para cada modelo, comparando si los modelos presentan alguna diferencia a partir del conjunto de datos de prueba o entrenamiento.
+
+```{r}
+set.seed(7709)
+# Evaluando los modelos con respecto al conjunto de entrenamiento
+probs_ent_rlogits <- fitted(rlogits)
+probs_pru_rlogits <- predict(rlogits, newdata = muestras_prueba, type = "response")
+
+probs_ent_rlogitm <- fitted(rlogitm)
+probs_pru_rlogitm <- predict(rlogitm, newdata = muestras_prueba, type = "response")
+
+# Se calcula la curva ROC, indicando el valor del AUC obtenido
+ROC_ent_rlogits <- roc(muestras_entrenamiento[["EN"]], probs_ent_rlogits, levels=c("no sobrepeso", "sobrepeso"), direction="<")
+ROC_pru_rlogits <- roc(muestras_prueba[["EN"]], probs_pru_rlogits, levels=c("no sobrepeso", "sobrepeso"), direction="<")
+
+ROC_ent_rlogitm <- roc(muestras_entrenamiento[["EN"]], probs_ent_rlogitm, levels=c("no sobrepeso", "sobrepeso"), direction="<")
+ROC_pru_rlogitm <- roc(muestras_prueba[["EN"]], probs_pru_rlogitm, levels=c("no sobrepeso", "sobrepeso"), direction="<")
+
+# Se esbozan los gráficos de cada curva ROC y se comparan
+plot(ROC_ent_rlogits, col = "blue", lwd = 2, main = "Curva ROC Modelo de regresión logística simple")
+plot(ROC_pru_rlogits, col = "red", lwd = 2, add = TRUE)
+legend("bottomright", legend = c("Entrenamiento", "Prueba"), col = c("blue", "red"), lwd = 2)
+
+plot(ROC_ent_rlogitm, col = "blue", lwd = 2, main = "Curva ROC Modelo de regresión logística múltiple")
+plot(ROC_pru_rlogitm, col = "red", lwd = 2, add = TRUE)
+legend("bottomright", legend = c("Entrenamiento", "Prueba"), col = c("blue", "red"), lwd = 2)
+
+cat("- - - - Modelo de regresión logística simple - - - - \n")
+roc_test_rlogits <- roc.test(ROC_pru_rlogits, ROC_ent_rlogits,  method = "delong")
+print(roc_test_rlogits)
+
+cat("- - - - Modelo de regresión logística múltiple - - - - \n")
+roc_test_rlogitm <- roc.test(ROC_pru_rlogitm, ROC_ent_rlogitm,  method = "delong")
+print(roc_test_rlogitm)
+```
+
+De acuerdo a los resultados obtenidos, se observa que a pesar de haber una diferencia en el AUC obtenido entre los distintos conjuntos de datos, el `p-value` asociado a la prueba de DeLong es mayor al nivel de significancia de $0.05$ en ambos modelos, lo que indica que no hay diferencias significativas entre los modelos dependiendo del conjunto de datos utilizado.
+
+Debido a esto, se puede decir que a pesar de haber una diferencia en los valores de AUC, estos no permiten concluir que el modelo tenga un desempeño significativamente mejor que el otro.
+
+A continuación, se evaluará el poder predictivo de los modelos en términos de sensibilidad y especificidad, al calcular las matrices de confusión asociadas a cada modelo, obteniendo las estadísticas de clasificación correspondientes.
+
+Primero, se evalúa el modelo simple con los datos de entrenamiento y prueba.
+
+```{r}
+set.seed(7709)
+# Establecer el valor umbral
+umbral <- 0.5
+
+# Predicciones para el conjunto de entrenamiento (modelo simple)
+pred_ent_rlogits <- sapply(probs_ent_rlogits, function(x) ifelse(x > umbral, "sobrepeso", "no sobrepeso"))
+pred_ent_rlogits <- factor(pred_ent_rlogits, levels=levels(muestras_entrenamiento[["EN"]]))
+
+# Matriz de confusión para el conjunto de entrenamiento
+mat_conf_ent_rlogits <- table(pred_ent_rlogits, muestras_entrenamiento[["EN"]])
+
+# Estadísticas para el conjunto de entrenamiento (modelo simple)
+VP_ent_rlogits <- mat_conf_ent_rlogits[2,2]
+VN_ent_rlogits <- mat_conf_ent_rlogits[1,1]
+FP_ent_rlogits <- mat_conf_ent_rlogits[2,1]
+FN_ent_rlogits <- mat_conf_ent_rlogits[1,2]
+
+# Predicciones para el conjunto de prueba (modelo simple)
+pred_pru_rlogits <- sapply(probs_pru_rlogits, function(x) ifelse(x > umbral, "sobrepeso", "no sobrepeso"))
+pred_pru_rlogits <- factor(pred_pru_rlogits, levels=levels(muestras_prueba[["EN"]]))
+
+# Matriz de confusión para el conjunto de prueba
+mat_conf_pru_rlogits <- table(pred_pru_rlogits, muestras_prueba[["EN"]])
+
+# Estadísticas para el conjunto de prueba (modelo simple)
+VP_pru_rlogits <- mat_conf_pru_rlogits[2,2]
+VN_pru_rlogits <- mat_conf_pru_rlogits[1,1]
+FP_pru_rlogits <- mat_conf_pru_rlogits[2,1]
+FN_pru_rlogits <- mat_conf_pru_rlogits[1,2]
+
+# Se muestran las estadísticas de clasificación para el modelo simple
+cat("Modelo de regresión logística simple con los datos de entrenamiento\n")
+print(mat_conf_ent_rlogits)
+cat("\n")
+cat(sprintf("Exactitud: %.3f\n", (VP_ent_rlogits + VN_ent_rlogits) / sum(mat_conf_ent_rlogits)))
+cat(sprintf("Sensibilidad: %.3f\n", (VP_ent_rlogits) / (VP_ent_rlogits + FN_ent_rlogits)))
+cat(sprintf("Especificidad: %.3f\n", (VN_ent_rlogits) / (VN_ent_rlogits + FP_ent_rlogits)))
+cat("------------------------------------\n")
+cat("\nModelo de regresión logística simple con datos de prueba\n")
+print(mat_conf_pru_rlogits)
+cat("\n")
+cat(sprintf("Exactitud: %.3f\n", (VP_pru_rlogits + VN_pru_rlogits) / sum(mat_conf_pru_rlogits)))
+cat(sprintf("Sensibilidad: %.3f\n", (VP_pru_rlogits) / (VP_pru_rlogits + FN_pru_rlogits)))
+cat(sprintf("Especificidad: %.3f\n", (VN_pru_rlogits) / (VN_pru_rlogits + FP_pru_rlogits)))
+cat("------------------------------------\n")
+cat("\nComparación entre los datos de entrenamiento y prueba (modelo simple)\n")
+
+# Cálculo de los cambios en las métricas de clasificación
+rlogits_cambio_exa <- ( (VP_pru_rlogits + VN_pru_rlogits) / sum(mat_conf_pru_rlogits) - 
+                         (VP_ent_rlogits + VN_ent_rlogits) / sum(mat_conf_ent_rlogits) ) * 100
+rlogits_cambio_sen <- ( (VP_pru_rlogits) / (VP_pru_rlogits + FN_pru_rlogits) - 
+                         (VP_ent_rlogits) / (VP_ent_rlogits + FN_ent_rlogits) ) * 100
+rlogits_cambio_esp <- ( (VN_pru_rlogits) / (VN_pru_rlogits + FP_pru_rlogits) - 
+                         (VN_ent_rlogits) / (VN_ent_rlogits + FP_ent_rlogits) ) * 100
+
+cat(sprintf("Cambio en Exactitud: %.2f%%\n", rlogits_cambio_exa))
+cat(sprintf("Cambio en Sensibilidad: %.2f%%\n", rlogits_cambio_sen))
+cat(sprintf("Cambio en Especificidad: %.2f%%\n", rlogits_cambio_esp))
+
+```
+
+Se puede visualizar un cambio en las métricas de clasificación entre los datos de entrenamiento y prueba, que se refleja en mayor medida en la exactitud y sensibilidad del modelo simple, lo que indica que el poder predictivo del modelo disminuye ligeramente con los datos de prueba.
+
+Al evaluar el modelo múltiple con los datos de entrenamiento y prueba:
+
+```{r}
+set.seed(7709)
+# Predicciones para el conjunto de entrenamiento (modelo múltiple)
+pred_ent_rlogitm <- sapply(probs_ent_rlogitm, function(x) ifelse(x > umbral, "sobrepeso", "no sobrepeso"))
+pred_ent_rlogitm <- factor(pred_ent_rlogitm, levels=levels(muestras_entrenamiento[["EN"]]))
+
+# Matriz de confusión para el conjunto de entrenamiento (modelo múltiple)
+mat_conf_ent_rlogitm <- table(pred_ent_rlogitm, muestras_entrenamiento[["EN"]])
+
+# Estadísticas para el conjunto de entrenamiento (modelo múltiple)
+VP_ent_rlogitm <- mat_conf_ent_rlogitm[2,2]
+VN_ent_rlogitm <- mat_conf_ent_rlogitm[1,1]
+FP_ent_rlogitm <- mat_conf_ent_rlogitm[2,1]
+FN_ent_rlogitm <- mat_conf_ent_rlogitm[1,2]
+
+# Predicciones para el conjunto de prueba (modelo múltiple)
+pred_pru_rlogitm <- sapply(probs_pru_rlogitm, function(x) ifelse(x > umbral, "sobrepeso", "no sobrepeso"))
+pred_pru_rlogitm <- factor(pred_pru_rlogitm, levels=levels(muestras_prueba[["EN"]]))
+
+# Matriz de confusión para el conjunto de prueba (modelo múltiple)
+mat_conf_pru_rlogitm <- table(pred_pru_rlogitm, muestras_prueba[["EN"]])
+
+# Estadísticas para el conjunto de prueba (modelo múltiple)
+VP_pru_rlogitm <- mat_conf_pru_rlogitm[2,2]
+VN_pru_rlogitm <- mat_conf_pru_rlogitm[1,1]
+FP_pru_rlogitm <- mat_conf_pru_rlogitm[2,1]
+FN_pru_rlogitm <- mat_conf_pru_rlogitm[1,2]
+
+# Se muestran las estadísticas de clasificación para el modelo múltiple
+cat("Modelo de regresión logística múltiple con los datos de entrenamiento\n")
+print(mat_conf_ent_rlogitm)
+cat("\n")
+cat(sprintf("Exactitud: %.3f\n", (VP_ent_rlogitm + VN_ent_rlogitm) / sum(mat_conf_ent_rlogitm)))
+cat(sprintf("Sensibilidad: %.3f\n", (VP_ent_rlogitm) / (VP_ent_rlogitm + FN_ent_rlogitm)))
+cat(sprintf("Especificidad: %.3f\n", (VN_ent_rlogitm) / (VN_ent_rlogitm + FP_ent_rlogitm)))
+cat("------------------------------------\n")
+cat("\nModelo de regresión logística múltiple con datos de prueba\n")
+print(mat_conf_pru_rlogitm)
+cat("\n")
+cat(sprintf("Exactitud: %.3f\n", (VP_pru_rlogitm + VN_pru_rlogitm) / sum(mat_conf_pru_rlogitm)))
+cat(sprintf("Sensibilidad: %.3f\n", (VP_pru_rlogitm) / (VP_pru_rlogitm + FN_pru_rlogitm)))
+cat(sprintf("Especificidad: %.3f\n", (VN_pru_rlogitm) / (VN_pru_rlogitm + FP_pru_rlogitm)))
+
+cat("------------------------------------\n")
+cat("\nComparación entre los datos de entrenamiento y prueba (modelo múltiple)\n")
+
+# Cálculo de los cambios en las métricas de clasificación
+rlogitm_cambio_exa <- ( (VP_pru_rlogitm + VN_pru_rlogitm) / sum(mat_conf_pru_rlogitm) - 
+                         (VP_ent_rlogitm + VN_ent_rlogitm) / sum(mat_conf_ent_rlogitm) ) * 100
+rlogitm_cambio_sen <- ( (VP_pru_rlogitm) / (VP_pru_rlogitm + FN_pru_rlogitm) - 
+                         (VP_ent_rlogitm) / (VP_ent_rlogitm + FN_ent_rlogitm) ) * 100
+rlogitm_cambio_esp <- ( (VN_pru_rlogitm) / (VN_pru_rlogitm + FP_pru_rlogitm) - 
+                         (VN_ent_rlogitm) / (VN_ent_rlogitm + FP_ent_rlogitm) ) * 100
+
+cat(sprintf("Cambio en Exactitud: %.2f%%\n", rlogitm_cambio_exa))
+cat(sprintf("Cambio en Sensibilidad: %.2f%%\n", rlogitm_cambio_sen))
+cat(sprintf("Cambio en Especificidad: %.2f%%\n", rlogitm_cambio_esp))
+
+```
+
+Similar al modelo simple, se puede visualizar un cambio leve en las métricas de clasificación entre los datos de entrenamiento y prueba, que se refleja en mayor medida en la exactitud y sensibilidad del modelo múltiple; sin embargo, el modelo logra mantener un poder predictivo similar al ser evaluado con los datos de prueba.
+
+En base a lo anterior, ambos modelos presentan un buen nivel de ajuste y son generalizables, ya que cumplen con las condiciones necesarias para ser considerados como modelos confiables.
+
+Si bien el modelo múltiple presenta un mayor poder predictivo en comparación al modelo simple, ambos modelos presentan un desempeño similar al ser evaluados con los datos de prueba, además de no presentar diferencias significativas al calcular sus curvas ROC y sus valores AUC asociados, independiente del conjunto de datos utilizado.
+
+En conclusión, se puede afirmar que ambos modelos son capaces de predecir de manera adecuada la variable respuesta "EN" en base a los predictores seleccionados.

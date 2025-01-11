@@ -1,0 +1,151 @@
+---
+title: "Ejercicio 5"
+author: "Grupo 8"
+date: "2024-10-21"
+output: html_document
+---
+
+A continuación se importaran las librerias a utilizar:
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(ggpubr)
+library(ez)
+```
+
+En una emocionante competencia de cubos Rubik, participantes de Chile, Argentina, Colombia, Uruguay, Perú y Ecuador demostraron su destreza en resolver tres tipos de cubos: 2x2x2, 3x3x3 y Megaminx.
+
+Después del torneo, un grupo de investigadores de la Asociación Mundial del Cubo, interesado en los tiempos que hicieron las jugadoras y los jugadores en la competencia, decidieron estudiar si el país y el tipo de cubo usado en cada prueba tienen influencia en los segundos que se tardan en resolverlos.
+
+A continuación se cargaran los datos del problema:
+
+```{r}
+datos = read.csv2("EP05 Datos.csv")
+head(datos)
+```
+
+en base a estos datos se plantea la siguiente pregunta:
+
+¿Existen diferencias en el tiempo de resolución de cubos 3x3x3 entre participantes de Argentina, Perú y Colombia?
+
+Primero obtenemos las muestras de cada país para realizar los cálculos:
+
+```{r}
+# Obtenemos los jugadores de cada pais, seleccionando su respectivo pais y el tiempo  # de resolucion del cubo 3x3x3
+argentina <- (datos %>% filter(pais == "Argentina" & tipo == "3x3x3")) %>% select(pais, tiempo)
+peru <- (datos %>% filter(pais == "Perú" & tipo == "3x3x3")) %>% select(pais, tiempo)
+colombia <- (datos %>% filter(pais == "Colombia" & tipo == "3x3x3")) %>% select(pais, tiempo)
+
+# Se muestra una parte de los jugadores de cada pais
+head(argentina)
+head(peru)
+head(colombia)
+```
+
+Para poder responder esta pregunta sera necesario aplicar la prueba anova, esto debido a que son más de 2 muestras y esta relacionada la media de cada muestra, por lo anterior es posible plantear las siguientes hipótesis:
+
+$H_o:$ El tiempo promedio de resolución de un cubo de 3x3x3 de los jugadores de Argentina, Colombia y Perú es el mismo. $H_a:$ El tiempo promedio de resolución de un cubo de 3x3x3 de los jugadores de Argentina, Colombia y Perú es diferente para al menos un país.
+
+Esto expresado de manera matemática correspondería de la siguiente manera:
+
+$H_o:$ $\mu_Argentina$ = $\mu_Colombia$ = $\mu_Perú$
+
+$H_a:$ $∃i, j ∈ \{Colombia, Perú, Argentina\}, \; i \neq j \; | \; \mu_i \neq \mu_j$
+
+pero antes de realizar la prueba se comprobara si cumple las condiciones necesarias para realizarse:
+
+1.- La escala de la variable dependiente, en este caso el tiempo en que se resolvió, sigue una escala de intervalos iguales, ya que todas están medidas en segundos, magnitud que nos permite comparar resultados ya que corresponde a la misma escala.
+
+2.- Las muestras son independientes, pues no se menciona que se haya utilizado un criterio que altere la elección de las observación, por lo tanto se puede mencionar que estas fueron seleccionadas al azar.
+
+3.- A continuación se mostrara un gráfico Q-Q de manera que se pueda observar si las muestras siguen una distribución normal:
+
+```{r}
+# Se tranformar el data frame a vectores
+tiempo_argentina <- pull(argentina, tiempo)
+tiempo_peru <- pull(peru, tiempo)
+tiempo_colombia <- pull(colombia, tiempo)
+
+
+# Determinar la longitud máxima de entre los vectore
+max_length <- max(length(tiempo_argentina), length(tiempo_peru), length(tiempo_colombia))
+
+# Rellenar los vectores con NA para que tengan la misma longitud
+tiempo_argentina <- c(tiempo_argentina, rep(NA, max_length - length(tiempo_argentina)))
+tiempo_peru <- c(tiempo_peru, rep(NA, max_length - length(tiempo_peru)))
+tiempo_colombia <- c(tiempo_colombia, rep(NA, max_length - length(tiempo_colombia)))
+
+#Creamos el data frame
+tabla <- data.frame(tiempo_colombia, tiempo_peru, tiempo_argentina)
+
+#Se cambia a formato largo
+data <- tabla %>% pivot_longer(c("tiempo_argentina", "tiempo_peru", "tiempo_colombia"), names_to = "paises", values_to = "tiempo")
+
+data <- data[complete.cases(data),]
+data[["paises"]] <- factor(data[["paises"]])
+data[["instancias"]] <- factor(1:nrow(data))
+
+# Creamos el grafico Q-Q
+g <- ggqqplot(data, x = "tiempo", y = "paises", color = "paises")
+g <- g + facet_wrap(~paises)
+g <- g + rremove("x.ticks") + rremove("x.text")
+g <- g + rremove("y.ticks") + rremove("y.text")
+g <- g + rremove("axis.title")
+print(g)
+
+```
+
+En conclusión se puede ver que todas las muestras se acercan razonablemente a una distribución normal.\
+A continuación se realizara la prueba anova, donde también se observara si se cumple la cuarta condición, la cual nos menciona que todas las muestras siguen una misma varianza:
+
+```{r}
+# Se aplica la prueba ANOVA para una via de muestras independientes
+prueba <- ezANOVA(data = data, dv = tiempo, between = paises, wid = instancias, return_aov = TRUE, type = 2)
+print(prueba)
+```
+
+Primero podemos observar que la prueba de homogenicidad nos da un p-value aproximadamente de 0.77 lo cual es mayor a un nivel de significancia de 0.5, por lo tanto todas las muestra tienen la misma varianza.
+
+Por otro lado se tiene que para la prueba anova el p-value es de aproximadamente $5.103 \times 10^{-42}$, lo que es mucho menor que un nivel de significancia del 0.05, por lo tanto existe una diferencia significativa entre Argentina, Colombia y Perú.
+
+Ahora aplicaremos algunos métodos de corrección:
+
+```{r}
+alfa = 0.01
+
+#Conseguimos la prueba anova para aplicar la corrección
+anova <- aov(tiempo ~ paises, data = data)
+
+#aplicamos la prueba de tukey
+tukey  <- TukeyHSD(x = anova,
+                   which = "paises",
+                   ordered = TRUE,
+                   conf.level = 1 - alfa)
+
+print(tukey)
+
+#aplicamos la prueba de bonferroni
+bonferroni <- pairwise.t.test(data[["tiempo"]],
+                              data[["paises"]],
+                              p.adj = "bonferroni",
+                              pool.sd = T,
+                              paired = F,
+                              conf.level = 1 - alfa)
+print(bonferroni)
+
+#aplicamos la prueba de holm
+holm <- pairwise.t.test(data[["tiempo"]],
+                        data[["paises"]],
+                        p.adj = "holm",
+                        pool.sd = T,
+                        paired = F,
+                        conf.level = 1 - alfa)
+print(holm)
+```
+
+Conclusión:
+
+Se realizaron 3 pruebas de post-hoc (Holm, Bonferroni y Tukey) para contrastar los resultados obtenidos y conseguir una mejor conclusión. La prueba post-hoc de Tukey realizada nos permite apreciar las cotas inferiores y superiores las cuales muestran los rangos de población.
+
+Por lo cual, con lo conseguido a traves de estas pruebas podemos decir que efectivamente, existe evidencia suficiente para decir que hay diferencias entre los tiempos de Colombia, Argentina y Perú en la resolución de cubos 3x3x3, pero la diferencia es muy pequeña como nos podemos percatar en las pruebas realizadas de Holm y Bonferroni.

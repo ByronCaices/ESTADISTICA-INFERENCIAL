@@ -1,0 +1,108 @@
+---
+title: "EP09-respuesta-equipo-4"
+author: "Equipo 4"
+date: "2024-12-07"
+output: pdf_document
+---
+```{r}
+# Cargar librerías
+library(dplyr)
+library(car)
+
+# Definir semilla: Últimos 4 dígitos del RUN del menor integrante
+semilla <- 0919
+set.seed(semilla)
+
+# Cargar datos
+datos <- read.csv2("EP09 Datos.csv")
+
+# Filtrar datos según género (mujeres si semilla es par, hombres si es impar)
+if (semilla %% 2 == 0) {
+  datos_filt <- datos %>% filter(Gender == 2)  # Mujeres
+} else {
+  datos_filt <- datos %>% filter(Gender == 1)  # Hombres
+}
+
+# Verificar si hay suficientes datos después de filtrar
+if (nrow(datos_filt) < 100) {
+  stop("El conjunto de datos filtrado tiene menos de 100 observaciones. Revise el filtro o reduzca el tamaño de la muestra.")
+}
+
+# Seleccionar muestra aleatoria de 100 individuos
+datos_filt <- sample_n(datos_filt, 100, replace = FALSE)
+
+# Dividir datos en entrenamiento (70) y prueba (30)
+datos_entrenamiento <- datos_filt[1:70, ]
+datos_prueba <- datos_filt[71:100, ]
+
+# Seleccionar aleatoriamente 8 variables predictoras
+variables <- colnames(datos_filt)
+variables <- setdiff(variables, c("Weight", "Gender"))  # Excluir respuesta y género
+predictores <- sample(variables, 8, replace = FALSE)
+
+cat("\nPredictores seleccionados:\n")
+print(predictores)
+
+# Separar la variable de respuesta
+respuesta_entrenamiento <- datos_entrenamiento$Weight
+respuesta_prueba <- datos_prueba$Weight
+
+# Seleccionar la variable con mayor correlación con el peso (excluyendo estatura y las seleccionadas)
+variables_no_predictoras <- setdiff(variables, predictores)
+correlaciones <- sapply(datos_entrenamiento[variables_no_predictoras], 
+                        function(x) cor(x, respuesta_entrenamiento, use = "complete.obs"))
+variable_principal <- names(which.max(correlaciones))
+
+cat("\nVariable principal seleccionada por correlación:\n")
+print(variable_principal)
+
+# Asegurar que la variable principal esté como columna en datos_entrenamiento
+datos_entrenamiento$VariablePrincipal <- datos_entrenamiento[[variable_principal]]
+
+# Modelo inicial con la variable principal
+modelo_inicial <- lm(Weight ~ VariablePrincipal, data = datos_entrenamiento)
+cat("\nResumen del modelo inicial:\n")
+summary(modelo_inicial)
+
+# Comentario sobre el modelo inicial:
+# El modelo inicial utiliza únicamente la variable más correlacionada con el peso. 
+# Esto proporciona una línea base para evaluar el ajuste. 
+# Aunque su simplicidad es ventajosa, el modelo puede carecer de capacidad predictiva debido a la falta de otras variables explicativas.
+
+# Crear el modelo completo con las variables seleccionadas
+modelo_completo <- lm(Weight ~ ., data = datos_entrenamiento[, c(predictores, "Weight", "VariablePrincipal")])
+
+# Ejecutar el procedimiento stepwise
+modelo_actualizado <- step(
+  modelo_inicial,
+  scope = list(lower = formula(modelo_inicial), upper = formula(modelo_completo)),
+  direction = "both"
+)
+
+# Evaluar el modelo final
+cat("\nResumen del modelo final:\n")
+summary(modelo_actualizado)
+
+# Comentario sobre el modelo final:
+# El modelo final utiliza un subconjunto óptimo de variables seleccionadas mediante stepwise. 
+# Esto mejora la capacidad predictiva al incluir únicamente variables relevantes. 
+# La reducción del AIC indica un modelo más ajustado y generalizable, pero aún debe evaluarse su capacidad predictiva en datos nuevos.
+
+# Diagnósticos de ajuste
+par(mfrow = c(2, 2))
+plot(modelo_actualizado)
+
+# Agregar la VariablePrincipal al conjunto de prueba
+datos_prueba$VariablePrincipal <- datos_prueba[[variable_principal]]
+
+# Evaluar el poder predictivo en el conjunto de prueba
+predicciones <- predict(modelo_actualizado, newdata = datos_prueba)
+error_cuadratico_medio <- mean((respuesta_prueba - predicciones)^2)
+
+cat("\nError Cuadrático Medio en el conjunto de prueba:\n", error_cuadratico_medio)
+
+# Comentario sobre el poder predictivo:
+# El ECM en el conjunto de prueba es una medida clave para evaluar la generalización del modelo. 
+# Si el ECM es bajo y comparable al error en el conjunto de entrenamiento, el modelo puede considerarse robusto. 
+# De lo contrario, puede haber problemas de sobreajuste o falta de ajuste adecuado.
+```

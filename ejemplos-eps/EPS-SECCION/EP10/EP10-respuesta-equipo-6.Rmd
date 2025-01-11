@@ -1,0 +1,399 @@
+---
+title: "EP10"
+author: "Grupo-6"
+date: "2024-12-09"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(car)
+library(leaps)
+library(ggpubr)
+```
+
+Para esta tarea nos pidieron realizar los siguientes puntos:
+
+1.-Definir la semilla a utilizar, que corresponde a los últimos cuatro dígitos del RUN (sin considerar el dígito verificador) del integrante de mayor edad del equipo.
+
+2.-Seleccionar una muestra de 150 mujeres (si la semilla es un número par) o 150 hombres (si la semilla es impar), asegurando que la mitad tenga estado nutricional “sobrepeso” y la otra mitad “no sobrepeso” en cada caso. Dividir esta muestra en dos conjuntos: los datos de 100 personas (50 con EN “sobrepeso”) para utilizar en la construcción de los modelos y 50 personas (25 con EN “sobrepeso”) para poder evaluarlos.
+
+3.-Recordar las ocho posibles variables predictoras seleccionadas de forma aleatoria en el ejercicio anterior.
+
+4.-Seleccionar, de las otras variables, una que el equipo considere que podría ser útil para predecir la clase EN, justificando bien esta selección (idealmente con literatura).
+
+5.-Usando el entorno R, construir un modelo de regresión logística con el predictor seleccionado en el paso anterior y utilizando de la muestra obtenida.
+
+6.-Usando estas herramientas para la exploración de modelos del entorno R1, buscar entre dos y cinco predictores de entre las variables seleccionadas al azar, recordadas en el punto 3, para agregar al modelo obtenido en el paso 5.
+
+7.-Evaluar la confiabilidad de los modelos (i.e. que tengan un buen nivel de ajuste y sean generalizables) y “arreglarlos” en caso de que tengan algún problema.
+
+8.-Usando código estándar, evaluar el poder predictivo de los modelos con los datos de las 50 personas que no se incluyeron en su construcción en términos de sensibilidad y especificidad.
+
+Primero vamos a obtener los datos necesarios de la forma que se nos pidió:
+
+```{r}
+#Lectura de datos
+datos = read.csv2("EP09 Datos.csv")
+
+#Paso de CM A M en una nueva columna
+datos$Height_m <- datos$Height / 100
+
+#IMC de los datos
+datos$IMC <- datos$Weight / (datos$Height_m^2)
+
+#Estado nutricional en base al IMC
+#Sobrepeso = 1 y No Sobrepeso = 0
+datos$EN <- ifelse(datos$IMC >= 23.2, 1, 0)
+set.seed(6475)
+
+```
+
+Para este caso, como tenemos que utilizar como semilla los últimos cuatro dígitos del RUN (sin considerar el dígito verificador) del integrante de mayor edad del equipo, el cual resulta 6475.
+
+Esta semilla es impar, por lo cual nos toca realizar un análisis a los hombres, por lo cual primero vamos a obtener los datos:
+
+```{r}
+set.seed(6475)
+#Seleccionar hombres
+hombres <- subset(datos, Gender == 1)
+
+#Selección por sobrepeso y no
+hombres_sobrepeso <- subset(hombres, EN == 1)
+hombres_no_sobrepeso <- subset(hombres, EN == 0)
+muestra_sobrepeso <- sample_n(hombres_sobrepeso, 75)
+muestra_no_sobrepeso <- sample_n(hombres_no_sobrepeso, 75)
+muestra <- rbind(muestra_sobrepeso, muestra_no_sobrepeso)
+muestra_100 = rbind(sample_n(muestra_sobrepeso, 50), sample_n(muestra_no_sobrepeso, 50))
+#Hacer que el orden de la muestra sea aleatorio
+muestra_100 <- sample_frac(muestra_100, 1)
+muestra_50 = rbind(sample_n(muestra_sobrepeso, 25), sample_n(muestra_no_sobrepeso, 25))
+#Hacer que el orden de la muestra sea aleatorio
+muestra_50 <- sample_frac(muestra_50, 1)
+
+```
+
+Recordando los predictores seleccionados en el ejercicio anterior de manera aleatorea, tenemos Bitrochanteric.diameter, Knee.Girth, Ankles.diameter, Chest.Girth, Shoulder.Girth, Wrists.diameter, Elbows.diameter y Navel.Girth.
+
+Buscando entre las variables no seleccionadas en el punto anterior, seleccionamos la variable edad, pues investigando mediante el estudio estadístico que se puede ver en la cita de más abajo, la edad se relaciona con el IMC de las personas, pues existe una seguridad del 90% de asociación estadística significativa.
+
+
+Palma, S., & Cabezas, J. M. (2022). Relación entre índice de masa corporal elevado y variables socioeconómicas en población chilena: Un estudio transversal. Revista Española de Nutrición Humana y Dietética, 26(1), 52-60. <https://doi.org/10.14306/renhyd.26.1.1444>
+
+# Regresion Logica Simple
+
+Ahora pasaremos a realizar una regresión logística con la variable edad.
+
+```{r}
+modelo <- glm(EN ~ Age, data = muestra_100, family = binomial(link = "logit"))
+summary(modelo)
+```
+# Regresión logica multiple
+
+### Selección de predictores
+```{r}
+
+# Especificar el modelo completo y los datos
+reg_model <- regsubsets(EN ~ Bitrochanteric.diameter + Knee.Girth + Ankles.diameter +
+                          Chest.Girth + Shoulder.Girth + Wrists.diameter +
+                          Elbows.diameter + Navel.Girth, 
+                        data = muestra_100, 
+                        nbest = 1,  # Selecciona el mejor modelo para cada tamaño
+                        nvmax = 4,  # Máximo número de predictores
+                        method = "forward")  # Selección hacia adelante
+
+plot(reg_model, scale = "bic")
+
+#Extraer los mejores subconjuntos
+comb_summary <- summary(reg_model)
+i_min_bic <- which.min(comb_summary[["bic"]])
+i_max_r2a <- which.max(comb_summary[["adjr2"]])
+
+mejor_comb_bic <- comb_summary[["which"]][i_min_bic, ]
+mejor_comb_r2a <- comb_summary[["which"]][i_max_r2a, ]
+
+#Extraer las variables seleccionadas
+comb_mejor_bic <- names(mejor_comb_bic[mejor_comb_bic == TRUE])
+comb_mejor_r2a <- names(mejor_comb_r2a[mejor_comb_r2a == TRUE])
+
+#Eliminar variables indicadoras
+nombres_mejor_bic <- unique(gsub("^(.*)\\d$", "\\1", comb_mejor_bic))
+nombres_mejor_r2a <- unique(gsub("^(.*)\\d$", "\\1", comb_mejor_r2a))
+
+#Obtener las fórmulas
+pred_mejor_bic <- paste(nombres_mejor_bic[-1], collapse = " + ")
+pred_mejor_r2a <- paste(nombres_mejor_r2a[-1], collapse = " + ")
+
+fmla_mejor_bic <- as.formula(paste("EN", pred_mejor_bic, sep = " ~ "))
+fmla_mejor_r2a <- as.formula(paste("EN", pred_mejor_r2a, sep = " ~ "))
+
+#Construir y mostrar los mejores modelos
+modelo_mejor_bic <- glm(fmla_mejor_bic, data = datos)
+modelo_mejor_r2a <- glm(fmla_mejor_r2a, data = datos)
+
+cat("Modelo que minimiza el BIC:\n")
+cat("---------------------------\n")
+print(nombres_mejor_r2a)
+cat("\n")
+cat("Modelo que maximiza el coeficiente de determinacion ajustado:\n")
+cat("-------------------------------------------------------------\n")
+print(modelo_mejor_r2a)
+```
+
+Como grupo consideramos un máximo de 4 predictores para el modelo de RLogM, por lo cual resultaron los siguientes: Knee.Girth, Ankles.diameter, Chest.Girth, Navel.Girth.
+
+Finalmente, el modelo resultante es:
+
+```{r}
+modelo_RlogM <- glm(EN ~ Age + Knee.Girth + Ankles.diameter + Chest.Girth + Navel.Girth, data = muestra_100, family = binomial(link = "logit"))
+```
+# Confiabilidad de los modelos
+
+### Ajuste
+
+Para revisar la bondad de ajuste de los modelos realizaremos pruebas con anova
+
+```{r}
+ajuste_RLogS <- anova(modelo, test = "LRT")
+ajuste_RLogM <- anova(modelo,modelo_RlogM, test = "LRT")
+
+cat("Bondad de ajuste del modelo univariado:\n")
+print(ajuste_RLogS)
+cat("\n")
+cat("Bondad de ajuste del modelo multivariado:\n")
+print(ajuste_RLogM)
+```
+
+Vemos que el modelo simple consigue una reducción de devianza bastante pequeña de 2.83 respecto al modelo que, aunque sea pequeña, sigue siendo una reducción al tener un p-value > 0.01. No resulta significativo, pero como este predictor fue seleccionado gracias a la literatura, continuaremos el trabajo con este. El modelo múltiple consigue reducir la devianza en 49.53 con un p-value < 0.01, por lo cual este resulta significativo. Bajo esto, el modelo múltiple consigue una buena bondad de ajuste, ya que la del modelo simple no resulta significativa.
+
+Comprobemos que los residuos (estandarizados) mantienen una media cercana a cero a lo largo de sus gráficos de dispersión respecto al predictor y a las predicciones que genera.
+
+```{r}
+cat("Prueba de curvatura para el predictor Age del modelo de RLogitS:\n")
+residualPlots(modelo, type = "rstandard", fitted = FALSE,
+                                  smooth = list(col="blue"))
+```
+Vemos que la media muestra desviación respecto al 0 que podría parecer importante, pero considerando un alfa de 0.05 podemos ver que no resulta significativa esta desviación, por lo que no hay evidencia suficiente para descartar que los residuos cumplen con la suposición.
+
+```{r}
+cat("Prueba de curvatura para el predictor Age del modelo de RLogitM:\n")
+residualPlots(modelo_RlogM, type = "rstandard", fitted = FALSE,
+                                  smooth = list(col="blue"))
+```
+En este caso vemos que todos los casos resultan, con desviaciones de las medias no significativas, excepto por Ankles.diameter. Esto se debe a que cuenta con 2 valores en las esquinas que provocan esta desviacion, pero el resto de los valores se comportan de manera correcta como para los demás casos, por lo cual no resulta que la desviación de la media para Ankles.diameter sea significativa.
+
+### Relaciones lineales
+
+```{r}
+RLogS_lin_df <- data.frame(muestra_100[["Age"]],
+log(fitted(modelo)/(1-fitted(modelo))))
+colnames(RLogS_lin_df) <- c("Age", "Logit")
+
+RLogS_graf_lin <- ggscatter(data = RLogS_lin_df, x = "Age", y = "Logit",
+                           add = "reg.line", add.params = list(color = "blue"))
+print(RLogS_graf_lin)
+```
+Vemos que el predictor Age cuenta con una relación lineal perfecta.
+
+```{r}
+predictores <- c("Knee.Girth", "Ankles.diameter", "Chest.Girth", "Navel.Girth")
+
+RLogM_lin_df <- muestra_100[, c(predictores)]  
+RLogM_lin_df[["Logit"]] <- log(fitted(modelo_RlogM) / (1 - fitted(modelo_RlogM)))  
+RLogM_lin_dfl <- pivot_longer(
+  RLogM_lin_df,
+  cols = all_of(predictores),  
+  names_to = "Predictor",  
+  values_to = "Valor"  
+)
+
+RLogM_graf_lin <- ggscatter(
+  data = RLogM_lin_dfl,
+  x = "Valor",
+  y = "Logit",
+  add = "reg.line",  
+  add.params = list(color = "blue")  ) + facet_wrap(~ Predictor, scales = "free_x") +  theme_minimal() +  
+  labs(
+    title = "Relación entre Logit y Predictores",
+    x = "Valor del Predictor",
+    y = "Logit"
+  )
+
+print(RLogM_graf_lin)
+
+```
+Vemos que el modelo logra establecer relaciones lineales con los predictores.
+
+### Casos influyentes
+
+
+```{r}
+casos_influyentes_RLogS = influencePlot(modelo)
+casos_influyentes_RLogS
+```
+Vemos que no tenemos apalancamiento en el modelo y,aparte, la distancia Cook, todas resultan bajo 1, lo que indica que no hay valores influyentes en el modelo, por lo cual no es necesario realizar modificaciones.
+
+```{r}
+
+casos_influyentes_RLogsM = influencePlot(modelo_RlogM)
+casos_influyentes_RLogsM
+```
+Vemos que no tenemos apalancamiento en el modelo y,aparte, la distancia Cook, todas resultan bajo 1, lo que indica que no hay valores influyentes en el modelo, por lo cual no es necesario realizar modificaciones.
+
+### Independencia de residuos
+
+Para evaluar la independencia de los residuos, haremos uso de la prueba de Durbin-Watson.
+
+```{r}
+cat("Prueba de la independencia de los residuos para el modelo de RLogitS:\n")
+print(durbinWatsonTest(modelo))
+```
+Con esta prueba vemos que se cumple la independencia de los residuos para el modelo simple.
+
+```{r}
+cat("Prueba de la independencia de los residuos para el modelo de RLogitM:\n")
+print(durbinWatsonTest(modelo_RlogM))
+```
+Con esta prueba vemos que se cumple la independencia de los residuos para el modelo múltiple.
+
+### Multicolineanidad
+
+Para evaluar esto haremos uso de los factores de inflación de la varianza y los valores de tolerancia mediante la función vif.
+
+```{r}
+cat("Factores de inflación de la varianza:\n")
+vif(modelo_RlogM)
+
+cat("\n")
+cat("Valores de tolerancia:\n")
+print(1 / vif(modelo_RlogM))
+```
+
+Como se puede observar los valores de inflación dan buenos resultados indicando que no hay multicolinealidad y aparte la tolerancia es mucho superior a 0.2 por lo cual concluimos que no hay problemas de multicolinealidad.
+
+# Poder predectivo del modelo
+
+Para estudiar el poder predectivo, haremos uso de las 50 muestras no utilizadas en el estudio, donde se estudiará de manera particular la sensibilidad y especificidad del modelo, haciendo uso de un umbral de 0.5.
+
+```{r}
+
+#Modelo de RLog con los datos no incluidos 
+
+Modelo_50_RLogM <- glm(EN ~ Age + Knee.Girth + Ankles.diameter + Chest.Girth + Navel.Girth, data = muestra_50, family = binomial(link = "logit"))
+Modelo_50_RLogS <- glm(EN ~ Age, data = muestra_50, family = binomial(link = "logit"))
+```
+
+```{r}
+#Predicciones
+
+Umbral <- 0.5
+
+#Datos de entrenamiento
+
+prob_100_RLogS <- predict(modelo, muestra_100, type = "response")
+pred_100_RLogS <- sapply(prob_100_RLogS, 
+                  function(p) ifelse (p < Umbral, "NoSobrepeso", "Sobrepeso"))
+pred_100_RLogS <- factor(pred_100_RLogS, levels = c("NoSobrepeso", "Sobrepeso"))
+
+prob_100_RLogM <- predict(modelo_RlogM, muestra_100, type = "response")
+pred_100_RLogM <- sapply(prob_100_RLogM, 
+                  function(p) ifelse (p < Umbral, "NoSobrepeso", "Sobrepeso"))
+pred_100_RLogM <- factor(pred_100_RLogM, levels = c("NoSobrepeso", "Sobrepeso"))
+
+#Datos de prueba no considerados
+
+prob_50_RLogS <- predict(Modelo_50_RLogS, muestra_50, type = "response")
+pred_50_RLogS <- sapply(prob_50_RLogS, 
+                  function(p) ifelse (p < Umbral, "NoSobrepeso", "Sobrepeso"))
+pred_50_RLogS <- factor(pred_50_RLogS, levels = c("NoSobrepeso", "Sobrepeso"))
+
+prob_50_RLogM <- predict(Modelo_50_RLogM, muestra_50, type = "response")
+pred_50_RLogM <- sapply(prob_50_RLogM, 
+                  function(p) ifelse (p < Umbral, "NoSobrepeso", "Sobrepeso"))
+pred_50_RLogM <- factor(pred_50_RLogM, levels = c("NoSobrepeso", "Sobrepeso"))
+```
+
+```{r}
+
+#Matriz de confusion
+
+obs_100_RLogS <- factor(muestra_100$EN, levels = c(0, 1), labels = c("NoSobrepeso", "Sobrepeso"))
+obs_100_RLogM <- factor(muestra_100$EN, levels = c(0, 1), labels = c("NoSobrepeso", "Sobrepeso"))
+
+matriz_100_RLogS <- table(Predicho = pred_100_RLogS, Observado = obs_100_RLogS)
+matriz_100_RLogM <- table(Predicho = pred_100_RLogM, Observado = obs_100_RLogM)
+cat("\n")
+cat("Matriz de confusión con de RLogS:\n")
+print(matriz_100_RLogS)
+cat("\n")
+cat("Matriz de confusión con de  RLogM:\n")
+print(matriz_100_RLogM)
+
+# Matriz de confusion datos no Consideredados
+obs_50_RLogS <- factor(muestra_50$EN, levels = c(0, 1), labels = c("NoSobrepeso", "Sobrepeso"))
+obs_50_RLogM <- factor(muestra_50$EN, levels = c(0, 1), labels = c("NoSobrepeso", "Sobrepeso"))
+
+matriz_50_RLogS <- table(Predicho = pred_50_RLogS, Observado = obs_50_RLogS)
+matriz_50_RLogM <- table(Predicho = pred_50_RLogM, Observado = obs_50_RLogM)
+cat("\n")
+cat("Matriz de confusión con los datos No considerados en RLogS:\n")
+print(matriz_50_RLogS)
+cat("\n")
+cat("Matriz de confusión con los datos No considerados en RLogM:\n")
+print(matriz_50_RLogM)
+```
+```{r}
+#Sensibilidad
+
+Sensibilidad_100_RLogS <- matriz_100_RLogS[1, 1] /
+sum(matriz_100_RLogS[, 1])
+Sensibilidad_100_RLogM <-matriz_100_RLogM[1, 1] /
+sum(matriz_100_RLogM[, 1])
+
+Sensibilidad_50_RLogS <- matriz_50_RLogS[1, 1] /
+sum(matriz_50_RLogS[, 1])
+Sensibilidad_50_RLogM <-matriz_50_RLogM[1, 1] /
+sum(matriz_50_RLogM[, 1])
+
+#Especificidad
+
+Especificidad_100_RLogS <- matriz_100_RLogS[2, 2] /
+sum(matriz_100_RLogS[, 2])
+Especificidad_100_RLogM <- matriz_100_RLogM[2, 2] /
+sum(matriz_100_RLogM[, 2])
+
+Especificidad_50_RLogS <- matriz_50_RLogS[2, 2] /
+sum(matriz_50_RLogS[, 2])
+Especificidad_50_RLogM <- matriz_50_RLogM[2, 2] /
+sum(matriz_50_RLogM[, 2])
+
+cat("Rendimiento del modelo de RLogitS:\n")
+cat("\n")
+cat(sprintf(" Sensibilidad datos de entrenamiento: %.2f\n", Sensibilidad_100_RLogS))
+cat(sprintf(" Sensibilidad datos no considerados: %.2f\n", Sensibilidad_50_RLogS))
+cat("\n")
+cat(sprintf(" Especificidad datos de entrenamiento: %.2f\n", Especificidad_100_RLogS))
+cat(sprintf(" Especificidad datos no considerados: %.2f\n", Especificidad_50_RLogS))
+
+cat("\n")
+cat("Rendimiento del modelo de RLogitM:\n")
+cat("\n")
+cat(sprintf(" Sensibilidad datos de entrenamiento: %.2f\n", Sensibilidad_100_RLogM))
+cat(sprintf(" Sensibilidad datos no considerados: %.2f\n", Sensibilidad_50_RLogM))
+cat("\n")
+cat(sprintf(" Especificidad datos de entrenamiento: %.2f\n", Especificidad_100_RLogM))
+cat(sprintf(" Especificidad datos no considerados: %.2f\n", Especificidad_50_RLogM))
+
+```
+
+# Conclusiones
+
+Finalmente, vemos que el modelo de RLogM resulta con una alta calidad predictiva, ya que cuenta con una sensibilidad del 96% y una especificidad del 82% con los datos no utilizados en la construcción del modelo.
+
+Vemos,aparte, que el modelo de RLogM tiene menor estabilidad en la sensibilidad, ya que el rendimiento se reduce en un 14% a diferencia del 6% del modelo de RLogS, pero aun así se mantiene mayor que este y el rendimiento de la especificidad resulta igual para ambos modelos, donde tan solo se reduce en un 2%.
+Por lo cual el mejor modelo resulta ser el de RLogM, haciendo uso de los predictores de Age, Knee.Girth, Ankles.diameter, Chest.Girth y Navel.Girth.
+
+
+
+
+

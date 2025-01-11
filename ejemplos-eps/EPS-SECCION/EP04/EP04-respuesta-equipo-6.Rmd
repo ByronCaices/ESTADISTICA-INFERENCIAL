@@ -1,0 +1,267 @@
+---
+title: "EP03 Grupo 6"
+date: "`r Sys.Date()`"
+output: html_document 
+        
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(repos = c(CRAN = "https://cran.rstudio.com/"))
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(tidyr)) install.packages("tidyr")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(ggpubr)) install.packages("ggpubr")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(ggmosaic)) install.packages("ggmosaic")
+if(!require(kableExtra)) install.packages("kableExtra")
+if(!require(ggpattern)) install.packages("ggpattern")
+if(!require(pwr)) install.packages("pwr")
+if(!require(tidyverse)) install.packages("tidyverse")
+if(!require(rcompanion)) install.packages("rcompanion")
+if(!require(RVAideMemoire)) install.packages("RVAideMemoire")
+
+```
+
+```{=html}
+<style>
+body {
+text-align: justify}
+</style>
+```
+
+## Pregunta 1
+
+Se llevó a cabo una investigación entre dos grupos demográficos: residentes urbanos y suburbanos. Seleccionaron aleatoriamente 30 residentes urbanos y 35 residentes suburbanos, y se les preguntó sobre su preferencia de transporte para desplazarse en la ciudad entre tres opciones comunes, obteniéndose que de los primeros 8 usan el Metro, 12 usan bicicletas y 10 su vehículo particular. mientras que entre los segundos 12 prefieren el Metro, 15 las bicicletas y 8 el vehículo particular.
+¿Son iguales las distribuciones de las preferencias de transporte entre los dos grupos demográficos?
+
+### Solución
+
+* Notemos que, para resolver este problema, debemos realizar una prueba de hipótesis de homogeneidad de proporciones. Lo anterior se debe a que estamos comparando dos grupos demográficos y sus preferencias de transporte.
+
+* Comprobemos las condiciones:
+1) Las observaciones son independientes: Se seleccionaron aleatoriamente 30 residentes urbanos y 35 residentes suburbanos. Además, supondremos que la muestra corresponde a menos del 10% de la población total. Por lo anterior se cumple la condición de independencia.
+
+2) Debe haber a lo menos 5 observaciones esperadas en cada grupo: Para lo anterior, generamos una tabla de contingencia con las preferencias de transporte de los dos grupos demográficos:
+```{r pregunta1_Verificacion}
+# Construir la tabla de contingencia
+urbano <-c(12,15,8)
+suburbano <-c(8,12,10)
+
+tabla <- as.table(rbind(urbano,suburbano))
+
+dimnames(tabla) <- list(residente = c("urbano", "suburbano"),
+                        transporte = c("Metro", "Bicicleta", "Vehículo particular"))
+
+# Verificar si se esperan más de 5 observaciones en cada grupo
+# E[i,j] = (Ri * Cj) / n
+E <- matrix(0, nrow = 2, ncol = 3)
+for (i in 1:2) {
+  for (j in 1:3) {
+    E[i,j] <- sum(tabla[i,]) * sum(tabla[,j]) / sum(tabla)
+  }
+}
+
+# Agrego nombres a la matriz
+rownames(E) <- c("urbano", "suburbano")
+colnames(E) <- c("Metro", "Bicicleta", "Vehículo particular")
+
+# Agrego la suma de las filas y columnas
+E <- addmargins(E)
+
+# Presentar tabla de observaciones esperadas
+E %>% kbl(caption = "Tabla de observaciones esperadas.") %>%
+   kable_classic_2(full_width = T, html_font = "Cambria", bootstrap_options = "striped")
+
+
+```
+
+* De lo anterior se puede observar que en todas las celdas de la tabla de contingencia se esperan más de 5 observaciones, por lo que se cumple la condición de esperar al menos 5 observaciones en cada grupo.
+
+Por los puntos anteriores, se puede proceder a realizar la prueba de hipótesis de homogeneidad de proporciones. Además propongamos un nivel de significancia de alfa = 0.05.
+
+Las hipótesis que se han de proponer son las siguientes:
+
+* H0: Las distribuciones de las preferencias de transporte entre los dos grupos demográficos son iguales.
+* HA: Las distribuciones de las preferencias de transporte entre los dos grupos demográficos son distintas.
+
+```{r pregunta1}
+# Sumo las filas y columnas
+tabla_margins <- addmargins(tabla)
+
+# Mostrar tabla de contingecia
+tabla_margins %>% kbl(caption = "Tabla Estadisticos de Rendimiento segun cambios.") %>%
+   kable_classic_2(full_width = T, html_font = "Cambria", bootstrap_options = "striped")
+
+
+# Hacer prueba de chisq.test
+prueba <- chisq.test(tabla)
+print(prueba)
+```
+
+Finalmente obtenemos que el p-value = 0.6136, un valor mayor a 0.05, por ende se falla al rechazar la hipótesis nula. Es decir, no hay evidencia suficiente para afirmar que las distribuciones de las preferencias de transporte entre los dos grupos demográficos son distintas.
+
+
+## Pregunta 2
+
+Un hotel está implementando un nuevo protocolo de limpieza para mejorar la calidad de servicio y la satisfacción de sus huéspedes. Para evaluar la efectividad de este protocolo, se seleccionaron aleatoriamente 25 habitaciones y se aplicó el protocolo de limpieza antiguo y nuevo de forma alternada. Después de la primera limpieza, se evaluó la calidad de limpieza de cada habitación. Luego, después de la segunda limpieza con el protocolo alternativo, se volvió a evaluar la calidad de limpieza. Los resultados se presentan a continuación:
+
+* 5 habitaciones mostraron una calidad de limpieza baja en ambas ocasiones.
+* 5 habitaciones con calidad de limpieza baja con el protocolo antiguo mostraron una mejora con el nuevo.
+* 8 habitaciones mantuvieron una alta calidad de limpieza con ambos protocolos.
+* 7 habitaciones mostraron una alta calidad de limpieza con el protocolo antiguo, pero una disminución con el protocolo nuevo.
+
+¿Hay evidencia de que el nuevo protocolo de limpieza haya tenido un efecto significativo en la calidad de limpieza de las habitaciones del hotel?
+
+### Solución
+
+* Notemos que para resolver este problema, debemos realizar una prueba de McNemar. Lo anterior se debe a que estamos comparando dos protocolos de limpieza en un mismo grupo de habitaciones. 
+
+Asumamos un nivel de significancia de alfa = 0.05.
+
+Las hipótesis que se han de proponer son:
+
+* H0: No hay efecto significativo del nuevo protocolo de limpieza en la calidad de limpieza de las habitaciones del hotel.
+* HA: Sí hay efecto significativo del nuevo protocolo de limpieza en la calidad de limpieza de las habitaciones del hotel.
+
+```{r pregunta2}
+# Crear tabla 
+habitaciones <- seq(1:25)
+protocolo_antiguo <- c(rep("Baja", 5), rep("Baja", 5), rep("Alta", 8), rep("Alta", 7))
+protocolo_nuevo <- c(rep("Baja", 5), rep("Alta", 5), rep("Alta", 8), rep("Baja", 7))
+datos <- data.frame(habitaciones, protocolo_antiguo, protocolo_nuevo)
+
+# Mostrar tabla 
+datos %>% kbl(caption = "Tabla Estadisticos de Rendimiento segun cambios.") %>%
+   kable_classic_2(full_width = T, html_font = "Cambria", bootstrap_options = "striped")
+
+# Creo tabla con los datos resumidos
+tabla <- table(protocolo_antiguo, protocolo_nuevo)
+
+# Hacer prueba de McNemar
+prueba <- mcnemar.test(tabla)
+print(prueba)
+```
+
+Finalmente obtenemos que el p-value = 0.7728, un valor mayor a 0.05, por ende se falla al rechazar la hipótesis nula. Es decir, no hay evidencia suficiente para afirmar que el nuevo protocolo de limpieza haya tenido un efecto significativo en la calidad de limpieza de las habitaciones del hotel.
+
+## Pregunta 3:
+
+Una agencia de marketing desea determinar si hay una diferencia significativa en la efectividad de tres estrategias publicitarias utilizadas para promocionar un nuevo producto. Para ello, se ha recopilado información de personas que fueron expuestas a las tres estrategias publicitarias, registrando si mostraron una aceptación (A) o rechazo (R) a cada una de ellas. ¿Qué puede concluir la agencia de marketing sobre la efectividad de las estrategias publicitarias para promover el nuevo producto?
+
+### Solución
+
+```{r}
+# Semilla para la consistencia de los datos
+set.seed(108)
+
+# Lectura de datos
+datos <- read.csv2("EP04 Datos.csv")
+
+# Se seleccionan 50 bloques (personas) aleatorios
+datos <- datos[sample(nrow(datos), 50),]
+```
+
+Debido a que la variable independiente posee más de dos observaciones apareadas (En este caso, tres estrategias publicitarias), el método escogido a utilizar de forma preliminar es la prueba Q de Cochran.
+
+Para este método, se deben cumplir algunas condiciones:
+
+* La variable de respuesta es dicotómica: La información de las personas representa si presentaron aceptación o rechazo a la estrategia, por lo que esta condición se cumple.
+* La variable independiente es categórica: En este caso, se está revisando el desempeño de tres estrategias publicitarias.
+* Las observaciones son independientes entre sí: Para esta condición hay que tomar ciertos supuestos.
+* Las personas fueron expuestas por separado a las estrategias, evitando la influencia entre unas y otras.
+* La muestra de 50 personas corresponde a menos del 10% de la población, la cual sería el mercado objetivo de la estrategia publicitaria.
+  
+* El tamaño de la muestra es lo suficientemente grande: Para este caso, se seleccionaron 50 bloques aleatorios del archivo, y se presentan 3 estrategias. Por ende, se tiene que 50 * 3 = 150 > 24, por lo que la muestra sí es suficientemente grande.
+ 
+Entonces, se proponen dos hipótesis a contrastar:
+
+* H0: La proporción de personas que demuestran aprobación a una estrategia publicitaria es la misma para todas las estrategias.
+* HA: La proporción de personas que demuestran aprobación a una estrategia publicitaria es distinta para al menos una de las estrategias.
+
+
+Como la prueba requiere una matriz en formato largo, se transforma el dataframe a un formato soportado por cochran.qtest.
+
+```{r}
+# Se transforma la tabla a formato largo.
+
+datos <- datos %>% pivot_longer(c("estrategia_1", "estrategia_2", "estrategia_3"), names_to = "estrategia", values_to = "recepcion")
+datos[["estrategia"]] <- factor(datos[["estrategia"]])
+datos[["recepcion"]] <- factor(datos[["recepcion"]])
+
+# Se transforman los Reprobado y Aprobado a valores booleanos.
+datos$recepcion <- ifelse(datos$recepcion == "R", 0, 1)
+```
+
+Finalmente, se realiza la prueba seleccionada.
+
+```{r}
+prueba <- cochran.qtest(recepcion ~ estrategia | id,
+                        data = datos, alpha = 0.05)
+print(prueba)
+```
+
+Para este caso de estudio, se obtiene un p-value de 0.7891, muchísimo mayor que el nivel de significancia escogido de 0.05, por lo que se falla en rechazar la hipótesis nula, concluyendo entonces que no existe una diferencia percibible en el desempeño de las diferentes estrategias de Marketing. Podría ser pertinente realizar un estudio con una muestra de mayor tamaño, sin embargo, el valor obtenido es tan alto que es muy poco probable que cambie el resultado. De esta manera, se aconsejaría a la agencia de Marketing utilizar la estrategia que les resulte más económica o conveniente, pues no va a haber un cambio en la recepción del público a la publicidad. 
+
+## Pregunta 4:
+
+Durante un apocalipsis zombie, un grupo de 10 mujeres y 15 hombres sobrevivientes se encuentra buscando desesperadamente refugio y encuentran dos edificios abandonados que podrían servir: una escuela y un centro comercial. Algunas personas piensan que la escuela es más segura, mientras que otras consideran que el centro comercial es más seguro. Después de elegir sus opciones, se observa que 5 mujeres y 4 hombres eligen refugiarse en la escuela abandonada mientras que los otros optan por el centro comercial.
+¿Hay relación entre el sexo de la persona y el edificio abandonado que encuentra más seguro?
+
+### Solución
+
+Tenemos dos variables categoricas de una misma poblacion, el sexo, y la eleccion de edificio abandonado, para saber si estas variables son independientes o si estan relacionadas, en primera instancia se puede pensar que la prueba chi-cuadrado de independencia es la adecuada para este caso. Pero, a continuación veremos que tendremos que usar la prueba exacta de Fisher.
+
+La explicación es porque:
+
+* Si bien se cumple la condición de independencia de las muestras, ya que se puede suponer que la muestra de personas fue elegida aleatoriamente, y se puede asumir que los sobrevivientes no son los únicos que quedan y forman menos del 10% de la población, con esto se verifica la condición de independencia de las muestras.
+* Pero no se cumple la condición de que todos los valores esperados deben superar las 5 observaciones, por lo que veremos a continuación:
+
+```{r pregunta4}
+# Creacion de tabla de contingencia
+escuela <- c(5, 4)
+centro <- c(5, 11)
+
+tabla <- as.table(rbind(escuela, centro))
+
+dimnames(tabla) <- list(grupo = c("Escuela", "Centro comercial"),
+                        sexo = c("Mujeres", "Hombres"))
+print(tabla)
+
+# Verificar si se esperan más de 5 observaciones en cada grupo
+# E[i,j] = (Ri * Cj) / n
+E <- matrix(0, nrow = 2, ncol = 2)
+for (i in 1:2) {
+  for (j in 1:2) {
+    E[i,j] <- sum(tabla[i,]) * sum(tabla[,j]) / sum(tabla)
+  }
+}
+
+# Agrego nombres a la matriz
+rownames(E) <- c("Escuela", "Centro comercial")
+colnames(E) <- c("Mujeres", "Hombres")
+
+# Agrego la suma de las filas y columnas
+E <- addmargins(E)
+
+# Presentar tabla de observaciones esperadas
+E %>% kbl(caption = "Tabla de observaciones esperadas.") %>%
+   kable_classic_2(full_width = T, html_font = "Cambria", bootstrap_options = "striped")
+
+```
+
+* Notemos que las mujeres que elijen la escuela abandonada tienen un valor esperado menor a 5, por lo que no se cumple la condición de la prueba chi-cuadrado de independencia. Por lo tanto, se procederá a realizar la prueba exacta de Fisher, la cual nos sirve cuando no se cumplen las condiciones de la prueba chi-cuadrado de independencia y ambos grupos son de variables categóricas dicotómicas.
+
+Para lo anterior, asumiendo un nivel de significancia de alfa = 0.05, se proponen las siguientes hipótesis a contrastar:
+
+* H0: las variables lugar de refugio y sexo son independientes.
+* HA: las variables lugar de refugio y sexo están relacionadas.
+
+```{r pregunta4_1}
+# Aplicamos la prueba exacta de Fisher
+prueba <- fisher.test(tabla)
+print(prueba)
+```
+
+Finalmente, se obtiene un p-value de 0.3973, el cual es mayor que el nivel de significancia de 0.05, por lo que se falla en rechazar la hipótesis nula. Es decir, no hay evidencia suficiente para afirmar que el sexo de la persona y el edificio abandonado que encuentra más seguro están relacionados.

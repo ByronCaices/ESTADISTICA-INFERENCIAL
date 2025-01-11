@@ -1,0 +1,420 @@
+---
+title: "EP08-respuesta-equipo-4"
+date: "2024-11-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(ez)
+```
+
+1.  Propongan una pregunta de investigación original, que involucre la comparación de una frecuencia de un evento o característica en dos grupos independientes (más abajo se dan unos ejemplos). Fijando una semilla propia, seleccionen una muestra aleatoria de hogares (100 \< n \< 150) y respondan la pregunta propuesta utilizando una prueba de permutaciones Monte Carlo. Indicación: creen su propio código, específicamente para este problema, no usen directamente el script del apunte.
+
+Como grupo proponemos la siguiente pregunta para responder el enunciado:
+
+¿Existe una diferencia significativa entre la proporción de personas mayores a 60 años entre zona rural y urbana?
+
+La pregunta de investigación propuesta plantea la comparación de dos proporciones. Luego, el estadístico para la prueba de Monte Carlo que se utilizara en este caso es la diferencia de las proporciones entre dos grupos independiente (Urbano y Rural).
+
+Lectura de datos:
+
+```{r}
+# Leer csv de los datos
+datos = read.csv2("EP08 Datos CASEN 2017.csv", sep=",")
+```
+
+Obtener muestra:
+
+```{r}
+# Muestra seleccionada
+datosP1 = datos %>% sample_n(149)
+```
+
+Definimos semilla, permutaciones y funciones que se utilizaran.
+
+```{r}
+# Establecer semilla y cantidad de permutaciones
+set.seed(46)
+R = 5999
+
+# Función para obtener una permutación
+obtener_permutacion = function(i, muestra_1, muestra_2) {
+  combinada = c(muestra_1, muestra_2)
+  permutacion = sample(combinada, length(combinada), replace = FALSE)
+  nueva_1 = permutacion[1:length(muestra_1)]
+  nueva_2 = permutacion[(length(muestra_1) + 1):length(combinada)]
+  return(list(nueva_1, nueva_2))
+}
+
+# Función para calcular la diferencia de proporciones entre dos muestras
+calcular_diferencia = function(muestras, FUN) {
+  muestra_1 = muestras[[1]]
+  muestra_2 = muestras[[2]]
+  proporcion_1 = FUN(muestra_1)
+  proporcion_2 = FUN(muestra_2)
+  diferencia = proporcion_1 - proporcion_2
+  return(diferencia)
+}
+
+# Función para calcular la proporción de un evento en una muestra
+calcular_proporcion = function(muestra, condicion) {
+  return(mean(condicion(muestra)))
+}
+
+# Función para contrastar hipótesis de permutaciones
+contrastar_hipotesis_permutaciones = function(muestra_1, muestra_2, repeticiones, FUN) {
+  permutaciones = lapply(1:repeticiones, function(i) {
+    obtener_permutacion(i, muestra_1, muestra_2)
+  })
+
+  # Calcular la distribución nula
+  distribucion = sapply(permutaciones, function(p) {
+    calcular_diferencia(p, FUN)
+  })
+
+  # Calcular estadístico observado
+  observado = calcular_diferencia(list(muestra_1, muestra_2), FUN)
+
+  # Calcular p-valor
+  numerador = sum(abs(distribucion) > abs(observado)) + 1
+  denominador = repeticiones + 1
+  p_valor = numerador / denominador
+
+  return(list(p_valor = p_valor, distribucion = distribucion, observado = observado))
+}
+```
+
+Antes de proceder al cálculo se muestran los datos observados.
+
+```{r}
+# Resumen de datos por zona y mayores de 60 años
+
+# Crear tabla de contingencia 2x2
+tabla_2x2 = table(datosP1$zona, datosP1$edad > 60)
+
+# Convertir la tabla en data frame para visualizarla mejor
+tabla_2x2_df = as.data.frame.matrix(tabla_2x2)
+colnames(tabla_2x2_df) = c("No Mayor 60", "Mayor 60")
+rownames(tabla_2x2_df) = c("Rural", "Urbano")
+
+# Mostrar la tabla como data frame
+print(tabla_2x2_df)
+
+# Calcular proporción observada de la diferencia
+total_rural = sum(tabla_2x2_df["Rural", ])
+total_urbano = sum(tabla_2x2_df["Urbano", ])
+
+proporcion_rural = tabla_2x2_df["Rural", "Mayor 60"] / total_rural
+proporcion_urbano = tabla_2x2_df["Urbano", "Mayor 60"] / total_urbano
+
+diferencia_observada = proporcion_rural - proporcion_urbano 
+
+# Mostrar resultados
+cat("Proporción Rural (Mayor 60):", round(proporcion_rural, 4), "\n")
+cat("Proporción Urbano (Mayor 60):", round(proporcion_urbano, 4), "\n")
+cat("Diferencia Observada:", round(diferencia_observada, 4), "\n")
+```
+
+Hipótesis:
+
+Sean pr y pu las proporciones de personas mayores a 60 años en la zona rural y urbano de manera respectiva, entonces:
+
+$H_0$ : No existen diferencias significativas en la proporción de personas mayores a 60 años entre la zona rural y urbana: $p_r−p_u=0$
+
+$H_A$ : Por el contrario, estas proporciones son distintas: $p_r−p_u≠0$
+
+Consideremos un nivel de significación de 0.05. Luego se procede al cálculo de la prueba de permutaciones de Monte Carlo utilizando las funciones y graficamos:
+
+```{r}
+# Contrastar hipótesis de diferencia de proporciones
+resultados = contrastar_hipotesis_permutaciones(
+  datosP1[datosP1$zona == "Rural", "edad"],
+  datosP1[datosP1$zona == "Urbano", "edad"],
+  R,
+  function(muestra) calcular_proporcion(muestra, function(x) x > 60)
+)
+
+# Extraer resultados
+p_valor = resultados$p_valor
+distribucion = resultados$distribucion
+diferencia_observada = resultados$observado
+
+# Imprimir resultados
+cat("P-valor:", p_valor, "\n")
+
+cat("Diferencia observada:", diferencia_observada, "\n")
+
+# Visualizar la distribución nula
+graficar_distribucion = function(distribucion, observado) {
+  observaciones = data.frame(distribucion = distribucion)
+  
+  # Histograma
+  histograma = ggplot(observaciones, aes(x = distribucion)) +
+    geom_histogram(bins = 30, fill = "lightblue", color = "blue", alpha = 0.7) +
+    geom_vline(xintercept = observado, color = "red", linetype = "dashed", size = 1) +
+    labs(
+      x = "Diferencia de proporciones",
+      y = "Frecuencia",
+      title = "Distribución nula del estadístico de prueba"
+    ) +
+    theme_minimal()
+  
+  print(histograma)
+}
+
+# Llamar la función para graficar
+graficar_distribucion(distribucion, diferencia_observada)
+
+```
+
+Luego a partir de los resultados obtenidos se puede concluir, con 95% confianza, que no hay evidencia suficiente para rechazar la hipótesis nula (P-valor: 0.6771667) y se concluye que no es posible descartar que no existen diferencias significativas en la proporción de personas mayores a 60 años entre la zona rural y urbana.
+
+2.  Propongan una pregunta de investigación original, que involucre la comparación de las medias de más de dos grupos independientes (más abajo se dan unos ejemplos). Fijando una semilla distinta a la anterior, seleccionen una muestra aleatoria de hogares (200 \< n \< 300) y respondan la pregunta propuesta utilizando bootstrapping. Solo por ejercicio académico, aplique un análisis post-hoc con bootstrapping aunque este no fuera necesario. Indicación: consideren que el análisis post-hoc debe hacerse con las mismas remuestras usadas para la prueba ómnibus.
+
+Para esta actividad consideraremos como pregunta: ¿Es igual el ingreso total por rango etario (18-33,34-49,50-65) de las personas adultas (de 18 años hasta 65 años) que viven en zonas rurales?
+
+Para simplificar la referencia a los rangos, definimos:
+
+-   Rango 1: 18-33 años
+-   Rango 2: 34-49 años
+-   Rango 3: 50-65 años
+
+Para este estudio se definen las siguientes hipótesis:
+
+$H_0$ : No existen diferencias significativas en el ingreso total promedio de las personas de diferentes rangos etarios(18-33,34-49,50-65) que viven en zonas rurales : $\mu_i−\mu_j=0: i,j \in$ {rango 1, rango 2, rango 3}
+
+$H_A$ : Existe una diferencia significativa en el ingreso total promedio de las personas que viven en zonas rurales para al menos un par de rangos etarios $\exists \space i,j \in \space${rango 1, rango 2, rango 3} $: \mu_i - \mu_j \neq 0$
+
+Además, se establece un nivel de significación de 0.05 para las conclusiones.
+
+Primero fijamos una semilla y obtenemos los datos
+
+```{r}
+set.seed(123)
+
+# Filtrar datos
+rural = datos %>% filter(zona == "Rural" & edad >= 18 & edad <= 65 ) 
+
+# Obtener muestra de 240 elementos
+muestra = rural %>% select(ytot, edad) %>% sample_n(240)
+
+# Separar los datos en grupos por rango etario
+
+rango1 = muestra %>% filter(18 <= edad & edad < 34)
+rango2 = muestra %>% filter(34 <= edad & edad < 50)
+rango3 = muestra %>% filter(50 <= edad & edad <= 65)
+```
+
+Se procede a crear un data frame con los datos para manejarlos de mejor manera.
+
+```{r}
+# Crear un data frame con los grupos
+
+ingresos = c(rango1$ytot, rango2$ytot, rango3$ytot)
+rangos = c(rep("18-33", length(rango1$ytot)),rep("34-49",length(rango2$ytot)), rep("50-65",length(rango3$ytot)))
+ids = 1:length(rangos)
+
+datosObs = data.frame(ids, ingresos,rangos)
+
+#Agregar ingresos en miles de pesos
+datosObs[["ingresosMill"]] = datosObs$ingresos / 1000000
+
+# Se vuelven a obtener los grupos a partir del nuevo dataframe
+rango1 = datosObs %>% filter(rangos == "18-33")
+rango2 = datosObs %>% filter(rangos == "34-49")
+rango3 = datosObs %>% filter(rangos == "50-65")
+```
+
+Se procede analizar los datos mediante diagramas de caja.
+
+```{r}
+# Graficar grupos
+g2 = ggboxplot(datosObs, x = "rangos", y = "ingresosMill", fill = "rangos")
+g2 = g2 + xlab("Rango") + ylab("Ingreso per cápita")
+print(g2)
+```
+
+Como se puede observar existen varios valores atípicos y los datos se ven desbalanceados, además los datos parecen no presentar la condición de homocedasticidad, por lo cual no se pueden analizar los datos y probar hipótesis mediante métodos clásicos, por lo cual se utilizará el método bootstraping para analizar los datos y probar hipótesis.
+
+Ahora, procederemos a crear una función que calcule el valor F de la prueba ANOVA para muestras independientes, puesto que este estadístico es el que nos interesa para poder probar hipótesis posteriormente.
+
+```{r}
+obtenerValorF = function(df, g1, g2, g3, print)
+{
+  i = c(g1, g2, g3)
+  ids = factor(1:length(i))
+  datos = cbind(id = ids, df[i, ])
+  dd <<- datos
+  
+  ez = ezANOVA(datos, ingresos, id, between = rangos, type = 2)
+  if(print)
+    print(ez)
+  return(ez[["ANOVA"]][["F"]])
+}
+```
+
+Procedemos a obtener el estadístico F de los datos observados.
+
+```{r}
+fObs = suppressMessages(suppressWarnings(obtenerValorF(datosObs, rango1$ids, rango2$ids, rango3$ids, TRUE)))
+cat("Valor F de los datos = ", fObs)
+
+```
+
+Procedemos a calcular las medidas de toda la muestra y las de cada grupo, para luego desplazar los valores.
+
+```{r}
+# Medidas generales
+mediaG = mean(datosObs$ingresos)
+desvG = sd(datosObs$ingresos)
+
+# Obtener medias por grupo
+
+# Medias
+media1 = mean(rango1$ingresos)
+media2 = mean(rango2$ingresos)
+media3 = mean(rango3$ingresos)
+
+# Desviaciones
+desv1 = sd(rango1$ingresos)
+desv2 = sd(rango2$ingresos)
+desv3 = sd(rango3$ingresos)
+```
+
+Procedemos a desplazar los valores.
+
+```{r}
+rango1d = mediaG + (rango1$ingresos - media1)*(desvG/desv1)
+rango2d = mediaG + (rango2$ingresos - media2)*(desvG/desv2)
+rango3d = mediaG + (rango3$ingresos - media3)*(desvG/desv3)
+
+ingresos = c(rango1d,rango2d,rango3d)
+
+datosObsD = datosObs
+datosObsD[["ingresos"]] = ingresos
+```
+
+Definimos la cantidad de remuestreos y una semilla para estos.
+
+```{r}
+B = 1500
+set.seed(12345)
+```
+
+Creamos las remuestras usando los índices de los valores.
+
+```{r}
+remuestrasIdsRango1 = lapply(1:B, function(i) sample(rango1$ids, replace = TRUE))
+remuestrasIdsRango2 = lapply(1:B, function(i) sample(rango2$ids, replace = TRUE))
+remuestrasIdsRango3 = lapply(1:B, function(i) sample(rango3$ids, replace = TRUE))
+```
+
+Creamos una función para obtener la distribución bootstrap.
+
+```{r}
+obtenerValorF.Remuestras = function(i, df)
+  obtenerValorF(df, remuestrasIdsRango1[[i]], remuestrasIdsRango2[[i]], remuestrasIdsRango2[[i]], FALSE)
+
+distribucionBoot = suppressMessages(suppressWarnings(sapply(1:B, function(i) obtenerValorF.Remuestras(i, datosObsD))))
+```
+
+Procedemos a generar la distribución bootstrap a partir de los datos desplazados.
+
+```{r}
+g2b = gghistogram(data.frame(distribucionBoot), x = "distribucionBoot",
+                  title = "Distribución bootstrap",
+                  xlab = "Estadístico F", ylab = "Frecuencia",
+                  bins = 30, fill = "blue")
+g2b = g2b + geom_vline(xintercept = fObs, colour="red")
+print(g2b)
+```
+
+A partir del gráfico, podemos observar que el valor del estadístico F observado parece no estar tan alejado de lo que se esperaría si la hipótesis nula fuera cierta. Por lo que procedemos a calcular el valor F con un 95% de confianza para la distribución bootstrap generada y calculamos el valor p para el valor F observado.
+
+```{r}
+fBoot = quantile(distribucionBoot, 0.95)
+cat("Valor F con 95% de confianza:", round(fBoot, 2), "\n")
+
+numerador2 = sum(distribucionBoot > fObs)
+valor_p2 = (numerador2 + 1) / (B + 1)
+cat("P-valor:", round(valor_p2, 3))
+```
+
+Luego de obtener estos valores podemos concluir respecto a la prueba ómnibus:
+
+Por lo cual finalmente, concluimos que si la hipótesis nula fuera cierta el valor F observado no debería ser superior a 5.44 con un 95% de confianza, y como se puede observar el valor F observado es menor al esperado y además tiene una probabilidad p de 0.93 de ser obtenido, llegamos a que se falla en rechazar la hipótesis nula, por lo cual con un 95% de confianza podemos afirmar que los datos no presentan evidencia suficiente para descartar que los ingresos totales promedio por rangos etarios de personas que viven en zonas rurales sean iguales.
+
+Ahora por temas de análisis y académicos procedemos a realizar una prueba post-hoc, a pesar de que teóricamente no corresponde.
+
+Comenzamos creando una función para obtener las diferencias de las medias de los datos observados.
+
+```{r}
+obtenerDiferenciaDeMedias = function(df, i1, i2)
+{
+  media1 = mean(df[i1, "ingresos"]) 
+  media2 = mean(df[i2, "ingresos"])
+  return(media1 - media2)
+}
+```
+
+Obtenemos las diferencias de las medias.
+
+```{r}
+dif21 = obtenerDiferenciaDeMedias(datosObs, rango2$ids, rango1$ids)
+dif31 = obtenerDiferenciaDeMedias(datosObs, rango3$ids, rango1$ids)
+dif23 = obtenerDiferenciaDeMedias(datosObs, rango2$ids, rango3$ids)
+
+cat("Diferencia (34-49) - (18-33) = ", dif21, "\n")
+cat("Diferencia (50-65) - (18-33) = ", dif31, "\n")
+cat("Diferencia (34-49) - (50-65) = ", dif23, "\n")
+```
+
+Obtenemos las distribuciones bootstrap para cada diferencia.
+
+```{r}
+distBoot21 = sapply(1:B, function(i) obtenerDiferenciaDeMedias(datosObsD, remuestrasIdsRango2[[i]], remuestrasIdsRango1[[i]]))
+distBoot31 = sapply(1:B, function(i) obtenerDiferenciaDeMedias(datosObsD, remuestrasIdsRango3[[i]], remuestrasIdsRango1[[i]]))
+distBoot23 = sapply(1:B, function(i) obtenerDiferenciaDeMedias(datosObsD, remuestrasIdsRango2[[i]], remuestrasIdsRango3[[i]]))
+```
+
+Generamos los gráficos para cada distribución y los imprimimos.
+
+```{r}
+gDif21 = gghistogram(data.frame(Diferencia = distBoot21 / 1000000), x = "Diferencia",
+                   title = "Rango 2(34-49) - Rango 1(18-33)",
+                   xlab = "Diferencia (en millones de pesos)", ylab = "Frecuencia",
+                   bins = 30, fill = "blue")
+gDif21 = gDif21 + geom_vline(xintercept = dif21 / 1000000, colour="red")
+gDif31 = gghistogram(data.frame(Diferencia = distBoot31 / 1000000), x = "Diferencia",
+                   title = "Rango 3(50-65) - Rango 1(18-33)",
+                   xlab = "Diferencia (en millones de pesos)", ylab = "Frecuencia",
+                   bins = 30, fill = "blue")
+gDif31 = gDif31 + geom_vline(xintercept = dif31 / 1000000, colour="red")
+gDif23 = gghistogram(data.frame(Diferencia = distBoot23 / 1000000), x = "Diferencia",
+                   title = "Rango 2(34-49) - Rango 3(50-65)",
+                   xlab = "Diferencia (en millones de pesos)", ylab = "Frecuencia",
+                   bins = 30, fill = "blue")
+gDif23 = gDif23 + geom_vline(xintercept = dif23 / 1000000, colour="red")
+pDifs = ggarrange(g2b, gDif21, gDif31, gDif23, nrow = 2, ncol = 2)
+print(pDifs)
+```
+
+Procedemos a obtener los valores p ajustados para cada par de rangos etarios.
+
+```{r}
+valorP21 = (sum(abs(distBoot21) > abs(dif21)) + 1) / (B + 1)
+valorP31 = (sum(abs(distBoot31) > abs(dif31)) + 1) / (B + 1)
+valorP23 = (sum(abs(distBoot23) > abs(dif23)) + 1) / (B + 1)
+valoresP.Adj = p.adjust(c(valorP21, valorP31, valorP23), method = "BH")
+
+cat("Valores p de pruebas bilaterales:\n")
+cat("Rango 2(34-49) - Rango 1(18-33):", round(valoresP.Adj[1], 3), "\n")
+cat("Rango 3(50-65) - Rango 1(18-33):", round(valoresP.Adj[2],3), "\n")
+cat("Rango 2(34-49) - Rango 3(50-65):", round(valoresP.Adj[3], 3), "\n")
+```
+
+Finalmente luego del procedimiento post-hoc, podemos concluir con un 95% de certeza que entre el rango etario 3 y el rango etario 1 de personas que viven en zonas rurales prácticamente no existe diferencia alguna entre los ingresos totales promedios puesto que el valor p de la diferencia de estos rangos es muy cercano a 1 (0.977), pero a la vez los ingresos totales promedios de las personas que viven en zonas rurales y pertenecen al rango etario 2 son significativamente superiores a los de las personas que también viven en zonas rurales y pertenecen a alguno de los otros dos rangos etarios, debido a que el valor p(0.23) de la diferencia del rango 2 respecto a los otros dos es menor al nivel de significancia (0.05).

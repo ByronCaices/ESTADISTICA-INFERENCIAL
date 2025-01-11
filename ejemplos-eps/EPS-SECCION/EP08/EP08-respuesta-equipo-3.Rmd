@@ -1,0 +1,241 @@
+---
+title: "EP08-respuesta-equipo-3"
+author: "Equipo 3"
+date: "2024-11-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ez)
+library(dplyr)
+library(boot)
+library(ggpubr)
+datos <- read.csv('EP08 Datos CASEN 2017.csv')
+```
+
+# Pregunta 1
+
+Como pregunta de investigación se propone el saber si la proporción de gente que se esta quedando viuda entre hombres y mujeres es similar, para esto se estudia principalmente a la gente de la comuna de San Joaquín. (Se busca tener un 95% de confianza)
+
+Hipótesis:
+
+$H_0:$ La diferencia entre las proporciones de hombres y mujeres viudas de la región Metropolitana de la comuna de San Joaquín es de cero. ($\mu_M - \mu_H = 0$)
+
+$H_a:$ La diferencia entre las proporciones de hombres y de la región Metropolitana de la comuna de San Joaquín es distinta de cero. ($\mu_M - \mu_H \neq 0$)
+
+Dado a que se esta trabajando con proporciones de hombres y mujeres viudos, se opta por la prueba de permutaciones debido a que permite trabajar datos categoricos sin necesidad de asumir sobre la distribución.
+
+Finalmente como se puede apreciar en el grafico siendo la diferencia observada un valor muy extremo en comparación con la distribución de las diferencias permutadas y en el p-value obtenido se puede asumir con un 95% de confianza de que se rechaza la hipotesis nula en favor de la alternativa de que existe una diferencia significativa entre las proporciones de hombres y mujer viudos en la comuna de San Joaquín.
+
+```{r}
+
+#Pregunta 1: ¿Es similar la proporcion entre mujeres y hombres viudos en los hogares de la comuna de san Joaquín, en la Region Metropolitana?
+
+
+set.seed(1223)
+
+# Muestreo de hombres
+hombres_hogar_sample <- datos %>%
+  filter(comuna == "San Joaquín" & sexo == "Hombre") %>%
+  distinct(id.vivienda, .keep_all = T) %>%
+  select(ecivil) %>%
+  sample_n(120)
+
+# Muestreo de mujeres
+mujeres_hogar_sample <- datos %>%
+  filter(comuna == "San Joaquín" & sexo == "Mujer") %>%
+  distinct(id.vivienda, .keep_all = T) %>%
+  select(ecivil) %>%
+  sample_n(120)
+
+# Proporciones observadas
+proporcion_hombre <- mean(hombres_hogar_sample == "Viudo(a)")
+proporcion_mujer <- mean(mujeres_hogar_sample == "Viudo(a)")
+
+diferencia_observada <- proporcion_mujer - proporcion_hombre
+
+# Configuración para permutaciones
+n_permutaciones <- 10000
+diferencias_permutaciones <- numeric(n_permutaciones)
+
+# Combinar muestras
+muestras_combinadas <- c(hombres_hogar_sample$ecivil, mujeres_hogar_sample$ecivil)
+
+# Bucle para permutaciones
+for (i in 1:n_permutaciones) {
+  
+  muestrasPermutadas <- sample(muestras_combinadas)
+  mujeres <- muestrasPermutadas[1:120]
+  hombres <- muestrasPermutadas[121:240]
+  
+  proporcion_hombre_permutado <- mean(hombres == "Viudo(a)")
+  proporcion_mujer_permutado <- mean(mujeres == "Viudo(a)")
+  
+  diferencias_permutaciones[i] <- proporcion_mujer_permutado - proporcion_hombre_permutado
+}
+
+# Crear un histograma de las diferencias permutadas
+hist(diferencias_permutaciones, 
+     breaks = 30, 
+     col = "lightblue", 
+     main = "Distribución de las diferencias permutadas", 
+     xlab = "Diferencia permutada (mujeres - hombres)")
+
+# Agregar una línea vertical para la diferencia observada
+abline(v = diferencia_observada, col = "red", lwd = 2, lty = 2)
+
+# Agregar texto explicativo
+legend("topright", 
+       legend = c("Diferencia observada"), 
+       col = "red", 
+       lty = 2, 
+       lwd = 2)
+
+p_value <- mean(abs(diferencias_permutaciones) >= abs(diferencia_observada))
+
+p_value
+
+```
+
+# Pregunta 2
+
+Se desea conocer si es que el ingreso per cápita promedio es similar para las personas de sexo Hombre, entre las diferentes comunas de la zona oriente de Santiago ("Providencia", "Ñuñoa", "La Reina", "Las Condes", "Vitacura", "Lo Barnechea")
+
+Para ello, primero se filtran aquellas observaciones que cumplan con lo solicitado del conjunto de datos `EP08 Datos CASEN 2017.csv`:
+
+```{r}
+Hombres <- datos %>%
+  filter(sexo == "Hombre")
+
+providencia <- Hombres %>%
+  filter(comuna == "Providencia") %>%
+  distinct(id.vivienda, .keep_all = TRUE) %>%
+  sample_n(size=250) %>%
+  select(ytot) %>%
+  pull()
+
+nunoa <- Hombres %>%
+  filter(comuna == "Ñuñoa") %>%
+  distinct(id.vivienda, .keep_all = TRUE) %>%
+  sample_n(size=250) %>%
+  select(ytot) %>%
+  pull()
+
+laReina <- Hombres %>%
+  filter(comuna == "Providencia") %>%
+  distinct(id.vivienda, .keep_all = TRUE) %>%
+  sample_n(size=250) %>%
+  select(ytot) %>%
+  pull()
+
+lasCondes <- Hombres %>%
+  filter(comuna == "Providencia") %>%
+  distinct(id.vivienda, .keep_all = TRUE) %>%
+  sample_n(size=250) %>%
+  select(ytot) %>%
+  pull()
+
+vitacura <- Hombres %>%
+  filter(comuna == "Providencia") %>%
+  distinct(id.vivienda, .keep_all = TRUE) %>%
+  sample_n(size=250) %>%
+  select(ytot) %>%
+  pull()
+
+loBarnechea <- Hombres %>%
+  filter(comuna == "Providencia") %>%
+  distinct(id.vivienda, .keep_all = TRUE) %>%
+  sample_n(size=250) %>%
+  select(ytot) %>%
+  pull()
+
+perCapitaComuna <- list(Providencia = providencia, Ñuñoa = nunoa, LaReina = laReina, LasCondes = lasCondes, Vitacura = vitacura, LoBarnechea = loBarnechea)
+```
+
+Seguido de ello, se llevan a cabo pruebas de Shapiro-Wilk sobre las muestras obtenidas para verificar la normalidad de los datos.
+
+```{r}
+alfa <- 0.05
+
+resultados <- lapply(perCapitaComuna, shapiro.test)
+
+for (comuna in names(resultados)){
+  cat("\nShapiro Wilk test para la comuna de", comuna, "\n")
+  print(resultados[[comuna]])
+}
+```
+
+Tras aplicarlas, se observa que en todas ellas, el `p-value` $< 0.05$, por lo que se rechaza la hipótesis nula en favor de la alternativa, sugiriendo que los datos **no siguen una distribución normal**, por lo que se utiliza *bootstrapping* para la prueba de hipótesis, considerando un nivel de significación $\alpha=0.05$ y $B=5000$
+
+```{r}
+set.seed(1223)
+
+datos_comunas <- data.frame(
+  comuna = rep(names(perCapitaComuna), sapply(perCapitaComuna, length)),
+  ytot = unlist(perCapitaComuna)
+)
+
+media_nula <- mean(datos_comunas$ytot)
+
+
+anovafunc <- function(data) {
+  # Restar la media global de las observaciones
+  data$ytot_centrada <- data$ytot - media_nula
+  anova_result <- aov(ytot_centrada ~ comuna, data = data)
+  anova_summary <- summary(anova_result)[[1]] 
+  
+
+  p_value <- anova_summary$`Pr(>F)`[1]  # El p-valor para el efecto de 'comuna'
+  
+  return(p_value)
+}
+
+
+n_bootstrap <- 1000
+
+p_values <- numeric(n_bootstrap)
+
+for (i in 1:n_bootstrap) {
+  # Crear una muestra bootstrap (con reemplazo)
+  bootstrap_sample <- datos_comunas[sample(1:nrow(datos_comunas), replace = TRUE), ]
+  
+  p_values[i] <- anovafunc(bootstrap_sample)
+}
+
+# Calcular el p-value empírico
+p_value_proportion <- mean(p_values <= 0.05)
+
+# Resultado
+cat("La proporcion de valores p con bootstrapping con p-value <= 0.05 es:", p_value_proportion, "\n")
+
+```
+
+Ya que se tiene un 47,2% de p-values menor o igual a 0.05, se puede decir con un 95% de confianza que no hay suficiente evidencia para rechazar la hipotesis nula y por lo tanto no hay una diferencia siginificativa entre el ingreso per capita de los hombre entre las comunas ...
+
+```{r}
+# Histograma con ajuste de breaks y densidad
+hist(p_values, 
+     main = "Distribución de p-values Bootstrap (Hipótesis Nula)", 
+     xlab = "P-value", 
+     breaks = 30,  # Número ajustable de breaks
+     col = "lightblue", 
+     probability = TRUE)  # Para mostrar densidad en lugar de conteos
+
+# Agregar la densidad estimada
+lines(density(p_values), col = "blue", lwd = 2)
+
+# Línea vertical para el p-valor de corte (0.05)
+abline(v = 0.05, col = "red", lwd = 2, lty = 2)
+
+legend("topright", 
+       legend = c("p-value 0.05"), 
+       col = "red", 
+       lty = 2, 
+       lwd = 2)
+
+```
+

@@ -1,0 +1,269 @@
+---
+title: "EP10"
+author: "Grupo 9"
+date: "2024-12-10"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(ggpubr)
+library(car)
+```
+
+1. Definir la semilla a utilizar, que corresponde a los últimos cuatro dígitos del RUN (sin considerar el dígito verificador) del integrante de mayor edad del equipo.
+```{r}
+set.seed(2572)
+```
+
+2. Seleccionar una muestra de 150 mujeres (si la semilla es un número par) o 150 hombres (si la semilla es impar), asegurando que la mitad tenga estado nutricional “sobrepeso” y la otra mitad “no sobrepeso” en cada caso. Dividir esta muestra en dos conjuntos: los datos de 100 personas (50 con EN “sobrepeso”) para utilizar en la construcción de los modelos y 50 personas (25 con EN “sobrepeso”) para poder evaluarlos.
+
+```{r}
+set.seed(2572)
+datos <- read.csv2("EP09 Datos.csv")
+head(datos)
+
+muestra <- datos %>%
+  filter(Gender == 0)
+  
+muestra$IMC <- muestra$Weight / (muestra$Height/100 * muestra$Height/100)
+#1 si tiene sobrepeso y 0 si no tiene
+muestra$EN <- ifelse(muestra$IMC < 23.2,0,1)
+
+muestra_sobrepeso <- muestra %>% 
+  filter(EN == 1) %>%
+  sample_n(75, replace = F)
+muestra_NO_sobrepeso <- muestra %>% 
+  filter(EN == 0) %>%
+  sample_n(75, replace = F)
+
+muestra_100 <- rbind(muestra_sobrepeso[1:50, ],muestra_NO_sobrepeso[1:50, ])
+muestra_50 <- rbind(muestra_sobrepeso[50:74, ],muestra_NO_sobrepeso[50:74, ])
+```
+
+3. Recordar las ocho posibles variables predictoras seleccionadas de forma aleatoria en el ejercicio anterior.
+
+```{r}
+predictores <- c("Knees.diameter", "Hip.Girth","Bitrochanteric.diameter", "Navel.Girth","Shoulder.Girth","Elbows.diameter","Chest.Girth","Chest.diameter", "EN", "Waist.Girth")
+
+#muestra_predictores <- muestra_100 %>% select(all_of(predictores))
+set.seed(2572)
+muestra_predictores <- muestra_100 %>% select(all_of(predictores)) %>% slice(sample(n()))
+```
+ 
+4. Seleccionar, de las otras variables, una que el equipo considere que podría ser útil para predecir la clase EN, justificando bien esta selección
+
+se selecciono el grosor a la altura de la cintura (Waist.Girth) A diferencia del Índice de Masa Corporal (IMC), que no distingue entre masa muscular y grasa, la circunferencia de la cintura permite evaluar directamente el riesgo asociado a la grasa abdominal.
+Según la Organización Mundial de la Salud (OMS) y otras instituciones, medidas específicas de cintura se correlacionan fuertemente con el riesgo de enfermedades metabólicas. Por ejemplo, una medida superior a 102 cm en hombres y 88 cm en mujeres indica un mayor riesgo.
+
+
+5. Usando el entorno R, construir un modelo de regresión logística con el predictor seleccionado en el paso anterior y utilizando de la muestra obtenida.
+
+```{r}
+modelo <- glm(EN ~ Waist.Girth, family = binomial(link = "logit"),muestra_100)
+print(summary(modelo))
+```
+6. Usando estas herramientas para la exploración de modelos del entorno R1, buscar entre dos y cinco predictores de entre las variables seleccionadas al azar, recordadas en el punto 3, para agregar al modelo obtenido en el paso 5.
+
+```{r}
+cota_inf <- glm(EN ~ Waist.Girth, family = binomial(link = "logit"),muestra_predictores)
+
+# Imprimir mensajes de advertencia a medida que ocurre.
+opt <- options(warn = 1, width = 26)
+
+
+# Definir modelos inicial y máximo.
+max <- glm(EN ~ ., family = binomial(link = "logit"), data = muestra_predictores)
+
+# Revisar un paso hacia adelante.
+cat("\nPaso 1:\n")
+cat("------\n")
+print(add1(cota_inf, scope = max))
+```
+```{r}
+# actualizar el modelo
+modelo1 = update(cota_inf, . ~ . + Chest.Girth)
+
+# Revisar un paso hacia adelante.
+cat("\nPaso 2:\n")
+cat("------\n")
+print(add1(modelo1, scope = max))
+```
+```{r}
+# actualizar el modelo
+modelo2 = update(modelo1, . ~ . + Hip.Girth)
+
+# Revisar un paso hacia adelante.
+cat("\nPaso 3:\n")
+cat("------\n")
+print(add1(modelo2, scope = max))
+```
+```{r}
+# actualizar el modelo
+modelo3 = update(modelo2, . ~ . +Shoulder.Girth)
+
+# Revisar un paso hacia adelante.
+cat("\nPaso 4:\n")
+cat("------\n")
+print(add1(modelo3, scope = max))
+```
+El modelo obtenido de la regresión paso a paso hacia adelante es el siguiente:
+
+```{r}
+print(summary(modelo3))
+```
+7. Evaluar la confiabilidad de los modelos (i.e. que tengan un buen nivel de ajuste y son generalizables) y “arreglarlos” en caso de que tengan algún problema.
+
+1) Verificación de las condiciones para determinar la validez del modelo
+```{r}
+residualPlots(modelo3, fitted= FALSE)
+```
+
+
+```{r}
+crPlots(modelo3)
+```
+De los gráficos y pruebas realizadas no podemos descartar que las relaciones entre la variable de salida y los predictores sean lineales.
+
+2) Verificar que los residuos sean independientes
+```{r}
+set.seed(2572)
+durbinWatsonTest(modelo3)
+```
+Con el resultado de la prueba, se descarta la existencia de autocorrelación entre los residuos, por lo que no hay evidencia de que no se esté cumpliendo la condición de independencia.
+
+3) Verificar multicolinealiedad
+```{r}
+vif(modelo3)
+```
+Dado que los valores para cada predictor se encuentran entre el rango de 1 a 5, existe multicolinealidad moderada, pero no es motivo de gran preocupación.
+
+4) Información incompleta
+Los predictores seleccionados son numéricos, además presentan más de 15 observaciones por predictor, por lo que no hay información incompleta.
+
+5) Separación perfecta
+```{r}
+# Predicciones para el conjunto de entrenamiento
+probabilidades <- predict(modelo, muestra_100, type = "response")
+pred_entrenamiento <- ifelse(probabilidades >= 0.5, 1, 0)
+matriz_conf_ent <- table(Predicho = pred_entrenamiento, Observado = muestra_100$EN)
+print(matriz_conf_ent)
+```
+Según la matriz de confusión, no se presenta separación perfecta, ya que la matriz de confusión clasifica algunos datos de manera errónea.
+
+6) Verificar influencia de casos
+```{r}
+influencePlot(modelo3)
+```
+Dado que los valores obtenidos para los casos que podrían ser influyentes son bastante bajos, se concluye que no hay influencia significativa.
+
+8. Usando código estándar, evaluar el poder predictivo de los modelos con los datos de las 50 personas que no se incluyeron en su construcción en términos de sensibilidad y especificidad.
+
+Análisis del modelo simple
+```{r}
+# Configuración inicial
+umbral <- 0.5
+
+# Predicciones para el modelo simple
+
+# Predicciones para el conjunto de entrenamiento
+probabilidades <- predict(modelo, muestra_100, type = "response")
+pred_entrenamiento <- ifelse(probabilidades >= umbral, 1, 0)
+
+# Predicciones para el conjunto de prueba
+probabilidades50 <- predict(modelo, muestra_50, type = "response")
+pred_prueba <- ifelse(probabilidades50 >= umbral, 1, 0)
+
+# Matrices de confusión
+matriz_conf_ent <- table(Predicho = pred_entrenamiento, Observado = muestra_100$EN)
+matriz_conf_prueba <- table(Predicho = pred_prueba, Observado = muestra_50$EN)
+
+# Mostrar las matrices de confusión
+cat("Matriz de confusión entrenamiento:\n")
+print(matriz_conf_ent)
+cat("\nMatriz de confusión prueba:\n")
+print(matriz_conf_prueba)
+```
+
+```{r}
+# Cálculo de métricas
+metricas <- function(matriz) {
+  exactitud <- sum(diag(matriz)) / sum(matriz)
+  sensibilidad <- matriz[2, 2] / sum(matriz[, 2]) # TP / (TP + FN)
+  especificidad <- matriz[1, 1] / sum(matriz[, 1]) # TN / (TN + FP)
+  cat(sprintf("Exactitud: %.2f\n", exactitud))
+  cat(sprintf("Sensibilidad: %.2f\n", sensibilidad))
+  cat(sprintf("Especificidad: %.2f\n", especificidad))
+  list(exactitud = exactitud, sensibilidad = sensibilidad, especificidad = especificidad)
+}
+
+# Métricas
+cat("\nRendimiento del modelo simple de entrenamiento:\n")
+metricas_entrenamiento = metricas(matriz_conf_ent)
+
+cat("\nRendimiento del modelo simple de prueba:\n")
+metricas_prueba = metricas(matriz_conf_prueba)
+
+# Comparar cambios entre entrenamiento y prueba
+cambios_metricas <- function(entrenamiento, prueba) {
+  cambio <- (entrenamiento - prueba) / prueba * 100
+  return(cambio)
+}
+
+cambio_exactitud <- cambios_metricas(metricas_entrenamiento$exactitud, metricas_prueba$exactitud)
+cambio_sensibilidad <- cambios_metricas(metricas_entrenamiento$sensibilidad, metricas_prueba$sensibilidad)
+cambio_especificidad <- cambios_metricas(metricas_entrenamiento$especificidad, metricas_prueba$especificidad)
+
+cat("\nCambios entre modelos de entrenamiento a prueba:\n")
+cat(sprintf("Cambio en Exactitud: %.2f%%\n", cambio_exactitud))
+cat(sprintf("Cambio en Sensibilidad: %.2f%%\n", cambio_sensibilidad))
+cat(sprintf("Cambio en Especificidad: %.2f%%\n", cambio_especificidad))
+```
+
+Análisis del modelo múltiple
+```{r}
+# Predicciones para el conjunto de entrenamiento
+probabilidades <- predict(modelo3, muestra_100, type = "response")
+pred_entrenamiento <- ifelse(probabilidades >= umbral, 1, 0)
+
+# Predicciones para el conjunto de prueba
+probabilidades50 <- predict(modelo3, muestra_50, type = "response")
+pred_prueba <- ifelse(probabilidades50 >= umbral, 1, 0)
+
+# Matrices de confusión
+matriz_conf_ent <- table(Predicho = pred_entrenamiento, Observado = muestra_100$EN)
+matriz_conf_prueba <- table(Predicho = pred_prueba, Observado = muestra_50$EN)
+
+# Mostrar las matrices de confusión
+cat("Matriz de confusión para los datos de entrenamiento:\n")
+print(matriz_conf_ent)
+cat("\nMatriz de confusión para los datos de prueba:\n")
+print(matriz_conf_prueba)
+```
+
+```{r}
+# Cálculo de métricas RLogM
+
+# Mostrar métricas
+cat("\nRendimiento del modelo en los datos de entrenamiento:\n")
+metricas_entrenamiento <- metricas(matriz_conf_ent)
+
+cat("\nRendimiento del modelo en los datos de prueba:\n")
+metricas_prueba <- metricas(matriz_conf_prueba)
+
+cambio_exactitud <- cambios_metricas(metricas_entrenamiento$exactitud, metricas_prueba$exactitud)
+cambio_sensibilidad <- cambios_metricas(metricas_entrenamiento$sensibilidad, metricas_prueba$sensibilidad)
+cambio_especificidad <- cambios_metricas(metricas_entrenamiento$especificidad, metricas_prueba$especificidad)
+
+cat("\nCambios entre modelos de entrenamiento a prueba:\n")
+cat(sprintf("Cambio en Exactitud: %.2f%%\n", cambio_exactitud))
+cat(sprintf("Cambio en Sensibilidad: %.2f%%\n", cambio_sensibilidad))
+cat(sprintf("Cambio en Especificidad: %.2f%%\n", cambio_especificidad))
+```
+### Conclusiones
+
+Los modelos presentan valores similares en los datos de entrenamiento y prueba, lo que sugiere que son generalizables. Además, los valores de exactitud y sensibilidad disminuyeron y la especificidad aumentó en ambos modelos. Por lo que se concluye que el modelo de RLogM presenta una calidad predictiva alta, mientras que el modelo RLogS presenta un cambio más notable del 15.79% en su sensibilidad al pasar de los datos de entrenamiento a los de prueba.
+
+
+

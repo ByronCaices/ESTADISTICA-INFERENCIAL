@@ -1,0 +1,297 @@
+---
+title: "EP-04: Inferencias no paramétricas mediante frecuencias"
+author: "Grupo 10"
+date: "2024-10-14"
+output: pdf_document
+---
+
+# Pregunta 1
+
+Una agencia de marketing desea determinar si hay una diferencia significativa en la efectividad de tres estrategias publicitarias utilizadas para promocionar un nuevo producto. Para ello, se ha recopilado información de personas que fueron expuestas a las tres estrategias publicitarias, registrando si mostraron una aceptación (A) o rechazo (R) a cada una de ellas.
+¿Qué puede concluir la agencia de marketing sobre la efectividad de las estrategias publicitarias para promover el nuevo producto?
+Indicación: obtenga la muestra de 50 personas a partir del archivo “EP04 Datos.csv” que se encuentra en el directorio compartido, usando la semilla 255. Considere un nivel de significación alpha=0,05.
+
+En este caso, se optó por utilizar la Prueba Q de Cochran porque la agencia desea evaluar si existe una diferencia significativa en la efectividad de las tres estrategias publicitarias. Esta prueba es apropiada, ya que la variable dependiente es dicotómica (aceptación o rechazo) y se tienen más de dos tratamientos (las tres estrategias publicitarias) con observaciones apareadas, es decir, las mismas personas fueron expuestas a cada estrategia.
+
+La prueba Q de Cochran posee las siguientes condiciones: 
+
+- La variable respuesta es dicotómica.
+- La variable independiente es catégorica.
+- Las observaciones son independientes entre sí.
+- El tamaño de la muestra es lo suficientemente grande. Esto quiere
+decir que $b * k \ge 24$, con b siendo la cantidad de bloques en que se organizan las observaciones y k la cantidad de tratamientos estudiados.
+
+La primera condición se cumple, debido a que la variable de respuesta es la efectividad de las estrategias publicitarias y esta contiene 2 niveles: "A" (Aceptación) o "R" (Rechazo).
+
+En la segunda condición la variable independiente es la estrategia publicitaria y es categórica, ya que contiene 3 niveles distintos (las 3 estrategias publicitarias). Además, no se miden en términos numéricos, si no que se clasifican en grupos.
+
+La tercera condición se cumple, debido a que como se trata de 50 personas diferentes y la muestra fue seleccionada de manera aleatoria a partir de la población objetivo, podemos asumir que las observaciones son independientes entre sí.
+
+En la cuarta condición, se tiene que la cantidad de bloques (b) corresponde a las 50 personas que fueron encuestadas y la cantidad de tratamientos (k) correspondiente a las 3 estrategias publicitarias. Sustituyendo los valores, se tiene que: 
+
+$b * k = 50 * 3$    
+$b * k = 150$
+
+Dado que $150 \geq 24$, esta condición se cumple, ya que el tamaño de la muestra es lo suficientemente grande según el criterio indicado para aplicar la Prueba Q de Cochran. 
+
+En conclusión, se puede hacer la prueba Q de Cochran debido a que se cumplen todas las condiciones para poder realizar esta. 
+
+Entonces, se plantean las hipótesis correspondientes al problema: 
+
+$H_0$: Todas las estrategias publicitarias tienen la misma proporcion de aceptación.
+$H_A$: Existe al menos una estrategia que tiene una proporción de aceptación distinta al resto.
+
+```{r}
+# Se cargan las bibliotecas necesarias
+library(tidyverse)
+library(RVAideMemoire)
+library(rcompanion)
+
+# Se cargan los datos desde un archivo .csv
+# Ademas, se establece la semilla para la selección aleatoria reproducible
+datos = read.csv2("EP04 Datos.csv")
+set.seed(255)
+
+# Se selecciona una muestra de 50 personas de forma aleatoria
+sampled_df <- datos[sample(nrow(datos), size = 50, replace = TRUE), ]
+
+# Se establece el nivel de significación en 0.05
+significacion = 0.05
+
+# Se reorganizan los datos de formato ancho a formato largo, donde cada fila 
+# representa una persona y una estrategia publicitaria. 
+sampled_df <- sampled_df %>% pivot_longer(c("estrategia_1", "estrategia_2", "estrategia_3"),
+                                names_to = "strat",
+                                values_to = "Resultado")
+
+# Convertimos las columnas id y strat en factores para realizar la prueba estadística.
+sampled_df[["id"]] <- factor(sampled_df[["id"]])
+sampled_df[["strat"]] <- factor(sampled_df[["strat"]])
+
+# Se realiza la prueba Q de Cochran y se imprime el resultado para evaluar si 
+# hay diferencias significativas entre las estrategias publicitarias.
+pruebaQ <- cochran.qtest(Resultado ~ strat | id,
+                        data = sampled_df, alpha = significacion)
+
+print(pruebaQ)
+```
+
+R: Dado que $p = 0,5051$ es mayor al nivel de significancia de $\alpha = 0,05$ no hay evidencia suficiente para poder rechazar la hipótesis nula. Por lo tanto, la agencia concluye que no hay una diferencia significativa en la efectividad de las tres estrategias de publicidad analizadas. 
+
+# Pregunta 2
+
+Se llevó a cabo una encuesta para investigar si hay una distribución homogénea de pasatiempos favoritos entre dos grupos de personas: hombres y mujeres. Se seleccionaron aleatoriamente 30 personas de cada grupo y se les preguntó sobre sus pasatiempos favoritos, obteniéndose que entre los hombres 9 prefieren actividades relacionadas con la lectura, 14 con el deporte y 7 con música; mientras que entre las mujeres 7 se inclinan por actividades relacionadas con la música, 5 con la lectura y 18 con deportes.
+¿Existe evidencia suficiente para concluir que la distribución de los pasatiempos favoritos es la misma entre hombres y mujeres?
+
+Evaluando las condiciones del problema, se desea conocer si dos poblaciones (hombres y mujeres) presentan las mismas proporciones en los diferentes niveles de una variable categórica (actividades como: deporte, lectura y música), por esta razón se utilizará la prueba de chi-cuadrado de homogeneidad. 
+
+Las condiciones de la prueba de chi-cuadrado de homogeneidad son las siguientes: 
+
+- Las observaciones son independientes entre sí.
+- Debe haber a lo menos 5 observaciones esperadas por cada grupo.
+
+La primera condición se cumple dado que se realizó una selección aleatoria de 30 personas de cada grupo (hombres y mujeres), y considerando que estos grupos son distintos y no se solapan, se puede asumir que las observaciones son independientes entre sí. Además, la muestra representa un porcentaje pequeño del total de hombres y mujeres, lo que refuerza la independencia de las respuestas sobre sus pasatiempos favoritos.
+
+Para verificar la segunda condición es necesario calcular las frecuencias esperadas en la tabla de contingencia:
+
+```{r}
+# Se definen los vectores con las frecuencias de pasatiempos favoritos para hombres y mujeres.
+hombres <- c(9, 14, 7)    # Preferencias de hombres: Lectura, Deporte, Música
+mujeres <- c(5, 18, 7)    # Preferencias de mujeres: Lectura, Deporte, Música
+
+# Se crea una tabla de contingencia combinando las preferencias de hombres y mujeres.
+tabla <- as.table(rbind(hombres, mujeres))
+
+# Se asignan nombres a las dimensiones de la tabla, indicando el sexo y las actividades.
+dimnames(tabla) <- list(sexo = c("Hombres", "Mujeres"),
+                        actividades = c("Lectura", "Deporte", "Música"))
+# Se imprime la tabla de contingencia.
+print(tabla)
+
+# Se calculan el número total de hombres y mujeres en la muestra.
+n_hombres <- sum(hombres)    # Total de hombres
+n_mujeres <- sum(mujeres)    # Total de mujeres
+
+# Se calculan las proporciones de pasatiempos favoritos de los hombres.
+proporciones <- round(hombres / n_hombres, 3)
+
+# Se obtienen las frecuencias esperadas de las actividades para mujeres
+# multiplicando las proporciones de hombres por el total de mujeres.
+frecuencias_esperadas <- round(proporciones * n_mujeres, 3)
+
+# Se imprimen las frecuencias esperadas calculadas.
+cat("Frecuencias Esperadas:\n")
+print(frecuencias_esperadas)
+
+```
+
+Por lo tanto, se cumple la segunda condición dado que cada uno de los grupos poseen a lo menos 5 observaciones esperadas. Entonces, se cumplen todas las condiciones para realizar la prueba de chi-cuadrado de homogeneidad.
+
+Para desarrollar el siguiente problema, primero planteamos la hipótesis alternativa y nula del problema:
+
+$H_0$: Hombres y mujeres tienen las mismas proporciones en sus preferencias de pasatiempos.
+$H_A$: Hombres y mujeres no tienen las mismas proporciones en sus preferencias de pasatiempos.
+
+
+```{r}
+
+# Se definen los vectores con las frecuencias de pasatiempos favoritos para hombres y mujeres.
+hombres <- c(9, 14, 7)    # Preferencias de hombres: Lectura, Deporte, Música
+mujeres <- c(5, 18, 7)    # Preferencias de mujeres: Lectura, Deporte, Música
+
+# Se crea una tabla de contingencia combinando las preferencias de hombres y mujeres.
+tabla <- as.table(rbind(hombres, mujeres))
+
+# Se asignan nombres a las dimensiones de la tabla, indicando el sexo y las actividades.
+dimnames(tabla) <- list(sexo = c("Hombres", "Mujeres"),
+                        actividades = c("Lectura", "Deporte", "Música"))
+
+# Se imprime la tabla de contingencia que muestra las preferencias de pasatiempos.
+print(tabla)
+
+# Se realiza la prueba de chi-cuadrado para evaluar la independencia entre las variables 
+# sexo y actividades.
+prueba_chi <- chisq.test(tabla)
+
+# Se imprime el resultado de la prueba de chi-cuadrado, que incluye el estadístico y el valor p.
+print(prueba_chi)
+
+
+```
+
+R: Suponiendo con un nivel de confianza del 95%, se ha obtenido en la prueba chi cuadrado un valor de p-value = 0.4398, lo que corresponde a un valor mayor al $\alpha = 0.05$ establecido, por lo tanto podemos decir con un 95% de confianza que no hay suficiente evidencia para rechazar la hipótesis nula. Esto quiere decir que no hay suficiente evidencia para afirmar que la proporción de preferencias de pasatiempos entre hombres y mujeres es la misma.
+
+
+# Pregunta 3
+
+Se realiza un estudio sobre las preferencias de consumo de dos tipos de chocolate, “Chocolate Blanco” y “Chocolate Negro”, entre dos grupos etarios distintos: personas adultas y personas menores de edad (niños, niños y adolescentes). Después de entrevistar a un total de 13 adultos y 17 menores de edad, se encontró que 2 personas adultas y 9 menores prefieren el chocolate negro.
+¿El tipo de chocolate preferido está influenciado por el grupo etario de las consumidoras y los consumidores? 
+
+Para empezar, se elige la Prueba de chi-cuadrado independiente debido a que se debe determinar si 2 variables categóricas se relacionan entre sí, o por el contrario son independientes entre sí. Ahora para hacerse, se debe comprobar si se cumplen las siguientes condiciones:
+
+- Las observaciones son independientes entre sí.
+- Debe haber a lo menos 5 observaciones esperadas por cada grupo.
+
+La primera condición se cumple, ya que las preferencias de los consumidores (adultos y menores de edad) son respuestas individuales y no influyen entre sí. Cada persona entrevistada toma su decisión de manera independiente, por lo que no hay interdependencia entre las respuestas de los adultos y las de los menores de edad.
+
+Para verificar la segunda condición, es necesario calcular las frecuencias esperadas en la tabla de contingencia: 
+
+```{r}
+# Se define un vector que contiene las frecuencias de preferencia por el chocolate negro
+# para adultos y menores de edad.
+chocolate_negro <- c(2, 9)
+
+# Se define un vector que contiene las frecuencias de preferencia por el chocolate blanco
+# para adultos y menores de edad.
+chocolate_blanco <- c(11, 8)
+
+# Se crea una tabla de contingencia combinando las preferencias por chocolate negro y blanco.
+tabla <- as.table(rbind(chocolate_negro, chocolate_blanco))
+
+# Se asignan nombres a las dimensiones de la tabla, indicando los grupos etarios 
+# y los tipos de chocolate.
+dimnames(tabla) <- list(rango_etario = c("Adultos", "Menores de Edad"),
+                        tipo_chocolate = c("Chocolate Negro", "Chocolate Blanco"))
+
+# Se obtienen las frecuencias esperadas de la prueba, redondeadas a tres decimales.
+n_chocolate_negro <- sum(chocolate_negro)
+n_chocolate_blanco <- sum(chocolate_blanco)
+proporciones <- round(chocolate_negro / n_chocolate_negro, 3)
+
+frecuencias_esperadas <- round(proporciones * n_chocolate_blanco, 3)
+
+# Se imprimen las frecuencias esperadas.
+cat("Frecuencias Esperadas:\n")
+print(frecuencias_esperadas)
+
+```
+
+La segunda condición no se cumple, ya que hay una frecuencia esperada menor a 5 y además hay 2 variables dicótomicas, las cuales son grupo etario (Adulto-Menor de Edad) y tipo de chocolate (Chocolate Blanco-Chocolate Negro). Por lo tanto, se aplica la prueba de Fisher ya que se cumplen esas condiciones. 
+
+Entonces, se escogen las siguientes hipótesis para el problema planteado:
+
+$H_0$: La variable de grupo etario y el tipo de chocolate preferido por los consumidores son independientes.
+$H_A$: La variable de grupo etario y el tipo de chocolate preferido por los consumidores están relacionadas.
+
+```{r}
+# Se crea un vector que representa el grupo etario de los consumidores,
+# repitiendo "Adultos" 13 veces y "Menores de Edad" 17 veces.
+grupo_etario <- c(rep("Adultos", 13), rep("Menores de Edad", 17))
+
+# Se crea un vector que representa las preferencias de tipo de chocolate,
+# donde "Chocolate Blanco" se repite 19 veces y "Chocolate Negro" 11 veces.
+tipo_chocolate <- c(rep("Chocolate Blanco", 19), rep("Chocolate Negro", 11))
+
+# Se construye un dataframe que combina ambos vectores.
+datos_consumidores <- data.frame(tipo_chocolate, grupo_etario)
+
+# Se genera una tabla de contingencia que muestra la frecuencia de cada combinación
+# de grupo etario y tipo de chocolate.
+tabla <- table(grupo_etario, tipo_chocolate)
+
+# Se realiza la prueba exacta de Fisher sobre la tabla de contingencia.
+# Esta prueba es adecuada para evaluar la independencia entre dos variables categóricas
+# cuando las frecuencias esperadas son bajas.
+pruebaFisher <- fisher.test(tabla)
+
+# Se imprimen los resultados de la prueba de Fisher.
+cat("\n")
+cat("Prueba de Fisher usando la tabla de los datos de consumidores")
+print(pruebaFisher)
+
+```
+
+R: Dado que $p = 0,000317$ es menor al nivel de significancia de 0,05, se rechaza la hipótesis nula en favor de la hipótesis alternativa. Por lo tanto, se puede concluir con un 95% de confianza que el tipo de chocolate preferido se encuentra influenciado por el grupo etario de las y los consumidores.
+
+# Pregunta 4
+
+Una organización dedicada a la rehabilitación de villanos ha observado que muchos de ellos ingresan al programa con niveles elevados de hostilidad. Para abordar este problema, decidieron implementar un nuevo programa de bienvenida diseñado para reducir la hostilidad y facilitar la reintegración a la sociedad. Para evaluar la efectividad de este programa, se reclutó a un grupo de 40 villanos a quienes se les midió el nivel de hostilidad (alto o bajo) antes y después de participar en el programa de bienvenida. Los resultados se presentan a continuación:
+
+- 8 villanos no mostraron hostilidad ni antes ni después.
+- 8 villanos que inicialmente mostraban hostilidad dejaron de hacerlo.
+- 20 villanos mantuvieron un elevado nivel de hostilidad.
+- 4 villanos que no mostraban hostilidad después del programa se volvieron hostiles.
+
+¿Qué se puede concluir acerca de la efectividad del nuevo programa de bienvenida para reducir la hostilidad en los villanos?
+
+La prueba de McNemar es la herramienta estadística más apropiada para este análisis, ya que está diseñada específicamente para comparar dos mediciones relacionadas en un mismo grupo de sujetos. En este contexto, se utiliza para evaluar la efectividad del nuevo programa de bienvenida en la reducción de la hostilidad entre los villanos, permitiendo identificar cambios significativos en los niveles de hostilidad antes y después de participar en el programa.
+
+Las condiciones para poder aplicar esta prueba son:
+- La variable de respuesta del tratamiento es dicotómica.
+- Tiene que haber dos mediciones en distintas ocasiones, para el mismo grupo de casos.
+
+La primera condición se cumple dado que la variable de respuesta es dicotómica, ya que se clasifica a los villanos en dos niveles: "Hostil" y "No Hostil", tanto antes como después del programa de bienvenida.
+
+La segunda condición se cumple, pues se realizaron dos mediciones para el mismo grupo de villanos, una antes del programa de bienvenida y otra después, lo que permite observar cambios en la hostilidad.
+
+Entonces, se cumplen las condiciones para realizar la prueba de McNemar de forma apropiada.
+
+Después, se enuncian las hipótesis correspondientes al problema planteado:  
+
+$H_0:$ No hay cambios significativos en el nivel de hostilidad de los villanos.
+$H_A:$ Si hay cambios significativos en el nivel de hostilidad de los villanos.
+
+```{r}
+# Vector que asigna un número único a cada villano
+villano = seq(1:40)
+
+# Estado de hostilidad antes y después del programa 
+antes = c(rep("No Hostil", 12), rep("Hostil", 28))
+despues = c(rep("No Hostil", 8), rep("Hostil", 24), rep("No Hostil", 8))
+
+# Data frame que combina villano, estado antes y después
+villanos = data.frame(villano, antes, despues)
+
+# Tabla de contingencia que muestra frecuencias de hostilidad
+tablaVillanos = table(despues, antes)
+print(tablaVillanos)
+
+# Realizar la prueba de McNemar para evaluar el cambio en hostilidad
+prueba = mcnemar.test(tablaVillanos)
+
+# Imprimir los resultados de la prueba de McNemar
+print(prueba)
+
+```
+
+R: Dado que $p = 0,3865$ es mayor al nivel de significancia $\alpha = 0,05$, no hay evidencia suficiente para rechazar la hipótesis nula. Entonces podemos concluir con un 95% de confianza que no hay un cambio significativo en el nivel de hostilidad en los villanos despues del programa de bienvenida.

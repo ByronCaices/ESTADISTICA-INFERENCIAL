@@ -1,0 +1,309 @@
+---
+title: "EP07-respuesta-equipo10"
+author: "Grupo 10"
+date: "2024-11-01"
+output: html_document
+---
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+#Librerias
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(tidyr)) install.packages("tidyr")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(ggpubr)) install.packages("ggpubr")
+if(!require(ggmosaic)) install.packages("ggmosaic")
+if(!require(kableExtra)) install.packages("kableExtra")
+
+if(!require(pwr)) install.packages("pwr")
+if(!require(tidyverse)) install.packages("tidyverse")
+if(!require(rcompanion)) install.packages("rcompanion")
+if(!require(RVAideMemoire)) install.packages("RVAideMemoire")
+if(!require(ez)) install.packages("ez")
+if(!require(nlme)) install.packages("nlme")
+if(!require(emmeans)) install.packages("emmeans")
+```
+
+**1.** *Observando los datos, la memorista sospecha que hay diferencias significativas en el tiempo de ejecución entre las versiones B y C del algoritmo cuando las instancias tienen 60 o más nodos. ¿Los datos respaldan la intuición de la memorista? Para responder, filtren los datos para tener las instancias con 60 o más nodos y seleccionen las columnas de los tiempos de ejecución de las versiones B y C en formato ancho. Usando como semilla el valor 31, obtenga muestras aleatorias independientes de 23 tiempos registrados por la versión B y 21 tiempos registrados por la versión C del algoritmo. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.*
+
+```{r}
+# Obtengo los datos
+datos <- read.csv("EP07 Datos.csv")
+
+set.seed(31)
+
+#vamos a filtrar por los grupos
+datos_mayor_60 <- datos %>% filter(n.nodos >= 60) %>% select(instancia,  tiempo.B, tiempo.C)
+
+#Definimos rangos para sacar las muestras y así las instancias no se repitan
+rango_B <- 1:24  
+rango_C <- 25:45 
+
+#Extraemos las filas que correspondan
+datos_B <- datos_mayor_60[rango_B, "tiempo.B"]
+datos_C <- datos_mayor_60[rango_C, "tiempo.C"]
+
+#Tomamos las muestras aleatorias. 
+#(este metodo evita que se repitan los valores de una misma instancia)
+muestra_B <- sample(datos_B, 23, replace = TRUE)
+muestra_C <- sample(datos_C, 21, replace = TRUE)
+```
+
+Como solo nos mencionan si hay diferencia en el tiempo de ejecución entre dos versiones, podemos decir decir que vamos aplicar una prueba para parametrica **T de Student para dos muestras independientes**, pero primero vamos a verificar las condiciones:
+
+1. "Los pares de observaciones son independientes entre sí".
+las observaciones fueron elegidas aleatoriamente, así que sí, son independientes.
+
+2. "Las observaciones provienen de una poblacion que sigue una distribucion normal".
+Para este caso vamos aplicar una prueba de Shapiro 
+```{r}
+normalidad_B <- shapiro.test(datos_mayor_60$tiempo.B)
+normalidad_C <- shapiro.test(datos_mayor_60$tiempo.C)
+
+print(normalidad_B)
+print(normalidad_C)
+```
+Podemos observar como los p_value tanto de B como de C son menores al nivel de significancia que es de 0.05, es decir p_value < $α$, por lo cual, no se cumple la condición de normalidad, provocando que tengamos que no se pueda aplicar una prueba parametrica.
+
+Con lo anterior hecho, podemos **aplicar** una prueba **no parametrica** para dos muestras independientes y así verficar que efectivamente haya diferencias entre los tiempos. Con esto mencionado, se puede decir que podemos aplicar una prueba de suma de rangos de Wilcoxon. Para esto, debemos **verificar las siguientes condiciones**:
+
+1. los pares de observaiones son independientes entre sí.
+Esta condición se cumple dado que se tomo una muestra aleatoria.
+
+2. La escala de medición empleada para ambas muestras debe sera lo menos ordinal. 
+En este caso, los tiempos pueden ser ordenados de menor a mayor o vice versa.
+
+Declaramos las hipotesis de este problema:
+
+Ho: No hay diferencias en los tiempos de ejecución entre las versiones B y C.
+Ha: Efectivamente hay difencia entre los tiempos de ejecución de B y C.
+
+Con la dos muestras ya obtenidas y las condiciones resueltas, ya podemos aplicar la prueba correctamente
+```{r, warning = FALSE}
+alfa <- 0.05
+prueba <- wilcox.test(muestra_B,
+                      muestra_C,
+                      alternativa = "two.sided",
+                      conf.level = 1 - alfa)
+print(prueba)
+```
+Como p_value fue menor al valor de significancia podemos decir que se rechaza la hipotesis nula en favor de la hipotesis alternativa. Es decir, que si hay diferencia en los tiempos de ejecución.
+
+**2.** *La memorista también sospecha que, al comparar las mismas instancias de iguales características, las mejores soluciones encontradas por las versiones A y B tienen rendimientos distintos. ¿Estará en lo cierto? Para responder, filtren los datos para tener las instancias con 60 o más nodos y seleccionen las columnas con el mejor rendimiento de las versiones A y B en formato ancho. Usando como semilla el valor 16, obtengan una muestra aleatoria de 21 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.*
+
+```{r}
+# Configurar la semilla
+set.seed(16)
+
+# Filtrar instancias con 60 o más nodos
+datos_filtrados <- datos %>%
+  filter(n.nodos >= 60) %>%
+  select(instancia, mejor.A, mejor.B) # Ajusta nombres de columnas según corresponda
+
+# Obtener una muestra aleatoria de 21 instancias
+muestra <- datos_filtrados %>%
+  sample_n(21)
+```
+
+Vamos aplicar una prueaba t de Student, pero antes de hacer eso, vamos verificar las condiciones para poder aplicar esta prueba
+
+1. *"Los pares de observaciones son independientes entre sí."*    
+Como las observaciones se toman aleatoriamente, entonces son independientes.
+
+2. *"Las diferencias de observaciones apareadas siguen una distribución cercana a la normal."*    
+Para eso vamos a verificar la normalidad usando shapiro test.
+```{r}
+diferencias <- muestra$mejor.A - muestra$mejor.B
+shapiro.test(diferencias)
+```
+Por lo que se puede apreciar, si se cumple esa condición, pero por **temas academicos** vamos a realizar una prueba de Wilcoxon. Como en este caso sabemos que son datos pareados ya que los analizamos en la misma instancia, debemos aplicar una prueba de  **rangos con signo de Wilcoxon**
+
+Vamos a definir la hipotesis
+
+H0: *No hay diferencia en los tiempos de ambos algoritmos.*
+Ha: *Hay diferencia en los tiempos de ambos algoritmos.*
+
+Y vamos a mencionar que vamos a usar un valor de significancia del 0,05
+
+Se deben cumplir dos condiciones:
+
+1. *"Los pares de observaciones son independientes"*    
+En este caso se cumple ya que se seleccionaron instancias aleatorias de los algoritmos.
+
+2. *"La escala de medición empleada para ambas muestras debe ser a lo menos ordinal"*   
+Se cumple dado que la escala de medición en este caso es por tiempo en ambas muestras y el tiempo si es ordinal.
+
+Aplicamos la prueba de Wilcoxon
+```{r}
+prueba <- wilcox.test(muestra$mejor.B,
+                      muestra$mejor.A,
+                      paired = TRUE,
+                      alternative = "two.sided",
+                      conf.level = alfa - 1)
+print(prueba)
+```
+
+Como p valor dio menor a nuestro valor de significancia, se dice que hay suficiente evidencia para rechazar la hipotesis nula, por lo cual, concluye que hay diferencia entre las muestras,
+
+**3.** *- La memorista sospecha que hay diferencias significativas en el tiempo de ejecución entre las versiones del algoritmo cuando las instancias de prueba tienen 60 o más nodos. ¿Los datos respaldan la intuición de la memorista?*
+
+**Para responder, filtren los datos para tener las instancias con 60 o más nodos y seleccionen las columnas con los tiempos de ejecución registrados (en formato ancho). Usando como semilla el valor 33, obtengan muestras aleatorias independientes de 14, 15 y 13 tiempos registrados por las versiones A, B y C, respectivamente. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.**
+```{r}
+# Recopilo los datos de tiempo A, B y C con 60 o más nodos, dejandolos en formato largo
+datos <- datos %>% filter(n.nodos >= 60) %>% select(tiempo.A, tiempo.B, tiempo.C)
+
+# definiejndo la semilla y tomando las muetras aleratorias
+set.seed(33)
+muestra_A <- sample(datos$tiempo.A, 14, replace = FALSE)
+muestra_B <- sample(datos$tiempo.B, 15, replace = FALSE)
+muestra_C <- sample(datos$tiempo.C, 13, replace = FALSE)
+
+
+# Convertir muestras en un dataframe para análisis
+muestras <- data.frame(
+  tiempo = c(muestra_A, muestra_B, muestra_C),
+  version = factor(rep(c("A", "B", "C"), times = c(14, 15, 13)))
+)
+
+# Reañizando un grafico Q-Q plot
+g <- ggqqplot(muestras, x = "tiempo", color = "version") +
+  facet_wrap(~ version) + 
+  rremove("x.ticks") + rremove("x.text") +
+  rremove("y.ticks") + rremove("y.text") +
+  rremove("axis.title")
+
+print(g)
+```
+
+```{r}
+# Análisis estadístico
+# 1. Hipótesis:
+#    H0: No hay diferencia significativa entre los tiempos de las versiones.
+#    H1: Hay al menos una diferencia significativa entre los tiempos de las versiones.
+
+# 2. Prueba de normalidad (Shapiro-Wilk para muestras pequeñas)
+shapiro_A <- shapiro.test(muestra_A)
+shapiro_B <- shapiro.test(muestra_B)
+shapiro_C <- shapiro.test(muestra_C)
+
+#Si alguna muestra no cumple normalidad, se usará una prueba no paramétrica, la cual es la pruebna de Kruskall, debido a que los tamaño de muestras difieren entre cada una, invalidando el procesamiento anova en un principio
+
+shapiro_A
+shapiro_B
+shapiro_C
+
+#Como se puede apreciar, no todas las prebas cumplen con la normalidad, en este caso, la prueba de shapiro para la muestra A, no la cumple ùesto que su p value es menor a 0.05
+
+#La prueba elegida fue la de Kruskall-Wallis
+
+#Evaluación de condiciones:
+
+#se puede realizar la prueba de Kruskall debido a que:
+#La condicion 1 se cumple puesto que la variable independiente (la  version del algortimo) tiene 3 niveles, A, B y C
+#La variable dependiente (el tiempo de ejecución), se mide en una escala de intervalo, cumpliendo de esta forma con la segunda condición
+#Las tres versiones se ejcutan de forma independiente, y el resultado de cada uno no depende del resultado de las otras versiones, cumpliendo la tercersa condición
+
+
+# Configurar nivel de significancia
+alfa <- 0.05
+
+# Realizar la prueba de Kruskal-Wallis
+prueba <- kruskal.test(tiempo ~ version, data = muestras)
+print(prueba)
+
+# Efectuar procedimiento post-hoc si hay diferencias significativas
+# se elegio el metodo Benjamini & Hochberg
+if (prueba$p.value < alfa) {
+  post_hoc <- pairwise.wilcox.test(
+    muestras[["tiempo"]],
+    muestras[["version"]],
+    p.adjust.method = "BH",
+    paired = FALSE,
+    exact = FALSE
+  )
+  print(post_hoc)
+}
+
+#como se aprecia, al haber obtenido un valor de p< alpha, se rechaza la hipotesis nula en favor de la alternativa, dadn ocom oconclusion que los datos si respaldan la intuición d ela memorista.
+```
+
+**4. ** *La memorista también sospecha que, al comparar las mismas instancias con iguales características, las mejores soluciones encontradas por las diferentes versiones del algoritmo tienen rendimientos distintos. ¿Estará en lo cierto? Para responder, filtren los datos para tener las instancias con 60 o más nodos y seleccionen las columnas con los mejores rendimientos registrados. Usando como semilla el valor 33, obtengan una muestra aleatoria de 18 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.*
+
+```{r}
+datos_2 <- read.csv("EP07 Datos.csv")
+
+set.seed(33)
+
+#vamos a filtrar por los grupos
+datos_mayor_60 <- datos_2 %>% filter(n.nodos >= 60) %>% select(instancia,  mejor.A, mejor.B, mejor.C)
+
+#tomamos muestras aleatorias
+muestra_A <- sample(datos_mayor_60$mejor.A, 18, replace = TRUE)
+muestra_B <- sample(datos_mayor_60$mejor.B, 18, replace = TRUE)
+muestra_C <- sample(datos_mayor_60$mejor.C, 18, replace = TRUE)
+```
+
+vamos a verificar las condiciones para ver si se aplica una prueba ANOVA
+
+1. *"La escala con que se mide la variable dependiente tiene las propiedades de una escala de intervalos iguales"*
+En este caso se cumple, dado que el tiempo tiene la propiedad de una escala de intervaloes iguales
+
+2. *"Las mediciones son independientes al interior de cada grupo"*
+Se cumple dado que en cada grupo las mediciones son independientes.
+
+3. *"Se puede suponer razonablemente que las poblaciones de origen siguen una distribución normal"*    
+Hay que aplicar el metodo de Shapiro para comprobar su normalidad
+
+```{r}
+normalidad_A <- shapiro.test(datos_mayor_60$mejor.A)
+normalidad_B <- shapiro.test(datos_mayor_60$mejor.B)
+normalidad_C <- shapiro.test(datos_mayor_60$mejor.C)
+
+print(normalidad_A)
+print(normalidad_B)
+print(normalidad_C)
+```
+Como se puede apreciar, todos los p valores dieron menor al valor de significancia por lo cual, las poblaciones de origen no siguen una distribución cercana a la normal. Con esto realizado podemos comenzar aplicar la prueba de Friedman.
+
+En este caso, vamos aplicar la prueba la **Prueba de Friedman** ya que estamos viendo muestras correlacionadas, por lo cual, tenemos que verificar las condiciones.
+
+1. *"La variable independiente debe ser categorica y tener a lo menos 3 niveles."*      
+En este caso, como la variable independiente es el mejor tiempo, es una variable categorica y tiene más de 3 niveles 
+
+2. *"la escala de la variable dependiente debe ser, a lo menos, ordinal."*    
+Se cumple dado que el tiempo es la variable dependiente y es ordinal ya que se puede comparar con "es menor a", "es igual a", "es mayor a".
+
+3. *"Las observaciones son una muestra aleatoria e independiente de la poblacion"*    
+Es verdad dado que se extrajo una muestra aleatoria y es independiente de la población.
+
+Aplicamos la prueba de friedman
+```{r}
+arreglo <- c(muestra_A, muestra_B, muestra_C)
+
+lista <- c(rep("A", length(muestra_A)),
+           rep("B", length(muestra_B)),
+           rep("C", length(muestra_C)))
+
+casos <- rep(1:18, 3)
+
+interfaz <- factor(lista)
+
+datos_matriz <- data.frame(casos, arreglo, interfaz)
+
+alfa <- 0.05
+
+prueba <- friedman.test(arreglo ~ interfaz | casos,
+                        data = datos_2)
+
+print(prueba)
+```
+
+Como p valor es menor a nuetro valor de significancia que es de 0.05, lo que implica que hay evidencias suficiente para rechazar la hipotesis nula, lo que quiere entonces quiere decir que hay alguna diferencia entre los grupos. Vamos a efectuar una prueba post_hoc para identificar cuales grupos son los que tienen diferencias.
+
+```{r}
+post_hoc <- pairwise.wilcox.test(datos_matriz$arreglo,
+                                 datos_matriz$interfaz,
+                                 p.adjust.method = "holm",
+                                 paired = TRUE,
+                                 exact = FALSE)
+print(post_hoc)
+```
+Por lo que se puede apreciar de los resultados obtenidos, solo entre el par A y B el valor p es menor al valor de significancia, por lo cual, en ese grupo hay diferencia significativas.

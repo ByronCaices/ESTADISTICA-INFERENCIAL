@@ -1,0 +1,407 @@
+---
+title: "EP09 Grupo 1"
+output: html_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+# Cargo las librerías necesarias
+if(!require(tidyr)) install.packages("tidyr")
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(ggpubr)) install.packages("ggpubr")
+if(!require(car)) install.packages("car")
+if(!require(ggfortify)) install.packages("ggfortify")
+```
+
+```{=html}
+<style>
+body {
+text-align: justify}
+</style>
+```
+
+```{r cargar_datos}
+# Leo los datos
+datos <- read.csv2(file = "EP09 Datos.csv", stringsAsFactors = TRUE)
+```
+
+```{r filtrar_datos}
+# Semilla a utilizar
+set.seed(8935)
+
+# Filtro los datos de hombres y selecciono 100 al azar
+# Lo anterior debido a que la semilla es impar
+datos_filtrados <- datos %>% filter(Gender == 1) %>% select(-Gender) %>% sample_n(100, replace = FALSE)
+
+# Divido los datos en entrenamiento y prueba
+datos_entrenamiento <- datos_filtrados[1:70, ]
+datos_entrenamiento_rlm <- datos_entrenamiento
+datos_prueba <- datos_filtrados[71:100, ]
+```
+
+Con el anterior script, se filtraron los datos de hombres y se seleccionaron 100 al azar. Posteriormente, se dividió en datos de entrenamiento y prueba. A continuación, se presentan los datos de entrenamiento:
+
+
+```{r predictores}
+# Seteo la semilla nuevamente
+set.seed(8935)
+
+# Ponemos en una tabla los datos de entrenamiento
+variables <- colnames(datos_entrenamiento)
+
+# Selecciono 8 variables al azar
+predictores <- sample(variables, 8, replace = FALSE)
+
+# Printeo los predictores seleccionados al azar
+cat("Los predictores seleccionados al azar son:\n ")
+cat (paste(predictores, collapse = "\n"))
+```
+
+Para escoger un predictor aparte de los seleccionados al azar, se utilizó la correlación de Pearson entre la variable de respuesta y las variables predictoras, tal y como se muestra en el siguiente script:
+
+```{r}
+datos_resto <- datos_entrenamiento %>% select(!all_of(predictores))
+
+i_respuesta_resto <- which(colnames(datos_resto) == "Weight")
+
+correlacion <- cor(datos_resto[-i_respuesta_resto], y = 
+                     datos_resto[["Weight"]])
+
+cat("Correlación con la variable respuesta:\n")
+print(correlacion)
+
+i_mejor <- which(correlacion == max(abs(correlacion)))
+predictor <- rownames(correlacion)[i_mejor]
+
+cat("Variable más correlacionada con la variable respuesta:", predictor, "\n")
+
+```
+
+Como se nos pide escoger un predictor, se seleccionó el predictor con mayor correlación con la variable de respuesta. En este caso, la variable seleccionada fue `Hip.Girth `. A continuación realizaremos el modelo de RLS para predecir la variable de respuesta `Weight` usando como predictor `Hip.Girth`:
+
+# Modelo de regresión lineal simple
+
+```{r modelo_rls}
+# Filtro los datos para quedarme con las variables relevantes (Hip.Girth y Weight)
+datos_entrenamiento <- datos_entrenamiento %>% select(Weight, Hip.Girth)
+
+# Construyo el modelo
+modelo <- lm(Weight ~ Hip.Girth, data = datos_entrenamiento)
+print(summary(modelo))
+
+# Graficar los datos y el modelo obtenido
+g1 <- ggscatter(datos_entrenamiento, x = "Hip.Girth", y = "Weight", color = "steelblue", fill = "steelblue", ylab = "Peso (Kg)", xlab = "Grosor a la altura de las caderas (cm)", title = "Modelo de regresión lineal simple")
+
+g1 <- g1 + geom_abline(intercept = coef(modelo)[1],
+                       slope = coef(modelo)[2],
+                       color = "red")
+
+# Printeo el gráfico
+print(g1)
+```
+
+
+## Confiabilidad del modelo de RLS
+
+### Bondad de ajuste
+
+Podemos observar, con el resultado del script anterior, que el modelo de RLS obtenido explica alrededor del 79% de la varianza en los datos y que, según lo arrojado por el modelo, el predictor seleccionado es significativamente mejor para medir el peso que usar unicamente la media de los pesos (p < 2.2e-16). En resumen, la reducción de la varianza es muy grande y significativa.
+
+### Distribución e independencia
+
+Como sabemos, para evaluar la confiabilidad de un modelo de RLS, debemos verificar las siguientes caracteristicas en un gráfico de residuos:
+
+1. Se distribuyen aleatoriamente en torno a la línea de valor cero.
+2. Forman una "banda horizontal" en torno a la línea de valor cero.
+3. No hay residuos que se alejen del patrón que forman los demás.
+4. No forman un patrón reconocible.
+
+Es por ello que realizaremos todo el analisis de residuos para verificar si el modelo cumple con las condiciones necesarias para ser confiable.
+
+```{r analisis_residuos}
+# Desplegar gráficos de residuos
+residualPlots(modelo, type = "rstandard",
+              id = list(method = "r", n = 3, cex = 0.7, locaion = "lr"),
+              col = "steelblue", pch = 20 , col.quad = "red")
+
+# Verificar independencia de los residuos
+db <- durbinWatsonTest(modelo)
+cat("\nPruebda de independencia:\n")
+print(db)
+
+# Desplegar gráficos marginales
+marginalModelPlots(modelo, sd = TRUE,
+                   id = list(method = "r", n = 3, cex = 0.7, locaion = "lr"),
+              col = "steelblue", pch = 20 , col.line = c("steelblue", "red"))
+
+# Prueba de la varianza del error no constante
+cat("\nPrueba de homoceasticidad:\n")
+print(ncvTest(modelo))
+```
+
+1. Visualizando los gráficos de residuos, podemos observar que los residuos se distribuyen de una manera uniforme, sin presentar patrones sistemáticos, por ende, podemos decir que los residuos están distribuidos de forma aleatoria.
+
+2. Los gráficos de residuos claramente muestran que los puntos se agrupan alrededor de la línea cero formando una banda horizontal sin estructuras evidentes.
+
+3. Notemos que si bien hay algunos residuos que se alejan de la línea cero, estos no son suficientes para considerar que el modelo no es confiable.
+
+4. No se observa un patrón reconocible en los residuos, por ende, se satisface este requisito.
+
+Además de lo anterior, con la prueba de Durbin-Watson, podemos observar que el p-value es de 0.306, por lo que no hay evidencia suficiente para rechazar la hipótesis nula de independencia de los residuos.
+
+También, con la prueba de homocedasticidad, podemos observar que el p-value es de 0.058, si bien es un valor cercano al límite de 0.05. Esto sugiere que no hay evidencia suficiente para rechazar la homocedasticidad.
+
+Por ende, a modo de resumir, según los gráficos y pruebas estadísticas realizadas, el modelo parece cumplir con las condiciones necesarias de independencia, homocedasticidad y distribución aleatoria de los residuos. 
+
+### Influencia de los valores atípicos
+
+Para verificar la influencia de los valores atípicos, se realizará un análisis de los valores atípicos y de la influencia de los mismos en el modelo.
+
+```{r analisis_atipicos}
+# Desplegar gráficos de influencia
+casos_influyentes <- influencePlot(modelo, id = list(cex = 0.7))
+cat("\nCasos que podrían ser influyentes:\n")
+print(casos_influyentes)
+```
+
+Como podemos ver en el gráfico de influencia, no hay casos que sean influyentes en el modelo. Por ende, podemos decir que los valores atípicos no influyen en el modelo.
+
+## Generalidad y confiabilidad del modelo de RLS
+
+Diremos que un modelo es generalizable si para un conjunto de datos nuevo consigue predicciones con una calidad similar al que consigue con los datos usados en su construcción. Para verificar la generalidad del modelo usaremos la validación cruzada.
+
+```{r validacion_cruzada}
+# Realizar validación cruzada
+
+# Calcular el error cuadrático medio para el conjunto de entrenamiento
+rmse_entrenamiento <- sqrt(mean(resid(modelo) ** 2))
+cat("MSE para el conjunto de entrenamiento:", rmse_entrenamiento, "\n")
+
+# Hacer predicciones para el conjunto de prueba 
+predicciones_prueba <- predict(modelo, datos_prueba)
+
+# Calcular el error cuadrático medio para el conjunto de prueba
+error <- datos_prueba[["Weight"]] - predicciones_prueba
+rmse_prueba <- sqrt(mean(error ** 2))
+cat("MSE para el conjunto de prueba:", rmse_prueba, "\n")
+#Calcular cambio de error
+cat("Cambio de error:", rmse_prueba - rmse_entrenamiento, "\n")
+
+
+```
+
+Los resultados de los errores cuadráticos medios [MSE] para el conjunto de entrenamiento [4.81] y el conjunto de prueba [5.66] indican que el modelo tiene un buen nivel de generalización.  La diferencia entre ambos errores es pequeña, lo que sugiere que el modelo logra predecir con una calidad similar tanto en los datos usados para entrenarlo como en datos nuevos. ES por lo anterior que podemos decir que el modelo es generalizable y puede ser considerado confiable para realizar predicciones con nuevos conjuntos de datos.
+ 
+## Conclusión del modelo de RLS 
+
+El modelo de RLS parece ser confiable, ya que como vimos en los anteriores puntos, se cumplen todos los puntos necesarios para que el modelo sea confiable. Además, el modelo es generalizable, ya que logra predecir con una calidad similar tanto en los datos usados para entrenarlo como en datos nuevos. Por lo tanto, podemos decir que el modelo es confiable y generalizable.
+
+# Modelo de regresión lineal Múltiple
+
+Para el modelo de regresión lineal múltiple, se seleccionaron 8 variables al azar, de las cuales deberemos seleccionar entre dos a cinco variables para usarlas como predictores, añadiendolas al modelo de regresión lineal simple que expusimos con anterioridad, a modo de recordatorio, las variables escogidas de forma aleatorias son:
+
+1. Knee.Girth: Grosor promedio de ambas rodillas, posición levemente flectada, medición arriba de la rótula [cm[].
+2. Biacromial.diameter: Diámetro biacromial (a la altura de los hombros) [cm].
+3. Ankles.diameter: Suma de los diámetros de los tobillos [cm].
+4. Bitrochanteric.diameter: Diámetro bitrocantéreo (a la altura de las caderas) [cm].
+5. Forearm.Girth: Grosor promedio de ambos antebrazos, brazos extendidos palmas hacia arriba [cm].	
+6. Navel.Girth: Grosor a la altura del ombligo [cm].
+7. Calf.Maximum.Girth: Grosor promedio de la parte más ancha de ambas pantorrillas [cm].
+8. Wrist.Minimum.Girth: Grosor promedio de la parte más delgada de ambas muñecas [cm].
+
+## Selección de predictores
+
+Como sabemos, el método más adecuado para seleccionar los predictores es la regresión jerárquica. Esto se debe a que este método es idoneo al momento de querer probar una teoría. Como este no es nuestro objetivo para este EP, usaremos la regresión paso a paso, la cual nos sirve para explorar los datos. Usaremos la estrategia de selección escalonada, la cual puede ser aplicada con la función step().
+
+```{r seleccion_predictores}
+datos_variables_seleccionadas <- data.frame(datos_entrenamiento_rlm[, c("Weight", predictores, "Hip.Girth")])
+
+
+minimo <- lm(Weight ~ Hip.Girth, data = datos_variables_seleccionadas)
+completo <- lm(Weight ~ ., data = datos_variables_seleccionadas)
+
+# Realizar regresión escalonada con menor BIC, 
+opt <- options(digits = 2, width = 54)
+modelo_rlm <- step(minimo, scope = list(lower = minimo, upper = completo),
+                   direction = "both", k = log(nrow(datos_variables_seleccionadas)),
+                   test = "F", trace = 1)
+
+options(digits = opt[[1]], width = opt[[2]])
+
+# Mostrar los coeficientes del modelo obtenido
+cat("\nModelo obtenido:\n")
+print(modelo_rlm[["coefficients"]])
+
+
+```
+
+El modelo obtenido cumple con lo pedido por enunciado, al contar con el predictor `Hip.Girth` y otros cuatro predictores, los cuales son: 'Forearm.Girth', 'Navel.Girth', 'Biacromial.diameter' y 'Knee.Girth'.
+
+```{r modelo_rlm}
+#modelo_rlm <- lm(Weight ~ Hip.Girth + Forearm.Girth + Navel.Girth + Biacromial.diameter + Knee.Girth, data = datos_entrenamiento_rlm)
+print(summary(modelo_rlm))
+
+```
+
+## Confiabilidad del modelo de RLM
+
+### Bondad de ajuste
+
+Podemos observar, con el resultado del script anterior, que el modelo de RLM obtenido explica alrededor del 88% de la varianza en los datos y que, según lo arrojado por el modelo, los predictores seleccionados son significativamente mejores para medir el peso que usar unicamente la media de los pesos (p < 2e-16). En resumen, la reducción de la varianza es muy grande y significativa.
+
+### Confiabilidad del modelo
+
+Como sabemos, para evaluar la confiabilidad de un modelo de RLM, debemos verificar las siguientes caracteristicas:
+
+1. La variable de respuesta debe ser cuantitativa y continua, sin restricciones para su variabilidad.
+
+2. Los predictores deben ser cuantitativos o dicotómicos (de ahí la necesidad de variables indicadoras para manejar más de dos niveles).
+
+3. Los predictores deben tener algún grado de variabilidad (su varianza no debe ser igual a cero). En otras palabras, no pueden ser constantes.
+
+4. Cada predictor debe estar relacionado linealmente con la respuesta.
+
+5. La distribución de los residuos debe ser cercana a la normal centrada en cero.
+
+6. La variabilidad de los residuos debe ser aproximadamente constante (homocedasticidad).
+
+7. Los residuos deben ser independientes entre sí.
+
+8. No debe existir multicolinealidad. Esto significa que no deben darse relaciones lineales fuertes (coeficientes de correlación altos) entre dos o más predictores.
+
+9. Las estimaciones de los coeficientes del modelo no deben estar alterados por unas pocas observaciones influyentes.
+
+
+Para verificar la confiabilidad del modelo, realizaremos el siguiente script:
+
+```{r confiabilidad_rlm}
+# Desplegar gráficos de residuos
+cat("\nPreubas de curvatura de residuos:\n")
+residualPlots(modelo_rlm, type = "rstandard",
+              id = list(method = "r", n = 3, cex = 0.7, locaion = "lr"),
+              col = "steelblue", pch = 20 , col.quad = "red")
+
+# Verificar independencia de los residuos
+db <- durbinWatsonTest(modelo_rlm)
+cat("\nPrueba de independencia:\n")
+print(db)
+
+# Linealidad de los predictores 
+cat("\nPrueba de linealidad de los predictores:\n")
+
+# Nombre de la variable respuesta
+nombre_respuesta <- "Weight"
+
+# Lista de predictores obtenidos de tu modelo
+predictores_rlm <- c("Hip.Girth", "Forearm.Girth", "Navel.Girth", "Biacromial.diameter", "Knee.Girth")
+
+# Reorganizar los datos en formato largo
+datos_rlm_largo <- datos_entrenamiento_rlm |>
+  select(all_of(c(nombre_respuesta, predictores_rlm))) |>
+  pivot_longer(!all_of(nombre_respuesta), names_to = "predictores", values_to = "valores")
+
+# Crear gráficos de dispersión con línea de regresión
+library(ggpubr)
+p_linealidad <- ggscatter(
+  datos_rlm_largo, 
+  x = "valores", 
+  y = nombre_respuesta, 
+  color = "predictores", 
+  add = "reg.line"
+) +
+  facet_wrap(~ predictores, scales = "free_x")
+
+# Mostrar el gráfico
+print(p_linealidad)
+
+
+# Desplegar gráficos marginales
+marginalModelPlots(modelo_rlm, sd = TRUE,
+                   id = list(method = "r", n = 3, cex = 0.7, locaion = "lr"),
+              col = "steelblue", pch = 20 , col.line = c("steelblue", "red"))
+
+# Prueba de la varianza del error no constante
+cat("\nPrueba de homoceasticidad:\n")
+print(ncvTest(modelo_rlm))
+
+
+
+#independencia de los residuos 
+cat("\nIndependencia de los residuos\n")
+print(durbinWatsonTest(modelo_rlm))
+
+#multicolinealidad
+cat("\nFactores de inflación de la varianza:\n")
+print(vif(modelo_rlm))
+cat("\nEstadísticos de tolerancia:\n")
+print(1 / vif(modelo_rlm))
+
+
+# Desplegar gráficos de influencia
+casos_influyentes <- influencePlot(modelo_rlm, id = list(cex = 0.7))
+cat("\nCasos que podrían ser influyentes:\n")
+print(casos_influyentes)
+
+```
+
+1. La variable de respuesta claramente es cuantitativa y continua, esto al tratarse de un peso, sin restricciones para su variabilidad.
+
+2. Todos los predictores son cuantitativos, por lo que cumplen con la condición.
+
+3. Unicamente viendo los datos, podemos observar que los predictores tienen un grado de variabilidad, por lo que cumplen con la condición de que no sean constantes.
+
+4. Cada predictor parece estar relacionado linealmente con la respuesta, esto lo podemos observar en los gráficos de dispersión con línea de regresión.
+
+5. La distribución de los residuos parece ser cercana a la normal centrada en cero, esto lo podemos observar en los gráficos de residuos consideramos las curvas extremas como como significantes ya que podria deberse a la falta de datos.
+
+6. La variabilidad de los residuos parece ser aproximadamente constante, esto lo podemos observar en los gráficos de residuos.
+
+7.Los residuos parecen ser independiente dado que al realizar la prueba se concluye que no hay sificiente evidencia para rechazar la hipotesis nula de independencia.
+
+8.Vemos que en general que los valores vif son menores a 5 por lo que inidica una multicolinialidad moderada pero no es motivo suficiente de preocupacion . 
+
+9.Vemos que no existe apalancamiento debido a que ninguna observación tiene un Hat cercano a 1. Por otro lado, ninguno de los índices encontrados presenta una distancia de Cook mayor al umbral de 1 , por lo tanto se cumple con esta condicion.
+
+Luego de cumplir con todas las condiciones necesarias para que el modelo sea confiable, podemos decir que el modelo de RLM es confiable.
+
+Procedemos a evaluar el poder predictivo del modelo.
+
+## Poder predictivo del modelo
+
+```{r}
+# Realizar validación cruzada
+
+# Calcular el error cuadrático medio para el conjunto de entrenamiento
+
+rmse_entrenamiento <- sqrt(mean(resid(modelo_rlm) ** 2))
+cat("MSE para el conjunto de entrenamiento:", rmse_entrenamiento, "\n")
+
+# Hacer predicciones para el conjunto de prueba
+datos_prueba_rlm <- datos_prueba %>% select(Weight, Hip.Girth, Forearm.Girth, Navel.Girth, Biacromial.diameter, Knee.Girth)
+
+predicciones_prueba_rlm <- predict(modelo_rlm, datos_prueba_rlm)
+
+# Calcular el error cuadrático medio para el conjunto de prueba
+error <- datos_prueba_rlm[["Weight"]] - predicciones_prueba_rlm
+rmse_prueba <- sqrt(mean(error ** 2))
+cat("MSE para el conjunto de prueba:", rmse_prueba, "\n")
+
+#calcula el cambio de error
+cat("Cambio de error:", rmse_prueba - rmse_entrenamiento, "\n")
+
+
+```
+
+## Conclusión del modelo de RLM
+
+Los resultados de los errores cuadráticos medios [MSE] para el conjunto de entrenamiento [3.49] y el conjunto de prueba [5.13] indican que el modelo tiene un buen nivel de generalización.  La diferencia entre ambos errores es pequeña, lo que sugiere que el modelo logra predecir con una calidad similar tanto en los datos usados para entrenarlo como en datos nuevos. ES por lo anterior que podemos decir que el modelo es generalizable y puede ser considerado confiable para realizar predicciones con nuevos conjuntos de datos.
+
+## Comparación de ambos modelos
+ 
+Recordamos los valores obtenidos al evaluar el poder predictivo del modelo de RLS:
+MSE para el conjunto de entrenamiento: 4.814136 
+MSE para el conjunto de prueba: 5.66065
+Cambio de error: 0.8465135 
+
+Al compararlos con los valores obtenidos al evaluar el poder predictivo del modelo de RLM podemos concluir que el modelo de RLM es mejor que el modelo de RLS, ya que el error cuadrático medio para el conjunto de prueba es menor en el modelo de RLM. Por lo tanto, podemos decir que el modelo de RLM es mejor que el modelo de RLS pero teniendo cuidado que el cambio de error es mayor en el RLM lo que puede significar un sobreajuste en el RML.
+

@@ -1,0 +1,272 @@
+---
+title: "Tarea 3"
+date: "2024-10-08"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# la pregunte 1,2,3 ejecutelas en orden 
+```
+
+## Enunciado General:
+
+En una planta química hay dos máquinas que envasan detergentes industriales en bidones con un volumen de producto que sigue una distribución normal con desviación estándar de 1 litro. La ingeniera a cargo de la planta debe asegurar que los bidones se están llenando con una media de 10 litros. Pero ella tiene la sospecha de que hay desviaciones en esta media, lo que piensa confirmar usando una muestra aleatoria de 100 envases (50 de cada una de las máquinas). También cree que hay diferencia en el cumplimiento del volumen requerido entre la máquina más antigua y la más moderna, que han de andar por el 90% y 96% de los bidones, respectivamente.
+
+## Preguntas Equipo 7
+
+### Pregunta 1
+
+Si la ingeniera piensa rechazar la hipótesis nula cuando la muestra presente una media menor a 9,8 litros o mayor a 10,2 litros, ¿cuál es la probabilidad de que cometa un error de tipo I? Para responder, generen un gráfico de la distribución muestral de las medias hipotetizada en donde se marquen las zonas correspondientes a la probabilidad solicitada, para luego, basándose en este gráfico, calcular el área correspondiente. Tome como ejemplo los scripts presentados en la lectura sobre poder estadístico.
+
+```{r}
+
+# Cargar bibliotecas para usar stat_function
+library(ggplot2)
+library(ggpattern)
+library(ggpubr)
+
+# Parámetros
+mu_0 <- 10  # Media bajo la hipótesis nula
+sigma <- 1  # Desviación estándar
+n <- 100  # Tamaño de la muestra
+sigma_muestra <- sigma / sqrt(n)  # Desviación estándar de la media muestral
+lim_inferior <- 9.8  # Límite inferior para la zona de rechazo
+lim_superior <- 10.2  # Límite superior para la zona de rechazo
+
+# Crear el gráfico usando ggplot y stat_function
+g <- ggplot(data.frame(x = c(9.6, 10.4)), aes(x = x)) +
+  stat_function(fun = dnorm, 
+                args = list(mean = mu_0, sd = sigma_muestra), 
+                color = "blue",
+                linewidth = 1) +
+  
+  # Sombrear la zona de rechazo a la izquierda (menos de 9.8 litros)
+  stat_function(fun = dnorm,
+                args = list(mean = mu_0, sd = sigma_muestra),
+                geom = "area", 
+                fill = "blue", alpha = 0.6,
+                xlim = c(9.6, lim_inferior)) +
+  
+  # Sombrear la zona de rechazo a la derecha (más de 10.2 litros)
+  stat_function(fun = dnorm,
+                args = list(mean = mu_0, sd = sigma_muestra),
+                geom = "area", 
+                fill = "blue", 
+                alpha = 0.6, 
+                xlim = c(lim_superior, 10.4)) +
+  
+  # Etiquetas y título del gráfico
+  labs(x = "Media Muestral (litros)", y = "Densidad",
+       title = "Distribución muestral de las medias bajo H0") +
+  theme_minimal()
+
+# Mostrar el gráfico
+print(g)
+
+
+# Calcular las áreas (probabilidad de cometer error de tipo I)
+prob_inferior <- pnorm(lim_inferior, mean = mu_0, sd = sigma_muestra)
+prob_superior <- 1 - pnorm(lim_superior, mean = mu_0, sd = sigma_muestra)
+error_tipo_I <- prob_inferior + prob_superior
+
+# Mostrar el resultado
+cat("Por lo tanto la probabilidad de cometer un error de tipo I obtenida es:", error_tipo_I, "\n")
+
+
+```
+
+### Pregunta 2
+
+Si el verdadero volumen medio de los bidones fuera de 10,1 litros,
+¿cuál sería la probabilidad de que la ingeniera, que obviamente no conoce este
+dato, cometa un error de tipo II? Para responder, agregue al gráfico anterior
+la verdadera distribución muestral de las medias y marquen (con otro color) la
+zona correspondiente a la probabilidad solicitada, para luego,
+basándose en este gráfico, calcular el área correspondiente. También 
+hay ejemplos de este procedimiento en la lectura sobre poder estadístico.
+
+```{r}
+#codigo
+dist_0<-stat_function(fun=dnorm,
+                      args = list(mean=mu_0,sd=sigma_muestra),
+                      geom="area",
+                      colour="red",fill="red",alpha=error_tipo_I)
+
+g_x_limites<- mu_0+c(-6,5)*sigma_muestra
+
+#valores
+media_true <- 10.1
+delta<-mu_0-media_true
+
+#verdadera distribucion
+dist_v<- stat_function( fun = dnorm,
+                        args =list(mean=media_true,sd=sigma_muestra),
+                        geom="area",
+                        colour="red", fill="red", alpha=error_tipo_I)
+g3<- g + dist_v+ geom_vline(xintercept=media_true,colour="red")
+print(g3)
+
+#calcular z critico 
+z_critico_inf<- qnorm(error_tipo_I/2,mean=mu_0,sd=sigma_muestra,lower.tail = TRUE)
+z_critico_sup<- qnorm(error_tipo_I/2,mean=mu_0,sd=sigma_muestra,lower.tail = FALSE)
+
+#grafico 4
+g4<- g+dist_0+dist_v
+g4<- g4 +stat_function(fun=dnorm,                                              args=list(mean=media_true,sd=sigma_muestra),
+                       geom="area",
+                       xlim= c(g_x_limites[1],z_critico_inf),
+                       fill="blue",alpha=0.6)
+                        
+g4<- g4 +stat_function(fun=dnorm,                                              args=list(mean=media_true,sd=sigma_muestra),
+                       geom="area",
+                       xlim= c(z_critico_sup,g_x_limites[2]),
+                       fill="blue",alpha=0.6)
+# Parámetros corregidos con patrones
+g4 <- g4 + stat_function(fun = dnorm, 
+                         args = list(mean = media_true, sd = sigma_muestra),
+                         geom = "area_pattern",
+                         xlim = c(z_critico_inf, z_critico_sup),
+                         fill = "white", color = "blue", alpha = 0.3,
+                         pattern_spacing = 0.15, pattern_density = 0.4,
+                         pattern_fill = "blue", pattern_colour = "blue",
+                         pattern_angle = 45, pattern_alpha = 0.5)
+
+# Mostrar el gráfico
+print(g4)
+
+#calculamos poder 
+poder_inf<-pnorm(z_critico_inf,mean = media_true,sd=sigma_muestra,lower.tail = TRUE)
+poder_sup<-pnorm(z_critico_sup,mean = media_true,sd=sigma_muestra,lower.tail = FALSE)
+poder<- poder_inf+poder_sup
+
+cat("Poder= ",poder, "\n")
+#probabilidad tipo 2
+beta<- 1-poder
+cat("Beta= ", beta, "\n")
+
+```
+Por lo tanto al realizar los calculos se obtuvo un beta de 0.8399948, es decir, que la ingeniera tiene un 83.99948% de probabilidades de cometer un error de tipo 2.
+
+### Pregunta 3
+
+Como no se conoce el verdadero volumen medio, genere un gráfico del poder
+estadístico con las condiciones anteriores, pero suponiendo que el verdadero
+volumen medio podría variar de 9,6 a 10,4 litros. Hay un ejemplo de este
+tipo de gráfico en la lectura sobre poder estadístico.
+
+```{r}
+library(pwr)
+library(ggplot2)
+
+# Parámetros
+mu_0 <- 10  # Media bajo la hipótesis nula
+sigma <- 1  # Desviación estándar de la población
+n <- 100  # Tamaño de la muestra
+alpha <- 0.04550026  # Nivel de significancia 
+
+# Generar valores hipotéticos del verdadero volumen medio (de 9.6 a 10.4 litros)
+mu_true <- seq(9.6, 10.4, length.out = 100)
+
+# Calcular el poder estadístico para cada valor de la media verdadera usando pwr.norm.test()
+poder <- sapply(mu_true, function(mu) {
+  effect_size <- abs(mu - mu_0) / sigma  # Tamaño del efecto estandarizado
+  pwr_result <- pwr.norm.test(d = effect_size, n = n, sig.level = alpha, alternative = "two.sided")
+  return(pwr_result$power)
+})
+
+# Crear el gráfico del poder estadístico
+g_poder_pwr <- ggplot(data.frame(mu_true, poder), aes(x = mu_true, y = poder)) +
+  geom_line(color = "blue", size = 1.5) +
+  
+  
+  labs(x = "Verdadero Volumen Medio (litros)", y = "Poder Estadístico",
+       title = "Poder Estadístico en función del Volumen Medio",
+       subtitle = "Prueba bilateral ") +
+  theme_minimal()
+
+# Mostrar el gráfico
+
+cat("Se muestra a continuacion el grafico obtenido basado en el ejemplo de la lectura")
+print(g_poder_pwr)
+
+
+```
+
+### Pregunta 4
+Considerando un volumen medio de 10 litros, ¿cuántos bidones deberían
+revisarse para conseguir un poder estadístico de 0,7
+y un nivel de significación de 0,05?
+
+```{r}
+# Hipotesis
+# Ho: La media de llenado es de 10 litros, es decir, (mu = 10).
+# Ha: la media de llenado es distinta de 10 litros, es decir, (mu != 10).
+
+# Se tiene que que revisar identificar cuantos bidones son necesarios para 
+# determinar un poder estadistico de 0.7 y sig.level de 0.05. Para este efecto
+# se usara pwr.norm.test() para pruebas Z, debido a que conocemos la
+# varianza poblacional, y por ultimo los datos de la muestra aleatoria
+# siguen una distribución normal.
+
+library(pwr)
+
+
+sd <- 1
+
+# Ocupando media enunciado 2
+media_real <- 10.1
+mediaObservada <- 10
+
+d <- (media_real - mediaObservada) / sd
+
+# Test
+res1 <- pwr.norm.test(n = NULL,d = d , sig.level = 0.05, power = 0.7, alternative = "two.sided")
+
+# Resultado tamaño muestra
+cat("Tamaño obtenido: ")
+cat(ceiling(res1[["n"]]))
+
+```
+Como resultado del test, se obtiene que serian necesarios 618 bidones de muestra para conseguir un poder estadistico de 0.7 y un nivel de signficancia de 0.05.
+
+### Pregunta 5
+¿Alcanzaría esta muestra para detectar la diferencia que la ingeniera
+sospecha que existe entre las dos máquinas de la planta con al menos las
+mismas probabilidades de cometer errores?
+
+```{r}
+# Hipotesis
+# Ho: No hay diferencia en el llenado correcto de los bidones entre
+# las 2 maquinas, es decir, (p1 = p2).
+# Ha: Hay diferencia en el llenado correcto de los bidones entre
+# las 2 maquinas, es decir, (p1 != p2).
+
+# Tomando en cuenta que la respuesta de la pregunta anterior dio como 
+# resultado 618 hay que determinar si el resultado de este test con proporciones
+# es 618 observaciones o menos, y en caso contrario no seria suficiente para esto
+# usaremos el test de 2 proporciones de igual tamaño.
+
+
+# Proporciones
+p1 <- 0.90  # Proporción de llenado correcto para la máquina antigua
+p2 <- 0.96  # Proporción de llenado correcto para la máquina moderna
+
+# Tamaño del efecto
+h <- ES.h(p1, p2)
+
+# Cálculo del tamaño de muestra
+res2 <- pwr.2p.test(h = h, n = NULL, sig.level = 0.05, power = 0.7, alternative = "two.sided")
+
+# Resultado tamaño muestra
+cat("Tamaño obtenido: ")
+cat(ceiling(res2[["n"]]))
+
+```
+Como resultado se obtiene que se necesitan 213 observaciones aproximadamente por lo que claramente las 618 obtenidas del ejercicio anterior serian suficientes para determinar una diferencia entre las maquinas.
+
+
+
+
+

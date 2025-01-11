@@ -1,0 +1,78 @@
+---
+title: "EP01-respuesta-equipo-10"
+author: "Martin Salinas, Giuseppe Cavallieri & Martin Gamboa"
+date: "2024-09-24"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#Importacion de librerias
+if(!require(dplyr))
+{
+  install.packages("dplyr",dependencies = T)
+  require(dplyr)
+}
+
+if(!require(ggplot2))
+{
+  install.packages("ggplot2",dependencies = T)
+  require(ggplot2)
+}
+
+if(!require(psych)){
+  install.packages("psych")
+  require(psych)
+}
+
+```
+
+
+```{r}
+#Lectura de datos
+datos <- read.csv2("EP01 Datos Casen 2017.csv")
+```
+
+### Pregunta: Los ingresos de los habitantes de la RM, ¿van incrementándose con la edad de forma similar en hombres y mujeres?
+
+Buscamos conocer si la correlación entre la edad y los ingresos aumente de manera similar en hombre y mujeres. Al estar trabajando con 2 variables numéricas como lo serian la edad y los ingresos, consideramos que la representación gráfica optima para el análisis de los datos es un gráfico de dispersión, para esto separamos primero los datos por hombres y mujeres para realizar los gráficos por separado y posteriormente realizar su análisis.
+
+```{r}
+
+#Separacion de datos en base a su sexo
+Hombres <- datos %>% filter(sexo == "Hombre")
+Mujeres <- datos %>% filter(sexo == "Mujer")
+
+#Seleccion de datos a estudiar(Ingreso total y edad) para hombres y mujeres
+ingresoHombre <- Hombres %>% select(ytot,edad)
+ingresoHombre <- ingresoHombre %>% arrange(edad)
+
+ingresoMujer <- Mujeres %>% select(ytot,edad)
+ingresoMujer <- ingresoMujer %>% arrange(edad)
+
+#Grafico de edad vs ingreso total de los hombres
+ggplot(data = ingresoHombre, aes(x = edad, y = ytot)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth() +
+  labs(title = "Relación entre la edad y el ingreso de los hombres",
+       x = "Edad",
+       y = "Ingreso total") +
+  theme_minimal()
+
+#Grafico de edad vs ingreso total de las mujeres
+ggplot(data = ingresoMujer, aes(x = edad, y = ytot)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth() +
+  labs(title = "Relación entre la edad y el ingreso de las mujeres",
+       x = "Edad",
+       y = "Ingreso total") +
+  theme_minimal()
+
+describe(ingresoHombre)
+
+```
+El aumento de ingresos totales con respecto a la edad tanto en hombres como en mujeres, sigue un aumento bastante similar, encontrándose los máximos en edades cercanas a los 50 años para ambos casos, aun pese a esto, se puede notar un nivel levemente mayor de ingresos en los hombres, incluso siendo mas común casos puntuales de ingresos muy altos.
+

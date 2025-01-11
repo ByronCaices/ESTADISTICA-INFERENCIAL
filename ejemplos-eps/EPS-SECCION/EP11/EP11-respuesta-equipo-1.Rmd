@@ -1,0 +1,761 @@
+---
+title: "EP11 Grupo 1"
+output: html_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+# Cargo las librerías necesarias
+if(!require(tidyr)) install.packages("tidyr")
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(ggpubr)) install.packages("ggpubr")
+if(!require(car)) install.packages("car")
+if(!require(kableExtra)) install.packages("kableExtra")
+if(!require(ggfortify)) install.packages("ggfortify")
+if(!require(leaps)) install.packages("leaps")
+if(!require(caret)) install.packages("caret")
+if(!require(pROC)) install.packages("pROC")
+```
+
+```{=html}
+<style>
+body {
+text-align: justify}
+</style>
+```
+
+
+1. Definir la semilla a utilizar, que corresponde a los primeros cinco dígitos del RUN del integrante de mayor edad del equipo.
+
+```{r cargar_datos}
+# Definimos la semilla
+set.seed(21388)
+
+# Leemos los datos
+datos <- read.csv2(file = "EP09 Datos.csv", stringsAsFactors = TRUE)
+
+# Filtro los datos
+datos_filtrados <- datos %>% mutate(IMC = Weight / ((Height/100) ^2)) %>% mutate(EN = ifelse(IMC > 23.2, 0, 1))
+```
+
+2. Seleccionar una muestra de 100 personas, asegurando que la mitad tenga estado nutricional “sobrepeso” y la otra mitad “no sobrepeso”.
+
+```{r seleccionar_muestra}
+
+# Seleccionar una muestra de 100 personas
+primera_muestra <- datos_filtrados %>% filter(EN == 0) %>% sample_n(50, replace = FALSE)
+segunda_muestra <- datos_filtrados %>% filter(EN == 1) %>% sample_n(50, replace = FALSE)
+muestra <- rbind(primera_muestra, segunda_muestra) %>% sample_frac(1L)
+
+# Calculo una nueva muestra que tenga 15 personas con sobrepeso y 15 personas sin sobrepeso que no se repitan con la muestra anterior
+tercera_muestra <- datos_filtrados %>% filter(EN == 0) %>% sample_n(15, replace = FALSE)
+cuarta_muestra <- datos_filtrados %>% filter(EN == 1) %>% sample_n(15, replace = FALSE)
+
+# Seleccionar una muestra de 30 personas
+muestraTest <- rbind(tercera_muestra, cuarta_muestra) %>% sample_frac(1L)
+```
+
+
+
+# Regresión lineal múltiple
+
+3. Usando las herramientas del paquete leaps, realizar una búsqueda exhaustiva para seleccionar entre dos y ocho predictores que ayuden a estimar la variable Peso (Weight), obviamente sin considerar las nuevas variables IMC ni EN, y luego utilizar las funciones del paquete caret para construir un modelo de regresión lineal múltiple con los predictores escogidos y evaluarlo usando bootstrapping.
+
+```{r seleccionar_predictores}
+# Definimos la semilla
+set.seed(21388)
+
+# Variables de respuesta
+variable_respuesta_continua <- "Weight"
+variable_respuesta_binaria <- "EN"
+variable_prohibida <- c("IMC", "EN")
+
+# Seleccionar datos excluyendo la variable de respuesta binaria
+datos_modelo <- muestra %>% select(-all_of(variable_prohibida))
+
+# Crear fórmula para la regresión
+formula_regresion <- formula(paste(variable_respuesta_continua, ".", sep = " ~ "))
+
+# Realizar selección exhaustiva de subconjuntos de variables
+modelo_seleccion_subconjuntos <- regsubsets(formula_regresion, data = datos_modelo, 
+                                            nbest = 2, nvmax = 8,method = "exhaustive")
+
+# Obtener resumen de la selección
+resumen_seleccion <- summary(modelo_seleccion_subconjuntos)
+
+# Identificar el mejor modelo según BIC
+indice_mejor_bic <- which.min(resumen_seleccion[["bic"]])
+
+# Seleccionar los nombres de las variables del mejor modelo
+variables_seleccionadas <- names(which(resumen_seleccion[["which"]][indice_mejor_bic, ])[-1])
+
+# Imprimir resultados
+print(resumen_seleccion)
+print(variables_seleccionadas)
+
+# Graficar la selección de subconjuntos
+plot(modelo_seleccion_subconjuntos)
+
+```
+
+
+```{r construir_modelo}
+
+# Crear fórmula con las variables seleccionadas
+formula_regresion_seleccionada <- formula(paste(variable_respuesta_continua, 
+                                                paste(variables_seleccionadas, collapse = " + "), sep = " ~ "))
+# Número de bootstrap
+B <- 500
+set.seed(21388)
+
+# Entrenar el modelo
+rlm1Entrenamiento <- train(formula_regresion_seleccionada, data = muestra, method = "lm",
+                           trControl = trainControl(method = "boot", number = B))
+
+# Obtener el modelo final
+rlm1 <- rlm1Entrenamiento[["finalModel"]]
+
+# Imprimir el resumen del modelo
+print(summary(rlm1))
+
+```
+
+## Confiabilidad del modelo RLM
+
+Como sabemos, para evaluar la confiabilidad de un modelo de RLM, debemos verificar las siguientes caracteristicas:
+
+1. La variable de respuesta debe ser cuantitativa y continua, sin restricciones para su variabilidad.
+
+2. Los predictores deben ser cuantitativos o dicotómicos (de ahí la necesidad de variables indicadoras para manejar más de dos niveles).
+
+3. Los predictores deben tener algún grado de variabilidad (su varianza no debe ser igual a cero). En otras palabras, no pueden ser constantes.
+
+4. Cada predictor debe estar relacionado linealmente con la respuesta.
+
+5. La distribución de los residuos debe ser cercana a la normal centrada en cero.
+
+6. La variabilidad de los residuos debe ser aproximadamente constante (homocedasticidad).
+
+7. Los residuos deben ser independientes entre sí.
+
+8. No debe existir multicolinealidad. Esto significa que no deben darse relaciones lineales fuertes (coeficientes de correlación altos) entre dos o más predictores.
+
+9. Las estimaciones de los coeficientes del modelo no deben estar alterados por unas pocas observaciones influyentes.
+
+
+### Multicolinealidad:
+
+```{r confiabilidad_modelo_multicolinealidad}
+# Multicolinealidad
+cat("Factores de inflación de la varianza:\n")
+print(vif(rlm1))
+```
+
+Notemos que los valores de los factores de inflación de la varianza de las variables Ches.Girth, Waist.Girth, Forearm.Girth y Wrist.Minimum.Girth son mayores a 5, lo que sugiere la presencia de multicolinealidad en el modelo. Para abordar este problema, se podría considerar la eliminación de alguna de estas variables del modelo.
+
+```{r eliminar_variables_multicolinealidad}
+variables_seleccionadas <- variables_seleccionadas[-1]
+variables_seleccionadas <- variables_seleccionadas[-4]
+variables_seleccionadas <- variables_seleccionadas[-1]
+variables_seleccionadas <- variables_seleccionadas[-2]
+
+rlm1_sel_text <- paste(variables_seleccionadas, collapse = " + ")
+formula_regresion_seleccionada <- formula(paste(variable_respuesta_continua, rlm1_sel_text, sep = " ~ "))
+
+rlm1_train <- train(formula_regresion_seleccionada, data = datos_modelo, method = "lm",
+                    trControl = trainControl(method = "boot", number = B))
+rlm1<- rlm1_train[["finalModel"]]
+
+cat("Modelo de RLM 1 con cinco predictores:\n")
+print(summary(rlm1))
+cat("Factores de inflación de la varianza:\n")
+print(vif(rlm1))
+
+```
+
+Ahora si, con los resultados obtenidos, podemos concluir que los factores de inflación de la varianza de las variables seleccionadas son menores a 5, lo que sugiere que la multicolinealidad ha sido abordada de manera moderada, ya que podrían afectar ligeramente los resultados, pero esto no es motivo de preocupación.
+
+### Ajuste y linealidad:
+
+```{r confiabilidad_modelo_Ajuste_y_linealidad}
+# Ajuste y linealidad
+rlm1_equiv <- lm(formula_regresion_seleccionada, datos_modelo)
+cat("Prueba de curvatura para los predictores del modelo de RLM 1:\n")
+residualPlots(rlm1_equiv, linear = TRUE)
+
+marginalModelPlots(rlm1_equiv, sd = TRUE, fitted = FALSE)
+
+```
+
+Notemos que, en general, los residuos no presentan patrones claros en los gráficos de ajuste y linealidad, lo que sugiere que la relación entre los predictores y la variable de respuesta es lineal.
+
+### Casos influyentes:
+
+```{r confiabilidad_modelo_Casos_influyentes}
+# Casos influyentes
+rlm1_casos_influyente <- influencePlot(rlm1_equiv, id = list(n = 3))
+cat("Casos notorios para el modelo de RLM:\n")
+print(rlm1_casos_influyente)
+cat("\n")
+```
+
+Notemos que no se observan casos influyentes en el modelo de RLM , lo que sugiere que no hay observaciones que afecten de manera significativa los resultados del modelo.
+
+### Independencia de los residuos:
+
+```{r confiabilidad_independencia_residuos}
+# Independencia de los residuos
+cat("Prueba de la independencia de los residuos para el modelo de RLM:\n")
+print(durbinWatsonTest(rlm1_equiv))
+```
+
+Notemos que el p-value de la prueba de Durbin-Watson es mayor a 0.05, lo que sugiere que, con un 95% de confianza no hay evidencia suficiente para rechazar la hipótesis nula de que los residuos son independientes entre sí.
+
+### Calidad predictiva del modelo:
+
+```{r confiabilidad_calidad_predictiva}
+# Realizar validación cruzada
+
+# Calcular el error cuadrático medio para el conjunto de entrenamiento
+
+rmse_entrenamiento <- sqrt(mean(resid(rlm1_equiv) ** 2))
+cat("MSE para el conjunto de entrenamiento:", rmse_entrenamiento, "\n")
+
+
+predicciones_prueba_rlm <- predict(rlm1_equiv, muestraTest)
+
+# Calcular el error cuadrático medio para el conjunto de prueba
+error <- muestraTest[["Weight"]] - predicciones_prueba_rlm
+rmse_prueba <- sqrt(mean(error ** 2))
+cat("MSE para el conjunto de prueba:", rmse_prueba, "\n")
+
+#calcula el cambio de error
+cat("Cambio de error:", rmse_prueba - rmse_entrenamiento, "\n")
+
+```
+
+Los resultados de los errores cuadráticos medios [MSE] para el conjunto de entrenamiento [4.23] y el conjunto de prueba [3.87] indican que el modelo tiene un buen nivel de generalización. La diferencia entre ambos errores es pequeña, lo que sugiere que el modelo logra predecir con una calidad similar tanto en los datos usados para entrenarlo como en datos nuevos. ES por lo anterior que podemos decir que el modelo es generalizable y puede ser considerado confiable para realizar predicciones con nuevos conjuntos de datos.
+
+### Conclusión de verificaciones del modelo de regresión lineal múltiple
+
+1- La variable de respuesta, es decir el peso, es claramente cuantitativa y continua.
+
+2- Los predictores escogidos de manera exhaustiva son cuantitativos.
+
+3- Tal y como se mencionó anteriormente, los predictores tienen variabilidad.
+
+4- La relación entre los predictores y la variable de respuesta es lineal, tal y como se vio en la multicolinealidad.
+
+5- La distribución de los residuos es cercana a la normal centrada en cero.
+
+6- Visualizando los gráficos de ajuste y linealidad, se puede concluir que la variabilidad de los residuos es aproximadamente constante.
+
+7- Como se vio en el análisis de independencia de los residuos, estos son independientes entre sí.
+
+8- Como se vio en la sección de multicolinealidad, en donde se vio que si habian variables con factores de inflación de la varianza mayores a 5, por lo que se eliminaron para abordar este problema.
+
+9- Usando la función influencePlot, se pudo ver que no hay casos influyentes en el modelo.
+
+
+Es por todo lo anterior que se puede concluir que el modelo de regresión lineal múltiple es confiable, generalizable y puede ser utilizado para realizar predicciones con nuevos conjuntos de datos, esto debido al cumplimiento de las características necesarias para un modelo de regresión lineal múltiple confiable, además de contar con un R-squared de aproximadamante 0.9.
+
+
+# Regresión lineal múltiple con Recursive Feature Elimination
+
+4. Haciendo un poco de investigación sobre el paquete caret, en particular cómo hacer Recursive Feature Elimination (RFE), construir un modelo de regresión lineal múltiple para predecir la variable IMC que incluya entre 10 y 20 predictores, seleccionando el conjunto de variables que maximice R2 y que use cinco repeticiones de validación cruzada de cinco pliegues para evitar el sobreajuste (obviamente no se debe considerar las variables Peso, Estatura ni estado nutricional –Weight, Height, EN respectivamente).
+
+### Selección de predictores con Recursive Feature Elimination (RFE)
+
+```{r cargar_datos}
+# Definir la semilla
+set.seed(21388)
+
+
+# Dividir muestra en entrenamiento y prueba
+
+muestra_entrenamiento_2 <- datos_filtrados %>% sample_frac(0.7)
+muestra_prueba_2 <- setdiff(datos_filtrados, muestra_entrenamiento_2)
+```
+
+```{r rfe}
+# Configuración del control para RFE
+rfe_control <- rfeControl(functions = lmFuncs, method = "repeatedcv", 
+                          number = 5, repeats = 5, verbose = FALSE)
+
+# Configuración del rango de tamaños de los subconjuntos
+rfe_tamanos <- 5:15
+
+# Aplicar RFE
+set.seed(21388)
+rfe_resultados <- rfe(
+  x = muestra_entrenamiento_2 %>% select(-IMC, -Weight, -Height, -EN),
+  y = muestra_entrenamiento_2$IMC,
+  sizes = rfe_tamanos,
+  rfeControl = rfe_control,
+  metric = "Rsquared"
+)
+
+# Mostrar resultados de RFE
+print(rfe_resultados)
+plot(rfe_resultados)
+```
+
+podemos notar que el modelo alcanza su maximo r^2 con 25 variables pero para evitar efectos de sobreajuste  se seleccionaran entre 10 a 20 variables
+
+## Confiabilidad del modelo RLM
+
+Como sabemos, para evaluar la confiabilidad de un modelo de RLM, debemos verificar las siguientes caracteristicas:
+
+1. La variable de respuesta debe ser cuantitativa y continua, sin restricciones para su variabilidad.
+
+2. Los predictores deben ser cuantitativos o dicotómicos (de ahí la necesidad de variables indicadoras para manejar más de dos niveles).
+
+3. Los predictores deben tener algún grado de variabilidad (su varianza no debe ser igual a cero). En otras palabras, no pueden ser constantes.
+
+4. Cada predictor debe estar relacionado linealmente con la respuesta.
+
+5. La distribución de los residuos debe ser cercana a la normal centrada en cero.
+
+6. La variabilidad de los residuos debe ser aproximadamente constante (homocedasticidad).
+
+7. Los residuos deben ser independientes entre sí.
+
+8. No debe existir multicolinealidad. Esto significa que no deben darse relaciones lineales fuertes (coeficientes de correlación altos) entre dos o más predictores.
+
+9. Las estimaciones de los coeficientes del modelo no deben estar alterados por unas pocas observaciones influyentes.
+
+### Modelo inicial con predictores seleccionados
+
+Primeramente construiremos el modelo de rlm inicial con los predictores seleccionados por RFE.
+
+```{r modelo_inicial}
+# Obtener los mejores predictores seleccionados
+mejores_predictores <- predictors(rfe_resultados)
+cat("Mejores predictores seleccionados :
+")
+cat(paste(mejores_predictores, collapse = "\n "), "
+")
+
+
+# Crear fórmula del modelo inicial
+formula_inicial <- as.formula(paste("IMC ~", paste(mejores_predictores, collapse = " + ")))
+
+# Entrenar el modelo inicial
+set.seed(21388)
+modelo_inicial <- train(
+  formula_inicial,
+  data = muestra_entrenamiento_2,
+  method = "lm",
+  trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5)
+)
+
+# Mostrar VIF del modelo inicial
+cat("Factores de inflación de la varianza (VIF) del modelo inicial:\n")
+print(vif(modelo_inicial$finalModel))
+```
+
+Se observa que se eligieron mas variables de lo solicitado pero muchas de ellas tienen un VIF mayor a 5, lo que sugiere presencia de multicolinealidad. Para abordar este problema se eliminaran las variables de VIF alto
+
+### Modelo final con eliminación de variables de VIF alto
+
+```{r modelo_final}
+# Eliminar variables con VIF alto
+a_eliminar <- c("Weight", "Gender", "Forearm.Girth", "Wrist.Minimum.Girth", 
+               "Hip.Girth", "Bicep.Girth", "Chest.Girth", "Shoulder.Girth", 
+               "Waist.Girth","Elbows.diameter")
+mejores_predictores <- setdiff(mejores_predictores, a_eliminar)
+cat("Mejores predictores seleccionados tras eliminar VIF alto:
+")
+cat(paste(mejores_predictores, collapse = "\n "), "
+")
+
+# Crear fórmula del modelo final
+formula_final <- as.formula(paste("IMC ~", paste(mejores_predictores, collapse = " + ")))
+
+# Entrenar el modelo final
+set.seed(21388)
+modelo_final <- train(
+  formula_final,
+  data = muestra_entrenamiento_2,
+  method = "lm",
+  trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5)
+)
+
+# Resumen del modelo final
+print(summary(modelo_final$finalModel))
+
+# Mostrar VIF del modelo final
+cat("Factores de inflación de la varianza (VIF) del modelo final:\n")
+print(vif(modelo_final$finalModel))
+```
+
+### Diagnósticos del modelo
+
+```{r diagnosticos}
+
+# Crear un modelo equivalente con lm para realizar diagnósticos
+modelo_equivalente <- lm(formula_final, data = muestra_entrenamiento_2)
+
+# Gráfico de residuos
+cat("Gráficos de diagnóstico:\n")
+par(mfrow = c(2, 2))
+plot(modelo_equivalente)
+
+# Prueba de curvatura
+cat("Prueba de curvatura:\n")
+residualPlots(modelo_equivalente, linear = TRUE, ask = FALSE)
+
+marginalModelPlots(modelo_equivalente, sd = TRUE, fitted = FALSE)
+# para ver estos graficos se debe apretat enter en la terminal
+```
+
+Atraves de los graficos determinamos que las siguientes variables no cumplen con la linealidad:Knees.diameter , Calf.Maximum.Girth , Knee.Girth , Thigh.Girth  y Navel.Girth.
+
+evaluamos
+```{r}
+
+# Entrenar el modelo final
+set.seed(21388)
+modelo_final <- train(
+  formula_final,
+  data = muestra_entrenamiento_2,
+  method = "lm",
+  trControl = trainControl(method = "repeatedcv", number = 5, repeats = 5)
+)
+
+
+```
+
+
+### Casos influyentes
+
+```{r casos_influyentes}
+# Gráfico de influencia
+cat("Casos influyentes:\n")
+influencePlot(modelo_final$finalModel)
+
+# Identificar observaciones influyentes
+cat("Observaciones influyentes:\n")
+print(cooks.distance(modelo_final$finalModel))
+```
+No hay presencia de casos influyentes en el modelo
+
+### Independencia de residuos
+
+```{r independencia_residuos}
+# Prueba de Durbin-Watson
+cat("Prueba de independencia de residuos:\n")
+print(durbinWatsonTest(modelo_final$finalModel))
+```
+Notemos que el p-value de la prueba de Durbin-Watson es mayor a 0.05, lo que sugiere que, con un 95% de confianza no hay evidencia suficiente para rechazar la hipótesis nula de que los residuos son independientes entre sí.
+
+
+### Desempeño
+```{r}
+# Calcular el RMSE
+predicciones <- predict(modelo_final, newdata = muestra_prueba_2)
+rmse <- sqrt(mean((muestra_prueba_2$IMC - predicciones) ^ 2))
+cat("RMSE en el conjunto de prueba:", rmse, "\n")
+
+rlm2_err_df <- modelo_final$resample %>% select(RMSE)
+rlm2_err_p <- ggplot(rlm2_err_df, aes(x = RMSE)) +
+  geom_histogram(bins = 5, fill = "blue", alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "Distribución del RMSE", x = "RMSE", y = "Frecuencia")
+print(rlm2_err_p)
+
+# Ver el rango de la variable IMC
+rango_imc <- range(datos_filtrados$IMC)
+cat("El rango de IMC es:", rango_imc[1], "a", rango_imc[2], "\n")
+
+```
+
+El RMSE de 1.428709 es razonablemente bajo en comparación con el rango de la variable IMC. Esto indica que el modelo tiene una buena capacidad predictiva 
+
+### Conclusiones
+
+Despues de desarrolar multiples pruebas se concluye que el modelo de regresion lineal multiple 
+posee un buen poder predictivo pero no es confiable dado que 
+1- La variable de respuesta, es decir el IMC, es claramente cuantitativa y continua.
+
+2- Los predictores escogidos de manera exhaustiva son cuantitativos.
+
+3- Tal y como se mencionó anteriormente, los predictores tienen variabilidad.
+
+4- La relación entre los predictores y la variable de respuesta no es lineal en algunas variables
+
+5- La distribución de los residuos es cercana a la normal centrada en cero.
+
+6- Visualizando los gráficos de ajuste y linealidad, se puede concluir que la variabilidad de los residuos es aproximadamente constante.
+
+7- Como se vio en el análisis de independencia de los residuos, estos son independientes entre sí.
+
+8- Como se vio en la sección de multicolinealidad, en donde se vio que si habian variables con factores de inflación de la varianza mayores a 5, por lo que se eliminaron para abordar este problema.
+
+9- Usando la función influencePlot, se pudo ver que no hay casos influyentes en el modelo.
+
+
+Es por todo lo anterior que se puede concluir que el modelo de regresión lineal múltiple no es confiable, pero si tiene un buen poder predictivo, por lo que se recomienda realizar ajustes en el modelo para mejorar su confiabilidad tales como aplicar una transformacion a las variables, además el modelo cuenta con un R-squared de 0.82 aproximadamente.
+
+
+# Regresión logística múltiple usando RFE
+
+5-Usando RFE, construir un modelo de regresión logística múltiple para la variable EN que incluya el conjunto de predictores, entre dos y seis, que entregue la mejor curva ROC y que utilice validación cruzada dejando uno fuera para evitar el sobreajuste (obviamente no se debe considerar las variables Peso, Estatura –Weight y Height respectivamente– ni IMC).
+
+### Preparación de datos
+
+```{r cargar_datos}
+# Definir la semilla
+set.seed(21388)
+
+
+# Convertir EN a factor con niveles válidos
+datos_3 <- datos_filtrados %>%
+  mutate(
+  EN = factor(EN, levels = unique(EN), labels = make.names(unique(EN)))
+  ) %>%
+  select(-c(Weight, Height, IMC))
+
+# Dividir muestra en entrenamiento y prueba
+
+muestra_entrenamiento_3 <- datos_3 %>% sample_frac(0.7)
+muestra_prueba_3 <- setdiff(datos_3, muestra_entrenamiento_3)
+```
+
+### Selección de predictores con Recursive Feature Elimination (RFE)
+
+```{r rfe_logit}
+# Configuración del control para RFE
+lrFuncs$summary <- twoClassSummary
+rfe_control <- rfeControl(
+  functions = lrFuncs,
+  method = "LOOCV",
+  saveDetails = TRUE,
+  returnResamp = "all",
+  verbose = FALSE
+)
+
+# Aplicar RFE para regresión logística
+set.seed(21388)
+rfe_resultados <- rfe(
+  x = muestra_entrenamiento_3 %>% select(-EN),
+  y = muestra_entrenamiento_3$EN,
+  sizes = 2:6,
+  metric = "ROC",
+  rfeControl = rfe_control
+)
+
+# Mostrar resultados de RFE
+cat("Resultados de RFE:")
+print(rfe_resultados)
+plot(rfe_resultados)
+```
+
+Notemos que, de lo anterior, el modelo alcanza su maximo r^2 con 5 variables, como esto coincide con el rango de variables solicitado, se procedera a construir el modelo con estas variables.
+
+
+### Modelo final de regresión logística
+
+```{r modelo_logit_final}
+# Obtener los mejores predictores seleccionados
+mejores_predictores <- predictors(rfe_resultados)
+cat("Mejores predictores seleccionados:")
+cat(paste(mejores_predictores, collapse = "\n "), "\n")
+
+# Crear fórmula del modelo final
+formula_final <- as.formula(paste("EN ~", paste(mejores_predictores, collapse = " + ")))
+
+# Entrenar el modelo final
+train_control <- trainControl(
+  method = "LOOCV",
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary
+)
+
+set.seed(21388)
+modelo_logit <- train(
+  formula_final,
+  data = muestra_entrenamiento_3,
+  method = "glm",
+  family = binomial,
+  metric = "ROC",
+  trControl = train_control
+)
+
+# Resumen del modelo final
+cat("Resumen del modelo de regresión logística:")
+print(summary(modelo_logit$finalModel))
+```
+
+```{r}
+# Extraer el modelo subyacente desde el objeto train
+modelo_logit_base <- modelo_logit$finalModel
+# Bondad de ajuste
+cat("Bondad de ajuste del modelo univariado:\n")
+rlogits_lrt <- anova(modelo_logit_base, test = "LRT")
+print(rlogits_lrt)
+```
+
+eliminaremos los predictores que menos aportan al modelo  en este caso el predictor "Knees.diameter" y "Knee.Girth"
+
+```{r}
+# Eliminar predictores menos importantes
+mejores_predictores <- setdiff(mejores_predictores, c("Knees.diameter", "Knee.Girth"))
+
+# Crear fórmula del modelo final
+formula_final <- as.formula(paste("EN ~", paste(mejores_predictores, collapse = " + ")))
+
+# Entrenar el modelo final
+set.seed(21388)
+modelo_logit <- train(
+  formula_final,
+  data = muestra_entrenamiento_3,
+  method = "glm",
+  family = binomial,
+  metric = "ROC",
+  trControl = train_control
+)
+
+# Resumen del modelo final
+print(summary(modelo_logit$finalModel))
+```
+
+## Confiabilidad del modelo de Regresión logística múltiple
+
+Recordemos que para que un modelo sea confiable se deben de cumplir las siguientes condiciones:
+
+1. Debe existir una relación lineal entre los predictores y la respuesta transformada
+
+2. Los residuos deben ser independientes entre sí
+
+3. Multicolinealidad de los predictores
+
+4. Información incompleta.
+
+5. Separación perfecta.
+
+6. Las estimaciones de los coeficientes del modelo no están dominadas por casos influyentes.
+
+### Prueba de independencia
+
+```{r prueba Dubin Watson RLogitM, results='hold'}
+# Crear un modelo equivalente con glm para realizar diagnósticos
+modelo_equivalente <- glm(formula_final, data = muestra_entrenamiento_3, family = binomial(link = "logit"))
+
+cat("Prueba de la independencia de los residuos para el modelo de RLogitM:\n")
+print(durbinWatsonTest(modelo_equivalente))
+```
+
+Notemos que el p-value de la prueba de Durbin-Watson es mayor a 0.05, lo que sugiere que, con un 95% de confianza no hay evidencia suficiente para rechazar la hipótesis nula de que los residuos son independientes entre sí.
+
+### Prueba de multicolinealidad
+
+```{r}
+cat("Factores de inflación de la varianza (VIF):\n")
+print(vif(modelo_equivalente))
+```
+
+Notemos que claramente no hay multicolinealidad en el modelo, ya que el VIF de todas las variables es menor a 5.
+
+### Información incompleta
+
+Los predictores numéricos seleccionados presentan más de 15 observaciones, por lo que no hay información incompleta.
+
+#### Diagnóstico de casos influyentes
+
+```{r casos_influyentes_modeloRLogitM}
+cat("\nCasos notorios para el modelo de regresión logística múltiple:\n")
+rlogitm_inf_estad <- influencePlot(modelo_equivalente, id = list(n = 3))
+print(rlogitm_inf_estad)
+
+```
+
+Notese que no hay casos influyentes en el modelo de regresión logística múltiple.
+
+### Prueba de curvatura y ajuste
+
+```{r prueba_curvatura}
+cat("Prueba de curvatura:\n")
+residualPlots(modelo_equivalente, linear = TRUE, ask = FALSE)
+
+marginalModelPlots(modelo_equivalente, fitted = TRUE)
+```
+
+
+
+```{r evaluacion_logit}
+
+# Predicción en el conjunto de prueba
+predicciones <- predict(modelo_logit, newdata = muestra_prueba_3, type = "prob")
+
+# Calcular la curva ROC
+roc_obj <- roc(muestra_prueba_3$EN, predicciones[, "X1"], levels = c("X0", "X1"))
+plot(roc_obj, print.auc = TRUE)
+```
+
+## Desempeño
+
+### Poder predictivo del modelo de regresión logística múltiple
+```{r funciones_metricas}
+# Calcular metricas de rendimiento
+metricas <- function(matriz) {
+  exactitud <- sum(diag(matriz)) / sum(matriz)
+  sensibilidad <- matriz[2, 2] / sum(matriz[, 2]) 
+  especificidad <- matriz[1, 1] / sum(matriz[, 1])
+  cat(sprintf("Exactitud: %.2f\nSensibilidad: %.2f\nEspecificidad: %.2f\n", exactitud,sensibilidad,especificidad))
+  list(exactitud = exactitud, sensibilidad = sensibilidad, especificidad = especificidad)
+}
+
+# Comparar cambios entre entrenamiento y prueba
+metricasDif <- function(entrenamiento, prueba) {
+  cambio <- (entrenamiento - prueba) / prueba * 100
+  return(cambio)
+}
+```
+
+```{r poder_predictivo_modeloRLogitM}
+
+modeloRLogitM <- modelo_logit$finalModel
+muestraEntrenamiento <- muestra_entrenamiento_3
+muestraTest <- muestra_prueba_3
+
+# Predicciones para el conjunto de entrenamiento
+probabilidadesEntrenamiento <- predict(modeloRLogitM, muestraEntrenamiento, type = "response")
+prediccionEntrenamiento <- ifelse(probabilidadesEntrenamiento >= 0.5, 1, 0)
+
+# Predicciones para el conjunto de prueba
+probabilidadesPrueba <- predict(modeloRLogitM, muestraTest, type = "response")
+prediccionPrueba <- ifelse(probabilidadesPrueba >= 0.5, 1, 0)
+
+# Matrices de confusión
+matrizEntrenamiento <- table(Predicho = prediccionEntrenamiento, Observado = muestraEntrenamiento$EN)
+matrizPrueba <- table(Predicho = prediccionPrueba, Observado = muestraTest$EN)
+
+# Mostrar las matrices de confusión
+cat("Matriz de confusión entrenamiento:\n")
+print(matrizEntrenamiento)
+cat("\nMatriz de confusión prueba:\n")
+print(matrizPrueba)
+
+# Obtener métricas
+cat("\nRendimiento del modelo múltiple de entrenamiento:\n")
+metricasEntrenamiento <- metricas(matrizEntrenamiento)
+
+cat("\nRendimiento del modelo múltiple de prueba:\n")
+metricasPrueba <- metricas(matrizPrueba)
+
+cat(sprintf("\nCambios entre modelos de entrenamiento a prueba:\nCambio en Exactitud: %.2f%%\nCambio en Sensibilidad: %.2f%%\nCambio en Especificidad: %.2f%%\n", 
+            metricasDif(metricasEntrenamiento$exactitud, metricasPrueba$exactitud),
+            metricasDif(metricasEntrenamiento$sensibilidad,metricasPrueba$sensibilidad),
+            metricasDif(metricasEntrenamiento$especificidad, metricasPrueba$especificidad)))
+```
+
+El modelo de regresión logística múltiple tiene un poder predictivo razonable, con una exactitud de 0.87, una sensibilidad de 0.85 y una especificidad de 0.88 Además, el modelo generaliza bien, ya que las métricas de rendimiento son similares en los conjuntos de entrenamiento y prueba. Es por lo anterior que se puede concluir que el modelo es confiable y generalizable, y puede ser utilizado para realizar predicciones con nuevos conjuntos de datos.
+
+# Conclusiones
+
+Tras realizar los análisis correspondientes, se puede concluir que el modelo de regresión lineal múltiple para el peso es confiable ya que se cumplen todas las condiciones necesarias para que el modelo sea confiable, además tiene un buen poder predictivo, el modelo cuenta con un R-squared de 0.9 aproximadamente para la forma tradicional de encontrar un RLM, y es por lo anterior qu podemos decir que el modelo cuenta con una buena bondad de ajuste, es confiable y generalizable, y puede ser utilizado para realizar predicciones con nuevos conjuntos de datos.
+
+Luego, para el modelo de regresión lineal múltiple con Recursive Feature Elimination, se puede concluir que el modelo no es confiable, ya que hay ciertas condiciones que , pero si tiene un buen poder predictivo, por lo que se recomienda realizar ajustes en el modelo para mejorar su confiabilidad, tales como aplicar una transformación a las variables, además el modelo cuenta con un R-squared de 0.82 aproximadamente, por lo que podemos decir que el modelo cuenta con una buena bondad de ajuste, el modelo no es confiable del todo pero puede ser usado con precacución para realizar predicciones con nuevos conjuntos de datos.
+
+Finalmente el modelo de regresión logística múltiple es confiable y generalizable, y puede ser utilizado para realizar predicciones con nuevos conjuntos de datos, esto debido al cumplimiento de las características necesarias para un modelo de regresión logística múltiple confiable, además de contar con un AUC de 0.96 aproximadamente, lo que nos decia con anterioridad que el modelo realizaria predicciones relativamente buenas.

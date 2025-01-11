@@ -1,0 +1,120 @@
+---
+title: "EP02"
+author: "Mohamed Al-Marzuk, Giuseppe Cavallieri, Martin Gamboa"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+Se importan las librerías necesarias
+
+```{r}
+library(dplyr)
+```
+
+Pregunta 1: Para responder a esta pregunta, utilizaremos la prueba T de Student. Para eso, definimos nuestras hipótesis:
+
+Hipótesis nula: El tiempo medio previo de los atletas de raza blanca es igual a 16,2 segundos. (mu = 16,2)
+
+Hipótesis alternativa: El tiempo medio previo de los atletas de raza blanca es diferente de 16,2 segundos. (mu != 16,2)
+
+Y vamos a determinar un nivel de significancia de 0,05
+
+```{r}
+datos <- read.csv2("EP02 Datos.csv")
+
+blancosPrevio = datos$Previo[datos$Raza=="Blanca"]
+
+t_test <- t.test(blancosPrevio, mu = 16.2)
+print(t_test)
+
+```
+
+Al realizar la prueba, vemos que el valor p obtenido es de 0,15. Esto es mayor al nivel de significancia definido, por lo que rechazamos la hipótesis nula. La media no es igual a 16,2. Finalmente, la media obtenida es de 16,45.
+
+Pregunta 2: La hipótesis nula en este caso es que la media sea en promedio igual a 4.7 segundos, mientras que la alternativa es que sea distinta.
+
+H0: mu = 4.7
+
+Ha: mu != 4.7
+
+Utilizaremos una significación de 0.05 (5%).
+
+Se aplica un test t-student de una muestra en base a las hipotesis, (two.sided, pues la hipotesis alternativa muestra que mu puede ser menor o mayor a 4.7)
+
+```{r}
+#Filtrar datos de los atletas orientales
+Orientales <- datos %>% filter(Raza == "Oriental")
+#Agregar una variable extra que representa la disminución en el tiempo promedio de los atletas luego del programa de entrenamiento
+AddDiferencia <- Orientales %>% mutate(Diferencia2 = as.numeric(gsub(",", ".", Previo)) - as.numeric(gsub(",", ".", Posterior)))
+#Se obtiene la columna de la nueva variable
+Diferencia2 <- AddDiferencia$Diferencia2
+#Se calcula la media real
+Media = mean(Diferencia2)
+t.test(Diferencia2, mu = 4.7, alternative = "two.sided")
+```
+Al ser el valor p menor que la significación, podemos rechazar la hipótesis nula en favor de la alternativa, es decir, que la media en promedio no es igual a 4.7 segundos. De hecho podemos ver que el valor real de la media es mas cercano a 4.9 o 5 segundos.
+
+Pregunta 3: Como se busca comparar las medias de dos poblaciones, utilizaremos la prueba t de student. Definimos las siguientes hipótesis:
+
+Hipotesis Nula: La diferencia entre los promedios de ambas razas de atletas tras el entrenamiento es igual a 1. (diferenciaPromedios = 1)
+
+Hipotesis Alternativa: La diferencia entre los promedios de ambas razas de atletas tras el entrenamiento es menor que 1 (diferenciaPromedios < 1)
+
+observación: diferenciaPromedios = promedioRazaNegra - promedioRazaBlanca
+
+```{r}
+
+blancos2 = as.numeric(gsub(",", ".", datos$Posterior[datos$Raza == "Blanca"]))
+negros2 = as.numeric(gsub(",", ".", datos$Posterior[datos$Raza == "Blanca"]))
+
+# "mu = 1" es el valor nulo, en este caso es 1
+tTest2 = t.test(negros2, blancos2, alternative = "less", mu = 1)
+
+print(tTest2$p.value)
+```
+
+El resultado es < 0.05, por lo que se rechaza la hipotesis nula. Se concluye 
+que los atletas de raza negra superan a los de raza blanca por menos de un
+segundo después del entrenamiento
+
+Pregunta 4: Para responder a esta pregunta, tenemos que comparar la proporción de atletas blancos que redujeron sus marcas en al menos 3,5 segundos, con la proporción de atletas negros que redujeron sus marcas en al menos 1,4 segundos. Por lo tanto, definimos nuestras hipótesis:
+
+Hipótesis nula = No hay diferencia significativa entre las proporciones de atletas de raza blanca que redujeron sus mejores marcas en al menos 3,5 segundos y atletas de raza negra que redujeron sus mejores marcas en al menos 1,4 segundos. 
+(propBlancos = propNegros)
+
+Hipótesis alternativa = Hay una diferencia significativa entre las proporciones de atletas de raza blanca y negra que lograron las respectivas reducciones de tiempo.
+(propBlancos != propNegros)
+
+```{r}
+
+blancos <- datos %>% filter(Raza == "Blanca")
+negros <- datos %>% filter(Raza == "Negra")
+
+blancos$Diferencia <- blancos$Previo - blancos$Posterior
+blancosNuevo <- blancos %>% filter(Diferencia >= 3.5)
+
+negros$Diferencia <- negros$Previo - negros$Posterior
+negrosNuevo <- negros %>% filter(Diferencia >= 1.4)
+
+numBlancos <- nrow(blancos)
+numNegros <- nrow(negros)
+
+numBlancosNuevo <- nrow(blancosNuevo)
+numNegrosNuevo <- nrow(negrosNuevo)
+
+propBlancos = numBlancosNuevo/numBlancos
+propNegros = numNegrosNuevo/numNegros
+
+cat("Proporción de atletas blancos que redujeron su tiempo en al menos 3.5 segundos:", propBlancos, "\n")
+cat("Proporción de atletas negros que redujeron su tiempo en al menos 1.4 segundos:", propNegros, "\n")
+
+propTest <- prop.test(c(numBlancosNuevo, numNegrosNuevo), c(numBlancos, numNegros))
+print(propTest)
+```
+En base a los resultados obtenidos, podemos concluir lo siguiente: El 15,38% de atletas blancos redujeron su tiempo en al menos 3,5 segundos, mientras que el 60,71% de atletas negrus logró reducir su tiempo en al menos 1,4 segundos.
+
+Ahora, vamos a analizar el valor p, que nos dio que es igual a 0,00172. Este es un valor demasiado pequeño, por lo que hay una diferencia significativa entre ambas proporciones.
+
+El intervalo de confianza es negativo en ambos extremos, por lo que podemos decir que la proporción de atletas negros es mayor que la de atletas blancos.
+
+Con toda esta información, podemos rechazar la hipótesis nula, y decir que hay una diferencia significativa entre ambas proporciones.

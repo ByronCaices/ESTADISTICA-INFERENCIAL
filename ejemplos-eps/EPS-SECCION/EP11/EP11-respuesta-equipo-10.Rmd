@@ -1,0 +1,686 @@
+---
+title: "EP11-respuesta-equipo-10"
+author: "Equipo 3"
+date: "2024-12-17"
+output: html_document
+---
+
+# Preguntas
+
+1.  **Definir la semilla a utilizar, que corresponde a los primeros cinco dígitos del RUN del integrante de mayor edad del equipo.**
+
+Para ello, preliminarmente se cargan todas las librerías necesarias.
+
+```{r}
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(tidyr)) install.packages("tidyr")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(ggpubr)) install.packages("ggpubr")
+if(!require(ggmosaic)) install.packages("ggmosaic")
+if(!require(kableExtra)) install.packages("kableExtra")
+if(!require(pwr)) install.packages("pwr")
+if(!require(tidyverse)) install.packages("tidyverse")
+if(!require(rcompanion)) install.packages("rcompanion")
+if(!require(RVAideMemoire)) install.packages("RVAideMemoire")
+if(!require(ez)) install.packages("ez")
+if(!require(nlme)) install.packages("nlme")
+if(!require(emmeans)) install.packages("emmeans")
+if(!require(pROC)) install.packages("pROC")
+if(!require(caret)) install.packages("caret")
+if(!require(leaps)) install.packages("leaps")
+if(!require(car)) install.packages("car")
+```
+
+Luego, se utiliza la semilla $19497$.
+
+2.  **Seleccionar una muestra de 100 personas, asegurando que la mitad tenga estado nutricional “sobrepeso” y la otra mitad “no sobrepeso”.**
+
+```{r}
+set.seed(19497)
+
+# Se leen los datos
+datos = read.csv2("EP09 Datos.csv")
+datos2 = read.csv2("EP09 Datos.csv")
+
+
+# Se crean las columnas IMC y EN a partir de los datos obtenidos
+
+datos_modificados <- datos
+datos_modificados$Height <- (datos_modificados$Height/100)^2
+datos_modificados$IMC <- datos_modificados$Weight/datos_modificados$Height
+datos_modificados$EN <- ifelse(datos_modificados$IMC >= 23.2, "sobrepeso", "no sobrepeso")
+
+
+#--------------- SE USARA EN LA PREGUNTA 4 ---------------
+
+#Conseguimos el EN para trabajar con los datos
+datos2$Height <- (datos2$Height/100)^2 #Tenemos que pasar la altura a metros y luego al cuadrado.
+datos2$IMC <- (datos2$Weight/datos2$Height) 
+datos2$EN <- ifelse(datos2$IMC >= 23.2, "sobrepeso", "no sobrepeso")
+
+
+# Se convierten las columnas en factores
+#datos_modificados[["Gender"]] <- factor(datos_modificados[["Gender"]])
+datos_modificados[["EN"]] <- factor(datos_modificados[["EN"]])
+
+# Del grupo de datos, se obtienen 100 muestras aleatorias por separado, 50 para personas con sobrepeso y 50 sin sobrepeso.
+muestra_sobrepeso = datos_modificados %>% filter(EN == "sobrepeso" ) %>% sample_n(50, replace = FALSE)
+muestra_sinSobrepeso = datos_modificados %>% filter(EN == "no sobrepeso" ) %>% sample_n(50, replace = FALSE)
+
+# Se mezclan ambos grupos en una muestra, desordenando el conjunto con la finalidad de evitar sesgos.
+muestraTotal <- rbind(muestra_sobrepeso, muestra_sinSobrepeso) |> sample_frac(1L)
+
+```
+
+3.  **Usando las herramientas del paquete `leaps`, realizar una búsqueda exhaustiva para seleccionar entre dos y ocho predictores que ayuden a estimar la variable Peso (`Weight`), obviamente sin considerar las nuevas variables `IMC` ni `EN`, y luego utilizar las funciones del paquete `caret` para construir un modelo de regresión lineal múltiple con los predictores escogidos y evaluarlo usando bootstrapping.**
+
+Primero, se aplica la búsqueda exhaustiva sobre el conjunto de datos:
+
+```{r}
+set.seed(19497)
+
+# Variables a considerar
+variableEstimar <- "Weight"
+variablesFuera <- c("EN", "IMC")
+
+# Al conjunto de datos de la muestra combinada, se descartan las variables asociadas al estado nutricional y el IMC 
+muestraEvaluar <- muestraTotal |> select(-all_of(variablesFuera))
+
+# Se obtiene el modelo completo de regresión lineal múltiple
+formula_rlm <- formula(paste(variableEstimar, ".", sep = " ~ "))
+
+# Sobre el modelo anterior, se lleva a cabo la búsqueda exhaustiva
+rlm_sets <- regsubsets(formula_rlm, data = muestraEvaluar, nbest = 3, nvmax = 8, method = "exhaustive")
+
+# Se obtiene una representación gráfica de los resultados de la búsqueda exhaustiva, de acuerdo a los valores BIC de cada predictor
+plot(rlm_sets)
+
+# Se extraen los mejores subconjuntos de predictores
+rlm1_sets_summ <- summary(rlm_sets)
+rlm1_sets_i_mejor <- which.min(rlm1_sets_summ[["bic"]])
+
+# Se extraen las variables seleccionadas
+rlm1_seleccion <- names(which(rlm1_sets_summ[["which"]][rlm1_sets_i_mejor, ])[-1])
+
+# Se extrae el modelo
+rlm1_sets_sorted_bic <- order(rlm1_sets_summ[["bic"]]) 
+rlm1_sets_i_segundo_mejor <- rlm1_sets_sorted_bic[4]   
+rlm1_seleccion_otro <- names(which(rlm1_sets_summ[["which"]][rlm1_sets_i_segundo_mejor, ])[-1])
+
+# Se muestran por pantalla dichas variables
+cat("Mejores predictores para el modelo de RLM 1:\n")
+print(rlm1_seleccion_otro)
+```
+De la figura obtenida, se observa que la combinación de subconjuntos de predictores para el modelo completo, que minimizan en mayor medida al indicador $BIC$ está compuesta por las variables `Knees.diameter`, `Chest.Girth`, `Waist.Girth`, `Thigh.Girth`, `Calf.Maximum.Girth` y `Height`; entregando un $BIC=-360$.
+
+En base a lo anterior, se utilizan dichos predictores para construir el modelo de regresión lineal múltiple en función del peso (`Weight`), y se evalúa mediante *bootstrapping*:
+
+```{r}
+# Se realiza bootstraping para evaluar la calidad de predicción del modelo
+B <- 1999
+set.seed(19497)
+rlm1_train <- train(Weight ~ Chest.Girth + Waist.Girth + Thigh.Girth + Calf.Maximum.Girth + Height, data = muestraEvaluar, method="lm", trControl =
+                      trainControl(method = "boot", number = B))
+
+# Se entrega el modelo final remuestreado
+rlm1 = rlm1_train[["finalModel"]]
+cat("Modelo de regresión lineal múltiple 1:\n")
+summary(rlm1)
+
+```
+
+En base al modelo obtenido, se puede observar que los predictores explican alrededor del $97.77 \%$ de la variabilidad de la variable de respuesta, en base a su $R_{adj}^2$; además de que todos ellos cuentan con un `p-value` $< 0.05$, lo cual sugiere que, con un $95 \%$ de confianza, se pueda afirmar que todos ellos son significativos para predecir `Weight`.
+
+Por otro lado, se observa que el intercepto es negativo, lo que carece de sentido al estar hablando del peso de una persona; sin embargo, se debe tener en cuenta que dicho comportamiento tiene su explicación cuando el resto de predictores son iguales a cero, lo cual es imposible en la realidad, por lo que no tiene ningún sentido práctico, y no debería afectar la interpretación del modelo.
+
+A continuación, se evalúa la confiabilidad del modelo, al evaluar el cumplimiento de las siguiente condiciones:
+
+a.  *La variable de respuesta debe ser cuantitativa y continua, sin restricciones para su variabilidad*
+
+Lo anterior se cumple, ya que la variable de respuesta `Weight`, que representa el peso de una persona y que está medido en kilogramos, es de tipo numérica, además de ser una variable continua.
+
+Esto se refuerza por medio de la función `class()`:
+
+```{r}
+class(muestraEvaluar$Weight)
+```
+
+b.  *Los predictores deben ser cuantitativos o dicotómicos*
+
+Para evaluar dicha condición, se aplica la función `class()` sobre las variables seleccionadas, por medio de `sapply()`:
+
+```{r}
+sapply(muestraEvaluar[rlm1_seleccion], class)
+```
+
+c.  *Los predictores deben tener algún grado de variabilidad, es decir, no ser constantes*
+
+De manera similar a la condición anterior, se calcula su varianza a través de la función `var()`:
+
+```{r}
+apply(muestraEvaluar[rlm1_seleccion], 2, var)
+```
+
+De lo anterior, se puede notar que el predictor `Height` presenta una varianza muy cercana a cero, lo cual sugiere que no aporta información al modelo, por lo que se podría recomendar su eliminación.
+
+d.  *Cada predictor debe estar linealmente relacionado con la variable de respuesta*
+
+Lo anterior se lleva a cabo mediante gráficos de dispersión de los residuos, a través de la función `residualPlots()`:
+
+```{r}
+# Debido a la forma en que se ha definido el modelo, se debe ajustar la fórmula para evaluar los residuos
+rlm1_equivalente = lm(Weight ~ Chest.Girth + Waist.Girth + Thigh.Girth + Calf.Maximum.Girth + Height + Height, data = muestraEvaluar)
+
+cat("Prueba de curvatura de los predictores del modelo del RLM")
+residualPlots(rlm1_equivalente, linear = TRUE)
+```
+En base a los resultados de la prueba de curvatura, se observa que los predictores `Calf.Maximum.Girth` y `Thigh.Girth` no cumplen la condición de linealidad, dado que sus `p-values` son menores al nivel de significancia, implicando así que no se relacionan linealmente con el peso. 
+
+Esto mismo se refuerza con los gráficos de residuos, donde se aprecia que sus residuos se concentran principalmente en una región, dejando ciertos valores atípicos en los extremos. 
+
+En base a ello, se eliminan dichos predictores del modelo, y se vuelve a verificar dicha condición:
+
+```{r}
+# Modelo con transformaciones sugeridas
+rlm_transformado <- lm(Weight ~ Chest.Girth + Waist.Girth + Height,              
+                       data = muestraEvaluar)
+
+# Evaluar el modelo transformado
+cat("Modelo con transformaciones:\n")
+print(summary(rlm_transformado))
+
+# Verificar los residuos
+cat("\nPrueba de curvatura de los predictores con transformaciones:")
+residualPlots(rlm_transformado, linear = TRUE)
+
+```
+
+En base a los resultados obtenidos, se observa que los predictores restantes **si cumplen** con la condición de linealidad, ya que sus `p-values` son mayores al nivel de significancia, además de que sus gráficos de residuos están distribuidos sin ningún patrón apartente, lo que sugiere que se relacionan linealmente con el peso.
+
+Con el modelo modificado, se procede a evaluar mediante *bootstrapping*:
+
+```{r}
+B <- 1999
+set.seed(19497)
+
+# Modelo con transformaciones cuadráticas
+rlm1_train <- train(Weight ~ Chest.Girth + Waist.Girth + Height,              
+                    data = muestraEvaluar, 
+                    method = "lm", 
+                    trControl = trainControl(method = "boot", number = B))
+
+# Modelo final remuestreado
+rlm1 = rlm1_train[["finalModel"]]
+cat("Modelo de regresión lineal múltiple con transformaciones cuadráticas:\n")
+summary(rlm1)
+
+```
+
+El modelo presenta un valor de $R^2$ de $0.9148$, lo cual sugiere que el modelo ajustado es capaz de explicar el $91.48 \%$ de la variabilidad de la variable de respuesta, lo cual es menor con respecto al modelo original, pero sigue siendo un valor bastante alto.
+
+Además, todos los predictores presentan un `p-value` $< 0.05$, lo cual sugiere que, con un $95 \%$ de confianza, se pueda afirmar que todos ellos son significativos para predecir `Weight`.
+
+e.  *La distribución de los residuos debe ser cercana a la normal centrada en 0*
+
+Para evaluar la normalidad de los residuos, se aplica la prueba de Shapiro-Wilk, a través de la función `shapiro.test()`:
+
+```{r}
+set.seed(19497)
+cat("Prueba de Shapiro-Wilk para los residuos del modelo de RLM 1:\n")
+shapiro.test(rlm1$residuals)
+
+```
+
+En base al `p-value` obtenido, que es mayor al nivel de significancia de $p-value$ considerado para la prueba, se puede afirmar que los residuos siguen una distribución normal, cumpliéndose la condiciones de normalidad.
+
+f.  *La variabilidad de los residuos debe ser aproximadamente constante (homocedasticidad)*
+
+Para evaluar la homocedasticidad de los residuos, se utiliza la función `ncvTest()` (*Non-constant Variance Score Test*):
+
+```{r}
+cat("Prueba de homocedasticidad de los residuos del modelo de RLM 1:\n")
+ncvTest(rlm1)
+```
+
+Dado que el `p-value` entregado es **menor** al nivel de significancia del $0.05$, se concluye que la varianza de los residuos no es constante, por lo que no se cumple con el principio de homocedasticidad.
+
+g.  *Los residuos deben ser independientes entre sí*
+
+Para evaluar la independencia de los residuos, se aplica la función `durbinWatsonTest()`:
+
+```{r}
+cat("Prueba de independencia de los residuos del modelo de RLM 1:\n")
+durbinWatsonTest(rlm1)
+```
+
+Dado que el `p-value` entregado es mayor a $0.05$, se puede afirmar que no hay evidencia de autocorrelación entre los residuos, por lo que se cumple con la condición de independencia.
+
+h.  *No debe haber multicolinealidad entre los predictores*
+
+Para evaluar la multicolinealidad entre los predictores, se aplica la función `vif()`, que calcula el factor de inflación de la varianza:
+
+```{r}
+cat("Factor de inflación de la varianza para el modelo de RLM 1:\n")
+print(vif(rlm1))
+```
+
+De lo anterior, se puede notar que los predictores `Waist.Girth` y `Chest.Girth` presentan un factor de inflación de la varianza mayor a 5, lo cual sugiere que podrían afectar considerablemente los resultados, por lo que se recomienda indagar más a fondo y efectuar acciones correctivas.
+
+i.  *Las estimaciones de los coeficientes no deben estar alteradas por unas pocas observaciones influyentes*
+
+Para estudiar la presencia de posibles valores atípicos que puedan influir sobre el ajuste del modelo, se utiliza la función `influencePlot()`:
+
+```{r}
+# Estudiamos la inlfuencia de observaciones influyentes en el modelo original 
+influencia = influencePlot(rlm1, id = list(cex=0.4))
+print(influencia)
+
+```
+Para el modelo en cuestión, se identifican ciertos valores atípicos asociados a los pesos de los participantes 21, 39, 42 y 59, pero que no influyen directamente sobre el modelo al observar los resultados del análisis de influencia, al no haber valores $Hat=1$ que puedan sugerir un posible apalancamiento, además que sus distancias de Cook son menores a 1.
+
+En base a las condiciones anteriores, se puede afirmar que el modelo resulta ser confiable en la mayoría de los casos —explicando un $91.48 \%$ de la variabilidad del peso— salvo para el caso de la homocedasticidad, para el cual se evaluó utilizando diferentes modelos con distintos subconjuntos de predictores, pero no se encontró un modelo que lograse satisfacer dicha condición.
+
+4.  **Haciendo un poco de investigación sobre el paquete `caret`, en particular cómo hacer Recursive Feature Elimination (RFE), construir un modelo de regresión lineal múltiple para predecir la variable `IMC` que incluya entre 10 y 20 predictores, seleccionando el conjunto de variables que maximice $R^2$ y que use cinco repeticiones de validación cruzada de cinco pliegues para evitar el sobreajuste (obviamente no se debe considerar las variables Peso, Estatura ni estado nutricional –`Weight`, `Height`, `EN` respectivamente).**
+
+```{r}
+set.seed(19497)
+# Eliminar las variables no deseadas
+datos_rfe <- datos2[, !(names(datos2) %in% c("Weight", "Height", "EN"))]
+
+# Configurar el control de RFE con validación cruzada de 5 pliegues y 5 repeticiones
+control_rfe <- rfeControl(
+  functions = lmFuncs,         # Funciones específicas para regresión lineal
+  method = "repeatedcv",       # Validación cruzada repetida
+  repeats = 5,                 # Número de repeticiones
+  number = 5,
+  verbose = FALSE              # Mostrar menos mensajes
+)
+
+# Ejecutar RFE para seleccionar las mejores variables
+rfe_resultado <- rfe(
+  x = datos_rfe %>% select(-IMC),  # Variables predictoras
+  y = datos_rfe$IMC,                          # Variable objetivo
+  sizes = 10:20,                              
+  rfeControl = control_rfe                    
+)
+
+# Ver las variables seleccionadas
+print(rfe_resultado)
+
+# Obtener el conjunto final de variables seleccionadas
+mejores_variables <- predictors(rfe_resultado)
+
+# Construir el modelo final de regresión lineal múltiple con las mejores variables
+modelo_final <- train(
+  formula(paste("IMC ~", paste(mejores_variables, collapse = " + "))),
+  data = datos_rfe,
+  method = "lm",                           # Método de regresión lineal
+  trControl = trainControl(
+    method = "repeatedcv",                 # Validación cruzada repetida
+    number = 5,                            # Número de pliegues
+    repeats = 5                            # Número de repeticiones
+  )
+)
+
+# Mostrar el resumen del modelo
+summary(modelo_final$finalModel)
+```
+
+En base al modelo obtenido, se observa que los predictores explican alrededor del $87.71 \%$ de la variabilidad de la variable de respuesta, en base a su $R_{adj}^2$; sin embargo, también se observa que las variables `Wrist.Minimum.Girth`, `Wrists.diameter`, `Knee.Girth`, `Bitrochanteric.diameter` y `Ankle.Minimum.Girth` no son significativas para predecir el IMC, ya que sus `p-values` son mayores a $0.05$, por lo que se eliminarán del modelo, y se volverá a evaluar con las variables restantes.
+
+```{r}
+set.seed(19497)
+
+variables_significativas <- summary(modelo_final$finalModel)$coefficients %>%
+  as.data.frame() %>%
+  rownames_to_column("Variable") %>%
+  filter(`Pr(>|t|)` <= 0.05) %>%
+  pull(Variable)
+
+modelo_ajustado <- train(
+  formula(paste("IMC ~", paste(variables_significativas[-1], collapse = " + "))),
+  data = datos_rfe,
+  method = "lm",
+  trControl = trainControl(
+    method = "repeatedcv",
+    number = 5,
+    repeats = 5
+  )
+)
+
+summary(modelo_ajustado$finalModel)
+```
+
+En base al nuevo modelo obtenido, en el que todos los predictores son significativos para predecir el `IMC` con un $95 \%$ de confianza, se puede observar que estos explican alrededor del $87.51 \%$ de la variabilidad de la variable de respuesta, en base a su $R_{adj}^2$, lo cual es ligeramente menor al modelo previo.
+
+Por otro lado, se observa que el intercepto es negativo, lo que carece de sentido al estar hablando del peso de una persona; sin embargo, se debe tener en cuenta que dicho comportamiento tiene su explicación cuando el resto de predictores son iguales a cero, lo cual es imposible en la realidad, por lo que no tiene ningún sentido práctico, y no debería afectar la interpretación del modelo.
+
+A continuación, se evalúa la confiabilidad del modelo, al evaluar el cumplimiento de las siguiente condiciones:
+
+a.  *La variable de respuesta debe ser cuantitativa y continua, sin restricciones para su variabilidad*
+
+Lo anterior se cumple, ya que la variable de respuesta `IMC`, que representa la masa corporal de una persona y que está medida en kilogramos por metro cuadrado, es de tipo numérica, además de ser una variable continua.
+
+Esto se refuerza por medio de la función `class()`:
+
+```{r}
+class(muestraTotal$IMC)
+```
+
+b.  *Los predictores deben ser cuantitativos o dicotómicos*
+
+Para evaluar dicha condición, se aplica la función `class()` sobre las variables seleccionadas, por medio de `sapply()`:
+
+```{r}
+sapply(muestraTotal[setdiff(variables_significativas, "(Intercept)")], class)
+```
+
+Donde la variable `Gender` es de tipo dicotómica, tomando valores `0` o `1` para mujeres y hombres respectivamente.
+
+c.  *Los predictores deben tener algún grado de variabilidad, es decir, no ser constantes*
+
+De manera similar a la condición anterior, se calcula su varianza a través de la función `var()`:
+
+```{r}
+apply(muestraEvaluar[setdiff(variables_significativas, "(Intercept)")], 2, var)
+```
+
+De lo anterior, se puede notar que el predictor `Gender` presenta una varianza muy cercana a cero, lo cual sugiere que no aporta información al modelo, por lo que se podría recomendar su eliminación.
+
+d.  *Cada predictor debe estar linealmente relacionado con la variable de respuesta*
+
+Lo anterior se lleva a cabo mediante gráficos de dispersión de los residuos, a través de la función `residualPlots()`:
+
+```{r}
+
+# Debido a la forma en que se ha definido el modelo, se debe ajustar la fórmula para evaluar los residuos
+
+rlm2_equivalente = lm(IMC ~ Gender + Knees.diameter + Forearm.Girth + Elbows.diameter + Calf.Maximum.Girth + Ankles.diameter + Waist.Girth + Biacromial.diameter + Thigh.Girth + Biiliac.diameter + Bicep.Girth + Hip.Girth + Chest.Girth, data = datos_rfe)
+
+cat("Prueba de curvatura de los predictores del modelo del RLM")
+residualPlots(rlm2_equivalente, linear = TRUE)
+
+```
+
+En base a los resultados de la prueba de curvatura, se aprecia que los `p-value` de las variables `Calf.Maximum`, `Thigh.Girth`, y `Hip.Girth` son menores al nivel de significación, lo que sugiere que no se relacionan linealmente con el `IMC`.
+
+e.  *La distribución de los residuos debe ser cercana a la normal centrada en 0*
+
+```{r}
+shapiro.test(modelo_ajustado$finalModel$residuals)
+```
+
+En base al `p-value` obtenido, que es mayor al nivel de significancia del $0.05$, se puede afirmar que los residuos siguen una distribución normal, cumpliéndose la condiciones de normalidad.
+
+f.  *La variabilidad de los residuos debe ser aproximadamente constante (homocedasticidad)*
+
+```{r}
+
+print(ncvTest(modelo_ajustado$finalModel))
+```
+
+En base a los resultados obtenidos, se aprecia que el `p-value` entregado es considerablemente **menor** al nivel de significancia del $0.05$, lo que sugiere que la varianza de los residuos no es constante, por lo que no se cumple con el principio de homocedasticidad.
+
+g.  *Los residuos deben ser independientes entre sí*
+
+Para evaluar la independencia de los residuos, se aplica la función `durbinWatsonTest()`:
+
+```{r}
+durbinWatsonTest(modelo_ajustado$finalModel)
+```
+
+En base al `p-value` obtenido, que es mayor al nivel de significancia de $p-value$ considerado para la prueba, se puede afirmar que no hay evidencia de autocorrelación entre los residuos, por lo que se cumple con la condición de independencia.
+
+h.  *No debe haber multicolinealidad entre los predictores*
+
+```{r}
+set.seed(19497)
+print(vif(modelo_ajustado$finalModel))
+```
+
+En base a los valores obtenidos, se aprecia que ciertos predictores, como `Biiliac.diameter`, `Biacromial.diameter`, `Knees.diameter`, `Calf.Maximum.Girth` y `Ankles.diameter` tienen un factor de inflación de la varianza entre 1 y 5, lo cual sugiere que si hay multicolinealidad, pero que afecta ligeramente al modelo, mientras que para `Gender`, `Elbows.diameter`, `Waist.Girth`, `Thigh.Girth`, y `Hip.Girth`, dicha colinealidad si puede llegar a ser severa; por último, para `Forearm.Girth`, `Bicep.Girth` y `Chest.Girth`, la multicolinealidad es severa.
+
+Una posible alternativa para solucionar este problema es eliminar las variables con mayor factor de inflación de la varianza, y volver a evaluar el modelo.
+
+i.  *Las estimaciones de los coeficientes no deben estar alteradas por unas pocas observaciones influyentes*
+
+Para ello, se utiliza la función `influencePlot()`:
+
+```{r}
+set.seed(19497)
+influencePlot(modelo_ajustado$finalModel)
+```
+Para el modelo en cuestión, se identifican ciertos valores atípicos asociados a los pesos de los participantes 69, 349, 359, 442 y 474, pero que no influyen directamente sobre el modelo al observar los resultados del análisis de influencia, al no haber valores $Hat=1$ que puedan sugerir un posible apalancamiento, además que sus distancias de Cook son menores a 1.
+
+5.  **Usando RFE, construir un modelo de regresión logística múltiple para la variable `EN` que incluya el conjunto de predictores, entre dos y seis, que entregue la mejor curva ROC y que utilice validación cruzada dejando uno fuera para evitar el sobreajuste (obviamente no se debe considerar las variables Peso, Estatura –`Weight` y `Height` respectivamente– ni `IMC`).**
+
+```{r}
+set.seed(19497)
+
+# Preparamos los datos para realizar nuestro rfe.
+datos_2_rfe <- datos_modificados[, !(names(datos_modificados) %in% c("Weight", "Height", "IMC"))]
+
+# Nos aseguramos que EN sea factor con los niveles correctos
+datos_2_rfe$EN <- factor(datos_2_rfe$EN, 
+                        levels = c("no sobrepeso", "sobrepeso"),
+                        labels = c("no_sobrepeso", "sobrepeso"))
+
+# Configuramos nuestro control RFE
+control_2_rfe <- rfeControl(
+  functions = lrFuncs,
+  method = "LOOCV",
+  verbose = FALSE,
+  returnResamp = "all"
+)
+
+# Se ejecuta el RFE
+rfe_2_resultado <- rfe(
+  x = datos_2_rfe %>% select(-EN),  
+  y = datos_2_rfe$EN,
+  sizes = 2:6,
+  rfeControl = control_2_rfe,
+  metric = "Accuracy"
+)
+
+# Mostramos los resultados de nuestro rfe
+print(rfe_2_resultado)
+
+# Se obtienen las 6 mejores variables de nuestro rfe
+mejores_variables_2 <- head(predictors(rfe_2_resultado), 6)
+
+# Modelos final usando validación cruzada
+modelo_final_2 <- train(
+  formula(paste("EN ~", paste(mejores_variables_2, collapse = " + "))),
+  data = datos_2_rfe,
+  method = "glm",
+  family = binomial,
+  trControl = trainControl(
+    method = "LOOCV",
+    classProbs = TRUE,
+    summaryFunction = twoClassSummary,
+    savePredictions = TRUE
+  ),
+  metric = "ROC"
+)
+
+# Mostramos la información del modelo final
+summary(modelo_final_2$finalModel)
+
+# Se generan las predicciones y se usa curva ROC
+predicciones <- predict(modelo_final_2, datos_2_rfe, type = "prob")
+curva_roc <- roc(datos_2_rfe$EN == "sobrepeso", predicciones[,"sobrepeso"])
+plot(curva_roc, main = "Curva ROC")
+auc <- auc(curva_roc)
+cat("AUC:", auc, "\n")
+
+# Realizamos la matriz de confusión.
+confusionMatrix(
+  predict(modelo_final_2, datos_2_rfe),
+  datos_2_rfe$EN
+)
+```
+En base al modelo obtenido, se observa que la curva $ROC$ se encuentra bastante alejada de la diagonal, con un $AUC=0.958$ lo que refleja que el modelo es un buen clasificador, con una exactitud del $87.97 \%$; sin embargo, también se observa que la variable `Biacromial.diameter` no es significativa para predecir el IMC, ya que su `p-value` es mayor a $0.05$, por lo que se eliminará del modelo, y se volverá a evaluar con las variables restantes.
+
+```{r}
+set.seed(19497)
+
+# Eliminando las variables no significativas, que en este caso solo sería Biacromial.diameter
+variables_significativas_2 <- summary(modelo_final_2$finalModel)$coefficients %>%
+  as.data.frame() %>%
+  rownames_to_column("Variable") %>%
+  filter(`Pr(>|z|)` <= 0.05) %>%
+  pull(Variable)
+
+# Se ajusta el modelo con las nuevas variables significativas
+modelo_ajustado_2 <- train(
+  formula(paste("EN ~", paste(variables_significativas_2[-1], collapse = " + "))),
+  data = datos_2_rfe,
+  method = "glm",
+  family = binomial,
+  trControl = trainControl(
+    method = "LOOCV",
+    classProbs = TRUE,
+    summaryFunction = twoClassSummary,
+    savePredictions = TRUE
+  ),
+  metric = "ROC"
+)
+
+# Se muestra por pantalla el resumen del modelo ajustado
+summary(modelo_ajustado_2$finalModel)
+
+# Se generan las predicciones y se usa curva ROC
+predicciones_ajustadas <- predict(modelo_ajustado_2, datos_2_rfe, type = "prob")
+curva_roc_ajustada <- roc(datos_2_rfe$EN == "sobrepeso", predicciones_ajustadas[,"sobrepeso"])
+plot(curva_roc_ajustada, main = "Curva ROC")
+auc_ajustada <- auc(curva_roc_ajustada)
+cat("AUC ajustada:", auc_ajustada, "\n")
+
+# Realizamos la matriz de confusión.
+confusionMatrix(
+  predict(modelo_ajustado_2, datos_2_rfe),
+  datos_2_rfe$EN
+)
+```
+
+A partir del nuevo modelo, se observa que el $AUC$ disminuye ligeramente, a $0.956$, lo que sugiere que el modelo sigue siendo un buen clasificador, con una ligera disminución de la exactitud, al pasar a un $87.38 \%$, al igual que tanto para su sensibilidad, como para su especificidad.
+
+A continuación, se evalúa la confiabilidad del modelo, verificando el cumplimiento de las siguiente condiciones:
+
+a. *Debe existir una relación lineal entre los predictores y la variable de respuesta*
+Lo anterior se lleva a cabo mediante gráficos de dispersión de los residuos, a través de la función `residualPlots()`:
+
+```{r}
+
+set.seed(19497)
+# Debido a la forma en que se ha definido el modelo, se debe ajustar la fórmula para evaluar los residuos
+rlm3_equivalente = glm(EN ~ Waist.Girth + Thigh.Girth + Calf.Maximum.Girth + Knees.diameter + Knee.Girth, data = datos_2_rfe, family = binomial(link = "logit"))
+
+cat("Prueba de curvatura de los predictores del modelo del RLM")
+residualPlots(rlm3_equivalente, fitted = FALSE)
+
+```
+
+Dado que todos los predictores presentan un `p-value` $> 0.05$, se puede afirmar que todos ellos se relacionan linealmente con el estado nutricional.
+
+b. *Los residuos deben ser independientes entre sí*
+
+Para evaluar la independencia de los residuos, se aplica la función `durbinWatsonTest()`:
+
+```{r}
+set.seed(19497)
+print(durbinWatsonTest(rlm3_equivalente))
+```
+
+c. *No debe existir multicolinealidad entre los predictores*
+
+Para evaluar la multicolinealidad entre los predictores, se aplica la función `vif()`, que calcula el factor de inflación de la varianza:
+
+```{r}
+set.seed(19497)
+print(vif(rlm3_equivalente))
+```
+
+En base a los resultados obtenidos, se aprecia que ninguna de las variables presenta un factor de inflación de la varianza mayor a 5, lo cual sugiere que hay multicolinealidad entre los predictores, pero que afecta muy ligeramente a los resultados.
+
+d. *No debe haber información incompleta, en relación a la cantidad de observaciones disponibles para todas las posibles combinaciones de predictores.*
+
+Para ello, se debe comprobar que cada modelo cuente con, al menos, 10 a 15 observaciones por cada predictor numérico y cada nivel de las variables predictoras, lo cual se cumple al observar los datos de entrenamiento.
+
+e. *No debe haber una separación perfecta entre las clases, por parte de los predictores.*
+
+```{r}
+# Filtramos las columnas relevantes y creamos el índice de las observaciones para los gráficos
+p2_dfl <- datos_2_rfe |> 
+  select(Waist.Girth, Thigh.Girth, Calf.Maximum.Girth, Knees.diameter, Knee.Girth, EN) |> 
+  mutate(Id = 1:n())
+
+# Función para crear el gráfico de dispersión con separación para cada predictor
+plot_separation <- function(data, predictor) {
+  grafico <- ggscatter(data, x = "Id", y = predictor, color = "EN") +
+    geom_hline(yintercept = median(data[[predictor]]), linetype = "dashed", color = "green") +
+    labs(title = paste("Evaluación de Separación Perfecta para", predictor), 
+         x = "Observaciones", 
+         y = predictor) +
+    scale_color_manual(values = c("red", "blue"))
+  print(grafico)
+}
+
+# Mostrar los gráficos de separación perfecta para cada predictor
+plot_separation(p2_dfl, "Waist.Girth")
+plot_separation(p2_dfl, "Thigh.Girth")
+plot_separation(p2_dfl, "Calf.Maximum.Girth")
+plot_separation(p2_dfl, "Knees.diameter")
+plot_separation(p2_dfl, "Knee.Girth")
+```
+De los gráficos obtenidos, se puede observar que no es posible separar las clases asociadas a los niveles de la variable respuesta "EN" para cada uno de los predictores, cumpliendo con dicha condición enunciada.
+
+f. *Las estimaciones de los coeficientes del modelo no deben estar dominadas por casos influyentes*
+
+Para estudiar la presencia de posibles valores atípicos que puedan influir sobre el ajuste del modelo, se utiliza la función `influencePlot()`:
+
+```{r}
+set.seed(19497)
+print(influencePlot(rlm3_equivalente, id = list(cex=0.4)))
+```
+
+Para el modelo en cuestión, se identifican ciertos valores atípicos asociados a los pesos de los participantes 162, 256, 371, 395 y 491, pero que no influyen directamente sobre el modelo al observar los resultados del análisis de influencia, al no haber valores $Hat=1$ que puedan sugerir un posible apalancamiento, además que sus distancias de Cook son menores a 1.
+
+6.  **Pronunciarse sobre la confiabilidad y el poder predictivo de los modelos obtenidos.**
+
+Para el modelo de regresión lineal múltiple descrito en el apartado 4, se tiene lo siguiente:
+
+- Con respecto a la multicolinealidad, hay valores que están cerca de 10, los cuales son muy preocupantes, por lo cual, se tendría que ajustar el modelo quitando esas variables.
+
+- Se puede apreciar hay que los residuos siguen una distribución cercana a la normal.
+
+- Con respecto a la distancia de Cook, hay valores que pueden ser influyentes, pero según los valores obtenidos, estos se alejan de 1, por lo cual, no hay apalancamiento, evitando así que hayan casos influyentes.  
+- Se puede apreciar que las variables no son constantes.
+
+***Confiabilidad:***  
+
+- El modelo tiene una alta confiabilidad con un R² ajustado de 87.51% y un RSE de 1.157.
+- El estadístico $F$, junto al $p-value$ indican que el modelo en su conjunto es altamente significativo.
+
+***Poder predictivo***  
+
+- Los indicadores $RMSE$ y $MAE$ bajos indican que el modelo tiene una buena precisión predictiva.
+- El valor del coeficiente $R^2²$ sugiere que el modelo explica una gran proporción de la variabilidad en la variable de respuesta.
+
+
+Por otro lado, para el modelo de regresión logística múltiple descrito en el apartado 5, se tiene lo siguiente:
+
+- Se puede observar que hay valores para el factor de influencia de ciertos predictores mayores a 10, lo cual es muy preocupante, ya que puede afectar el modelo, por lo cual, se tendría que ajustar el modelo quitando esas variables. 
+
+- Se puede apreciar que los residuos siguen una distribución cercana a la normal dado que el $p-value$ es mayor a nuestro nivel de significancia.  
+
+- Con respecto a la distancia de Cook, hay valores que pueden ser influyentes, pero según los valores obtenidos, estos se alejan de 1, por lo cual, no hay apalancamiento, evitando así que hayan casos influyentes.
+
+***Confiabilidad:***  
+- El valor de AIC es bajo, lo cual corresponde a tiene un buen ajuste nuestro modelo.
+- Con respecto a la precisión o *accuracy*, tiene un valor de $0.8797$, lo que permite asignar observaciones con alta precisión.
+- El indicador $Kappa$, que representa la concordancia entre las predicciones y los valores reales, posee un valor de $0.7593$.
+
+***Poder Predictivo:*** 
+- $AUC=0.9566$, indicando así que tiene una muy alta capacidad discriminativa. 
+- La devianza de los residuos es de $267.98$ y el $AIC$ el cual es de $279.98$, indicando que el modelo tiene un buen ajuste.

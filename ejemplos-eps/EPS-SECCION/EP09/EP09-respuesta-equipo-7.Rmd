@@ -1,0 +1,340 @@
+---
+title: "EP-09: Regresión Lineal y Múltiple"
+author: "Grupo N°7"
+date: "06/12/2024"
+output: html_document
+---
+
+# Preguntas
+
+Para empezar, se importan las librerías utilizadas para resolver las preguntas enunciadas en este trabajo. 
+
+```{r}
+# Librerías importadas para la resolución de las preguntas.
+library(car)
+library(caret)
+library(dplyr)
+library(ggpubr)
+```
+
+### 1) Definir la semilla a utilizar, que corresponde a los últimos cuatro dígitos del RUN (sin considerar el dígito verificador) del integrante de menor edad del equipo.
+
+Para definir la semilla, se tiene que los últimos cuatro dígitos del RUN del integrante de menor edad del equipo corresponde a 2225, la cual se incorpora posteriormente a la muestra aleatoria a realizar. Esta se expresa de la siguiente manera:
+
+```{r}
+# Se define la semilla con los 4 últimos dígitos del RUN  
+# (antes del guión) del menor integrante del equipo. 
+set.seed(2225)
+```
+
+### 2) Seleccionar una muestra aleatoria de 100 mujeres (si la semilla es un número par) o 100 hombres (si la semilla es impar), y separar 70 casos para trabajar en la construcción de modelos y 30 para su evaluación en datos no vistos.
+
+Como la semilla a utilizar en la muestra aleatoria es 2225, corresponde a un número impar y por lo tanto se debe realizar una muestra aleatoria de 100 hombres. Posteriormente, se hace una separación de 70 casos para trabajar en la construcción de modelos y 30 casos para la evaluación del modelo en datos no vistos.
+
+```{r}
+# Se define la semilla con los 4 últimos dígitos del RUN  
+# (antes del guión) del menor integrante del equipo. 
+set.seed(2225)
+
+# Se carga el archivo "EP09 Datos.csv", se filtra para incluir 
+# únicamente los hombres (Gender == 1), y se seleccionan aleatoriamente 100
+# de ellos.
+datos <- read.csv2("EP09 Datos.csv") %>% filter(Gender == 1) %>% sample_n(100)
+
+# De los datos seleccionados anteriormente, se toma una muestra aleatoria de 70
+# hombres (datos_entrenamiento) y se muestran las primera seis filas de ellos.
+datos_entrenamiento <- datos[sample(nrow(datos), 70), ] %>% select_if(~ all(!is.na(.)))
+head(datos_entrenamiento)
+
+# Crear los datos de prueba con los 30 hombres que no están en la muestra
+# y se muestran las primera seis filas de ellos.
+datos_prueba <- datos[!(1:nrow(datos) %in% rownames(datos_entrenamiento)), ]
+head(datos_prueba)
+```
+
+### 3) Seleccionar de forma aleatoria ocho posibles variables predictoras.
+
+Se hace la selección de las ocho posibles variables predictoras mediante utilizando la semilla definida en la pregunta 1), las funciones colnames (selecciona todas las variables) y sample (utilizada para tomar una muestra aleatoria de elementos de un conjunto) de la siguiente manera: 
+
+```{r}
+# Se define la semilla con los 4 últimos dígitos del RUN  
+# (antes del guión) del menor integrante del equipo. 
+set.seed(2225)
+
+# Se obtienen los nombres de todas las vaiabless del data frame "datos_entrenamiento".
+variables_predictoras <- colnames(datos_entrenamiento)
+
+# De los nombres de las columnas, se seleccionan aleatoriamente las 8 posibles
+# variables predictoras.
+# Esto crea un conjunto aleatorio de posibles 8 variables predictoras.
+variables_predictoras <- sample(variables_predictoras, 8)
+
+# Se imprime el vector de las 8 variables predictoras.
+print(variables_predictoras)
+```
+
+En base a esto, las ocho posibles variables predictoras seleccionadas de forma aleatoria son las siguientes: 
+
+- Height
+- Biacromial.diameter
+- Chest.depth
+- Chest.diameter
+- Navel.Girth
+- Knee.Girth
+- Thigh.Girth
+- Gender
+
+### 4) Seleccionar, de las otras variables, una que el equipo considere que podría ser útil para predecir la variable Peso (sin considerar la estatura), justificando bien esta selección.
+
+Para esta pregunta, se filtran las variables restantes mediante la función setdiff y calcula los coeficientes de correlación con el peso, considerando solo datos completos usando la función cor. Luego, ordena estas correlaciones en orden descendente mediante la función sort y las imprime, permitiendo identificar de manera directa cuál es la variable con mayor relación lineal con el peso. Esto se hace de la siguiente manera:  
+
+```{r}
+# Filtrar las variables no elegidas en el paso 3.
+variables_restantes <- setdiff(colnames(datos)[!colnames(datos) %in% c("Height", "Weight")], variables_predictoras)
+
+# Calcular la correlación de las variables restantes con Weight.
+correlaciones_restantes <- cor(datos_entrenamiento[, variables_restantes], datos_entrenamiento[["Weight"]], use = "complete.obs")
+
+# Imprimir las correlaciones de las variables restantes con Weight.
+print(correlaciones_restantes)
+
+# Ordenar las correlaciones en orden descendente para identificar la que 
+# posee un mayor coeficiente (mayor relación con la variable Weight).
+correlaciones_ordenadas <- sort(correlaciones_restantes, decreasing = TRUE)
+
+# Imprimir las correlaciones ordenadas.
+cat("\n")
+cat("Coeficientes de correlación ordenados:")
+print(correlaciones_ordenadas)
+```
+
+Para predecir la variable Peso (sin considerar la estatura), se seleccionó la variable Hip.Girth, ya que presenta la mayor correlación con el Peso entre las variables restantes, con un coeficiente de correlación de 0,80867562. Esto indica una relación significativa y positiva, lo que sugiere que Hip.Girth podría ser un buen predictor del Peso.
+
+### 5) Usando el entorno R y paquetes estándares, construir un modelo de regresión lineal simple con el predictor seleccionado en el paso anterior.
+
+Ya teniendo la variable Hip.Girth como posible variable predictora de la variable Weight, se construye el modelo de Regresión Lineal Simple (RLS) utilizando la función lm de la siguiente forma:  
+
+```{r}
+# Ajustar un modelo de regresión lineal simple para predecir el peso (Weight)
+# usando como predictor la circunferencia de cadera (Hip.Girth).
+modelo_1 <- lm(Weight ~ Hip.Girth, data = datos_entrenamiento) 
+
+# Mostrar el resumen estadístico del modelo, incluyendo coeficientes, valores p, 
+#R², etc.
+cat("\n")
+print("-------Modelo con RLS-------")
+print(summary(modelo_1))
+```
+
+Se hace un gráfico de dispersión en el cual se comprueba que hay una relación entre la variable Hip.Girth y la variable Peso planteada en el modelo de RLS anteriormente hecho.
+
+```{r}
+# Generar un gráfico de dispersión para visualizar la relación entre Hip.Girth y Weight.
+# Se agrega la línea de regresión ajustada al modelo en color rojo.
+g <- ggscatter(data = datos_entrenamiento, x = "Hip.Girth", y = "Weight", 
+               add = "reg.line", color = "red", fill = "red")
+
+# Mostrar el gráfico de dispersión con la línea de regresión.
+print(g)
+```
+
+### 6) Usando herramientas estándares para la exploración de modelos del entorno R, buscar entre dos y cinco predictores de las variables seleccionadas al azar en el punto 3, para agregar al modelo de regresión lineal simple obtenido en el paso 5.
+
+En esta pregunta, se procede a realizar un modelo de Regresión Lineal Múltiple utilizando 3 predictores de las variables seleccionadas al azar en el punto 3 de la siguiente manera: 
+
+```{r}
+# Ajustar el modelo de regresión lineal completo
+# Se ajusta un modelo de regresión lineal donde 'Weight' es la variable 
+# dependiente, y las demás variables como 'Hip.Girth', 'Gender', 'Biacromial.diameter', 'Chest.depth', etc. son las variables predictoras.
+modelo_completo <- lm(Weight ~ Hip.Girth + Gender + Biacromial.diameter + 
+                      Chest.depth + Chest.diameter + Navel.Girth + Knee.Girth + 
+                      Thigh.Girth + Height, data = datos_entrenamiento)
+
+# Imprimir el resumen del modelo
+# Se imprime el resumen del modelo ajustado para revisar los coeficientes,
+# la significancia de las variables y otras métricas estadísticas del modelo.
+print(summary(modelo_completo))
+
+# Realizar el paso de comparación AIC entre modelos
+# 'add1' compara el modelo actual (modelo_1) con el modelo completo (modelo_completo)
+# calculando el AIC (Criterio de Información de Akaike) para evaluar si la 
+# adición de variables mejora el modelo.
+AIC_1 <- add1(modelo_1, scope=modelo_completo)
+print(AIC_1)
+
+# Crear modelo_2 añadiendo la variable Height
+# Se actualiza el modelo_1 añadiendo el predictor Height y se calcula el AIC 
+# de este nuevo modelo.
+modelo_2 <- update(modelo_1, .~.+Height)
+AIC_2 <- add1(modelo_2, scope=modelo_completo)
+print(AIC_2)
+
+# Imprimir el resumen de modelo_2 y realizar un análisis de varianza entre 
+# modelo_1 y modelo_2.
+# Esto permite comparar si la inclusión de la variable Height mejora significativamente el modelo.
+print(summary(modelo_2))
+print(anova(modelo_1, modelo_2))
+
+# Crear modelo_3 añadiendo la variable Chest.depth
+# Ahora, se agrega el predictor 'Chest.depth' al modelo_2 y se calcula
+# nuevamente el AIC para el modelo_3.
+modelo_3 <- update(modelo_2, .~.+Chest.depth)
+AIC_3 <- add1(modelo_3, scope=modelo_completo)
+print(AIC_3)
+
+# Imprimir el resumen de modelo_3 y realizar un análisis de varianza entre los 
+# tres modelos.
+# Se compara cómo la adición de Chest.depth afecta al modelo y si mejora el 
+# ajuste.
+print(summary(modelo_3))
+print(anova(modelo_1, modelo_2, modelo_3))
+
+# Crear modelo_4 añadiendo la variable Chest.diameter
+# Finalmente, se agrega el predictor Chest.diameter al modelo_3 y se calcula 
+# el AIC para el modelo_4.
+modelo_4 <- update(modelo_3, .~.+Chest.diameter)
+AIC_4 <- add1(modelo_4, scope=modelo_completo)
+print(AIC_4)
+
+# Imprimir el resumen del modelo final (modelo_4) y realizar un análisis de 
+# varianza entre todos los modelos ajustados.
+cat("\n")
+print("-------Modelo final con RLM-------")
+print(summary(modelo_4))
+print(anova(modelo_1, modelo_2, modelo_3, modelo_4))
+```
+
+Por lo tanto, se tiene que el modelo de Regresión Lineal Múltiple se expresa de la siguiente forma: Weight ~ Hip.Girth + Height + Chest.depth + Chest.diameter.
+
+### 7) Evaluar la bondad de ajuste (incluyendo el análisis de casos atípicos y casos influyentes) y la generalidad (condiciones para RLM) de los modelos y “arreglarlos” en caso de que presenten algún problema.
+
+## Bondad de Ajuste
+
+Se procede a evaluar la bondad de ajuste tanto en el modelo de Regresión Lineal Simple como el modelo de Regresión Lineal Múltiple:
+
+```{r}
+# Se evalúa la bondad de ajuste del modelo de Regresión Lineal Simple. 
+cat("La bondad de ajuste en el modelo de RLS es: ", 
+    summary(modelo_1)$r.squared)
+cat("\n")
+
+# Se evalúa la bondad de ajuste del modelo final de Regresión Lineal Múltiple.
+cat("La bondad de ajuste en el modelo final de RLM es: ", 
+    summary(modelo_4)$r.squared)
+```
+
+En base a las bondades de ajustes obtenidad en ambos modelos, se tiene que el modelo de regresión lineal múltiple (modelo_4) tiene un mejor ajuste que el modelo de regresión lineal simple (modelo_1) al conjunto de datos. 
+
+Esto significa que agregar más variables predictoras en el modelo de Regresión Lineal Múltiple mejora su capacidad para predecir el valor de la variable dependiente (Weight) en comparación con el modelo de Regresión Lineal Simple, que solo usa una variable predictora. Sin embargo, es importante también considerar otros factores, como la significancia de las variables y la posibilidad de sobreajuste (overfitting) al usar más variables.
+
+## Generalidad
+
+El modelo RLM planteado en la pregunta 6) debe cumplir con las siguientes condiciones: 
+
+- La variable de respuesta debe ser cuantitativa y continua.
+
+La variable de respuesta es Weight es una variable cuantitativa (es decir, numérica) y continua (puede tomar cualquier valor dentro de un rango en lugar de estar limitada a un conjunto discreto de valores). Por lo tanto, está condición se cumple. 
+
+- Los predictores deben ser cuantitativos o dicotómicos.
+
+Los predictores Waist.Girth, Height, Chest.depth y Chest.diameter son variables cuantitativas porque representan medidas numéricas continuas (longitud). Estas variables cumplen con la condición de ser cuantitativas, ya que pueden tomar valores numéricos y permitir operaciones matemáticas. Por lo tanto, se cumple la condición de que los predictores sean cuantitativos o dicotómicos.
+
+- Los predictores deben tener algún grado de variabilidad.
+
+```{r}
+# Se comprueba los grados de variabilidad en los predictores. 
+apply(datos[,c("Hip.Girth", "Height", "Chest.depth", "Chest.diameter")], 2, var)
+```
+
+Como todos los predictores del modelo poseen una varianza distinta de 0 (no son constantes), esta condición se cumple.
+
+- Cada predictor debe estar relacionado linealmente con la respuesta. 
+
+```{r}
+# Se comprueba si cada predictor debe estar relacionado linealmente con la 
+# respuesta.
+print(residualPlots(modelo_4))
+```
+
+Aquí se puede ver que los predictores y no aditividad en Tukey en la prueba de linealidad poseen valores mayores a 0,05. Por lo tanto, está condición se cumple. 
+
+- La distribución de los residuos debe ser normal centrada en cero.
+
+```{r}
+# Se aplica prueba de normalidad en la distribución de residuos.
+shapiro.test(residuals(modelo_4))
+```
+
+Como el valor de $p = 0,8645 > 0,05$, se tiene que la distribución de los residuos es normal centrada en cero. Por lo tanto, está condición se cumple. 
+
+- La variabilidad de los residuos debe ser aproximadamente constante. 
+
+```{r}
+# Se comprueba la variabilidad de los residuos.
+print(ncvTest(modelo_4))
+```
+
+Como el valor de $p = 0,74329 > 0,05$, se tiene que la variabilidad de los residuos es constante. Por lo tanto, está condición se cumple. 
+
+- Los residuos deben ser independientes entre sí.
+
+```{r}
+# Se comprueba si los residuos son independientes entre sí 
+print(durbinWatsonTest(modelo_4))
+```
+
+Como el valor de $p = 0,762 > 0,05$, se tiene que los residuos son independientes entre sí. Por lo tanto, está condición se cumple. 
+
+- No debe existir multicolinealidad.
+
+```{r}
+# Se comprueba si hay existencia de multicolinealidad
+print(vif(modelo_4))
+```
+
+Se tiene que los valores de VIF de los predictores del modelo estan entre los valores de 1 y 5, entonces no hay existencia de una multicolinealidad que afecte significativamente los resultados. Por lo tanto, está condición se cumple.  
+
+- Las estimaciones de los coeficientes del modelo no deben estar alteradas por unas pocas observaciones influyentes.
+
+```{r}
+# Se crea un gráfico para identificar casos influyentes en el modelo 'modelo_4'.
+casos_influyentes <- influencePlot(modelo_4, id=list(cex=0.7))
+
+# Se imprime la lista de casos influyentes identificados.
+print(casos_influyentes)
+```
+
+En base a los resultados anteriores, se tiene ningún valor de Hat observado se acerca a 1 y las Distancias de Cook son pequeñas y menores al umbral que se define, es decir, no sobrepasan el valor de 1. Por lo tanto, se cumple está condición.
+
+En consecuencia, se cumplen todas las condiciones de confiabilidad de RLM para el modelo anteriormente planteado y por lo tanto, el modelo es confiable.
+ 
+### 8) Evaluar el poder predictivo del modelo con los datos no utilizados para construirlo.
+
+Se procede a evaluar el poder predictivo del modelo con los 30 datos de prueba  haciendo validación cruzada de 5 pliegues. 
+
+```{r}
+set.seed(2225)
+
+# Se define el control para la validación cruzada (cross-validation)
+# La función "trainControl" establece los parámetros para la validación cruzada. 
+# En este caso, se utiliza el método "cv" (validación cruzada) y se especifica 
+# que se realizarán 5 pliegues (folds).
+control <- trainControl(method = "LOOCV", number=5) 
+
+# Se ajusta el modelo de regresión lineal utilizando validación cruzada
+modelo_cv <- train(Weight ~ Hip.Girth + Height + Chest.depth + Chest.diameter, 
+                   data = datos_prueba, 
+                   method = "lm", 
+                   trControl = control)
+
+# Se imprime el resumen del modelo ajustado con validación cruzada
+print(modelo_cv) 
+```
+
+En base a los resultados, el valor de $R^2 = 0,9220689$ en los datos de prueba, cercano al valor de $R^2 = 0,8791413$ en los datos de entrenamiento, sugiere que el modelo tiene una buena capacidad de generalización y no presenta sobreajuste. Esto indica que las variables predictoras (Hip.Girth, Height, Chest.depth y Chest.diameter) son efectivas para predecir el peso.
+
+### Conclusión
+
+En conclusión, el modelo de regresión lineal múltiple (RLM) muestra una mejor capacidad predictiva que el modelo de regresión lineal simple (RLS), con un ajuste superior reflejado en un mayor valor de $R^2$. El RLM, que incluye las variables  Hip.Girth, Height, Chest.depth y Chest.diameter como variables predictoras, explica de manera más precisa la variabilidad del peso (Weight). La selección de estas variables ha sido efectiva, aunque se debe tener en cuenta que agregar más predictores puede aumentar la complejidad y la posibilidad de multicolinealidad, lo que requiere un manejo adecuado para garantizar la estabilidad y confiabilidad del modelo.
+
+La evaluación del modelo en datos no vistos, así como el análisis de los coeficientes de correlación y la evaluación de casos atípicos e influyentes, respaldan la utilidad del modelo final. No obstante, siempre es recomendable realizar pruebas adicionales y ajustes para asegurar que el modelo sea generalizable y robusto frente a diferentes escenarios.

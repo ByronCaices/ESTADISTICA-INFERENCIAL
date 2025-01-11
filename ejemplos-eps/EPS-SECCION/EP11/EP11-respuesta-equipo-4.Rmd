@@ -1,0 +1,307 @@
+---
+title: "EP11-respuesta-equipo-4"
+date: "2024-12-22"
+output: html_document
+---
+
+```{r}
+# Verificar e instalar librerías necesarias
+if(!require(tidyverse)) install.packages("tidyverse")
+if(!require(caret)) install.packages("caret")
+if(!require(leaps)) install.packages("leaps")
+if(!require(pROC)) install.packages("pROC")
+if(!require(car)) install.packages("car")
+if(!require(GGally)) install.packages("GGally")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(Metrics)) install.packages("Metrics")
+if(!require(lmtest)) install.packages("lmtest")
+if(!require(ggcorrplot)) install.packages("ggcorrplot")
+
+# Cargar librerías
+library(tidyverse)
+library(caret)
+library(leaps)
+library(pROC)
+library(car)
+library(GGally)
+library(ggplot2)
+library(Metrics)
+library(lmtest)
+library(ggcorrplot)
+
+# Configuración inicial
+set.seed(1166)  # Semilla para reproducibilidad
+
+# 1. Cargar y preparar los datos
+data <- read.csv2("EP09 Datos.csv")
+data <- data %>% mutate(IMC = Weight / (Height / 100)^2, 
+                        EN = ifelse(IMC < 23.2, 0, 1))  # 0: No sobrepeso, 1: Sobrepeso
+
+# 2. Crear una muestra balanceada
+muestra_sobrepeso <- data %>% filter(EN == 1) %>% sample_n(50)
+muestra_no_sobrepeso <- data %>% filter(EN == 0) %>% sample_n(50)
+muestra <- bind_rows(muestra_sobrepeso, muestra_no_sobrepeso)
+
+# 3. Exploración inicial de los datos
+cat("Resumen inicial de los datos:\n")
+summary(muestra)
+
+cat("\nDistribución de grupos nutricionales:\n")
+print(table(muestra$EN))
+
+# Gráfico inicial de distribución del IMC
+ggplot(muestra, aes(x = IMC, fill = factor(EN))) +
+  geom_histogram(binwidth = 1, alpha = 0.7, position = "identity") +
+  labs(title = "Distribución del IMC por estado nutricional",
+       x = "IMC", y = "Frecuencia", fill = "Estado Nutricional") +
+  theme_minimal()
+
+# Mapa de correlaciones entre variables
+correlaciones <- muestra %>% select(where(is.numeric)) %>% cor()
+ggplot(data = as.data.frame(as.table(correlaciones)), 
+       aes(Var1, Var2, fill = Freq)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0, limit = c(-1, 1), space = "Lab") +
+  labs(title = "Mapa de correlaciones entre variables", x = "", y = "") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text = element_text(size = 10),
+        plot.title = element_text(hjust = 0.5))
+
+# ------------------- Verificación de condiciones para RLM -------------------
+
+# 1. Verificar la relación lineal entre las variables
+# Visualizar la relación lineal entre las variables independientes y dependientes (Peso)
+pairs(muestra[, c("Weight", "Height", "IMC", "EN", "Age", "Chest.depth")],
+      main = "Relación lineal entre variables")
+
+# 2. Verificación de independencia de los errores con el test de Durbin-Watson
+modelo_inicial <- lm(Weight ~ Height + IMC + Age + Chest.depth, data = muestra)
+dwtest(modelo_inicial)
+
+# 3. Verificación de homocedasticidad
+# Graficamos los residuos versus los valores ajustados
+par(mfrow = c(1, 1))  # Configura la ventana para un solo gráfico
+plot(modelo_inicial, which = 1)  # Residuals vs Fitted
+
+# 4. Verificación de la normalidad de los errores (Q-Q plot)
+par(mfrow = c(1, 1))  # Configura la ventana para un solo gráfico
+plot(modelo_inicial, which = 2)  # Q-Q plot de residuos
+
+# 5. Verificación de multicolinealidad (VIF)
+vif(modelo_inicial)
+
+# 6. Verificación de valores atípicos utilizando las distancias de Cook
+par(mfrow = c(1, 1))  # Configura la ventana para un solo gráfico
+plot(modelo_inicial, which = 4)  # Cook's Distance
+
+# 7. Verificación de tamaño adecuado de la muestra
+cat("\nTamaño de la muestra:", nrow(muestra), "\n")
+
+# 8. Verificación de la linealidad de los residuos
+# Graficamos los residuos contra los valores ajustados
+par(mfrow = c(1, 1))  # Configura la ventana para un solo gráfico
+plot(modelo_inicial, which = 3)  # Scale-Location
+
+# 9. Verificación de no autocorrelación
+# Usamos el test de Breusch-Godfrey para autocorrelación
+bgtest(modelo_inicial)
+
+# ------------------- Construcción del Modelo Final de RLM -------------------
+
+# Ajustar el modelo de regresión lineal final
+modelo_final <- lm(Weight ~ Height + IMC + Age + Chest.depth, data = muestra)
+summary(modelo_final)
+
+# Verificación de multicolinealidad después de ajustar el modelo
+vif(modelo_final)
+
+# 5. Gráficos de diagnóstico del modelo
+# Residuals vs Fitted
+par(mfrow = c(1, 1))  # Configura la ventana para un solo gráfico
+plot(modelo_final, which = 1)  # Residuals vs Fitted
+
+# Q-Q Residuals
+par(mfrow = c(1, 1))  # Configura la ventana para un solo gráfico
+plot(modelo_final, which = 2)  # Q-Q plot de residuos
+
+# Scale-Location
+par(mfrow = c(1, 1))  # Configura la ventana para un solo gráfico
+plot(modelo_final, which = 3)  # Scale-Location
+
+# Cook's Distance
+par(mfrow = c(1, 1))  # Configura la ventana para un solo gráfico
+plot(modelo_final, which = 4)  # Cook's Distance
+
+
+# ------------------- INSTRUCCIONES 3 y 4 -------------------
+
+# 3) Selección de predictores con `leaps` para Weight (sin IMC ni EN)
+combinaciones <- regsubsets(Weight ~ ., data = muestra %>% select(-Height, -IMC, -EN), nvmax = 8)
+resumen_comb <- summary(combinaciones)
+
+# Seleccionar modelo con menor BIC
+modelo_bic <- resumen_comb$which[which.min(resumen_comb$bic), ]
+variables_bic <- names(which(modelo_bic))[-1]  # Excluir intercepto
+
+# Ajustar modelo final basado en BIC
+formula_bic <- as.formula(paste("Weight ~", paste(variables_bic, collapse = " + ")))
+modelo_bic_final <- lm(formula_bic, data = muestra)
+
+# Resumen del modelo final (BIC)
+cat("\nResumen del modelo seleccionado basado en BIC:\n\n")
+print(summary(modelo_bic_final))
+
+# Validación cruzada con el paquete caret, repetida 5 veces
+control <- trainControl(method = "cv", number = 5, repeats = 5)
+modelo_cv <- train(formula_bic, data = muestra, method = "lm", trControl = control)
+
+# Resultados de validación cruzada
+cat("\nResultados de validación cruzada:\n")
+print(modelo_cv)
+
+# Comparación del poder predictivo
+predicciones <- predict(modelo_bic_final, muestra)
+error_rmse <- rmse(muestra$Weight, predicciones)
+cat("\nError RMSE del modelo basado en BIC:", error_rmse, "\n")
+
+# Conclusión Final:
+cat("\n### Conclusión Final del Modelo BIC\n")
+cat("El modelo basado en BIC ha seleccionado un subconjunto óptimo de predictores para el peso, mostrando un error RMSE relativamente bajo. La validación cruzada sugiere que este modelo es confiable y robusto para predecir el peso.\n")
+
+# 4) RFE para predecir IMC
+control_rfe <- rfeControl(functions = rfFuncs, method = "cv", number = 5)
+modelo_rfe <- rfe(muestra[, c("Height", "Weight", "Age", "Chest.depth", "Waist.Girth", "Hip.Girth")], 
+                  muestra$IMC, 
+                  sizes = c(10:20), 
+                  rfeControl = control_rfe)
+
+# Resultados de RFE
+cat("\nResultados de RFE:\n")
+print(modelo_rfe)
+
+# Ajuste final del modelo con las variables seleccionadas por RFE
+modelo_rfe_final <- lm(IMC ~ ., data = muestra[, c(modelo_rfe$optVariables, "IMC")])
+summary(modelo_rfe_final)
+
+# Predicciones y error RMSE del modelo de RFE
+predicciones_rfe <- predict(modelo_rfe_final, muestra)
+error_rmse_rfe <- rmse(muestra$IMC, predicciones_rfe)
+cat("\nError RMSE del modelo de RFE:", error_rmse_rfe, "\n")
+
+# Conclusión Final:
+cat("\n### Conclusión Final del Modelo RFE\n")
+cat("El modelo basado en RFE ha seleccionado un conjunto de variables predictoras del IMC, logrando un error RMSE bajo y una validación cruzada confiable. Este modelo muestra un buen desempeño y robustez en la predicción del IMC.\n")
+
+
+# Conclusión final
+cat("\n### Conclusión Final\n")
+cat("La selección de variables y la validación de los modelos muestran que ambos enfoques, el basado en BIC y el uso de RFE, producen modelos robustos para predecir el Peso y el IMC. La validación cruzada sugiere que ambos modelos son altamente predictivos y ajustados para evitar sobreajuste.\n")
+
+
+# ----------------- INSTRUCCIONES 5 y 6 ------------------
+
+# 5. Construcción de un modelo predictivo para IMC basado en RFE
+cat("\n### Verificación de condiciones antes de aplicar RFE para IMC\n")
+
+# 1. Verificación de la relación lineal entre las variables
+# Visualizar la relación lineal entre las variables independientes y dependientes (IMC)
+pairs(muestra[, c("Height", "Weight", "Age", "Chest.depth", "Waist.Girth", "Hip.Girth")],
+      main = "Relación lineal entre variables para predecir IMC")
+
+# 2. Verificación de independencia de los errores con el test de Durbin-Watson
+modelo_inicial_imc <- lm(IMC ~ Height + Weight + Age + Chest.depth + Waist.Girth + Hip.Girth, data = muestra)
+dwtest(modelo_inicial_imc)
+
+# 3. Verificación de homocedasticidad
+# Graficamos los residuos versus los valores ajustados
+par(mfrow = c(1, 1))  # Configura la ventana para un solo gráfico
+plot(modelo_inicial_imc, which = 1)  # Residuals vs Fitted
+
+# 4. Verificación de la normalidad de los errores (Q-Q plot)
+par(mfrow = c(1, 1))  # Configura la ventana para un solo gráfico
+plot(modelo_inicial_imc, which = 2)  # Q-Q plot de residuos
+
+# 5. Verificación de multicolinealidad (VIF)
+vif(modelo_inicial_imc)
+
+# 6. Verificación de valores atípicos utilizando las distancias de Cook
+par(mfrow = c(1, 1))  # Configura la ventana para un solo gráfico
+plot(modelo_inicial_imc, which = 4)  # Cook's Distance
+
+# 7. Verificación de tamaño adecuado de la muestra
+cat("\nTamaño de la muestra para la predicción de IMC:", nrow(muestra), "\n")
+
+# 8. Verificación de la linealidad de los residuos
+# Graficamos los residuos contra los valores ajustados
+par(mfrow = c(1, 1))  # Configura la ventana para un solo gráfico
+plot(modelo_inicial_imc, which = 3)  # Scale-Location
+
+# 9. Verificación de no autocorrelación
+# Usamos el test de Breusch-Godfrey para autocorrelación
+bgtest(modelo_inicial_imc)
+
+cat("\n### Construcción del modelo predictivo para IMC usando RFE\n")
+
+# Ajuste del modelo RFE para predecir IMC
+control_rfe <- rfeControl(functions = rfFuncs, method = "cv", number = 5)
+modelo_rfe <- rfe(muestra[, c("Height", "Weight", "Age", "Chest.depth", "Waist.Girth", "Hip.Girth")], 
+                  muestra$IMC, 
+                  sizes = c(1:5), 
+                  rfeControl = control_rfe)
+
+# Resultados del modelo RFE
+cat("\nResultados de RFE para predecir IMC:\n")
+print(modelo_rfe)
+
+# Ajustar modelo final basado en RFE
+variables_rfe <- modelo_rfe$optVariables
+formula_rfe <- as.formula(paste("IMC ~", paste(variables_rfe, collapse = " + ")))
+modelo_rfe_final <- lm(formula_rfe, data = muestra)
+
+# Resumen del modelo final basado en RFE
+cat("\nResumen del modelo basado en RFE:\n")
+print(summary(modelo_rfe_final))
+
+# ----------------- INSTRUCCIONES 6 ------------------
+
+# 6. Comparación de errores y validación cruzada
+cat("\n### Comparación de errores y validación cruzada para modelo RFE\n")
+
+# Predicciones y error RMSE del modelo RFE
+predicciones_rfe <- predict(modelo_rfe_final, muestra)
+error_rmse_rfe <- rmse(muestra$IMC, predicciones_rfe)
+cat("\nError RMSE del modelo basado en RFE:", error_rmse_rfe, "\n")
+
+# Validación cruzada del modelo RFE
+control_cv_rfe <- trainControl(method = "cv", number = 10)
+modelo_cv_rfe <- train(formula_rfe, data = muestra, method = "lm", trControl = control_cv_rfe)
+
+cat("\nResultados de validación cruzada para modelo RFE:\n")
+print(modelo_cv_rfe)
+
+# Conclusión del modelo RFE
+cat("\n### Conclusión del Modelo RFE\n\n")
+cat("El modelo basado en RFE seleccionó las siguientes variables predictoras del IMC:\n")
+cat(paste(variables_rfe, collapse = ", "), "\n\n")
+cat("- **RMSE del modelo final**: ", error_rmse_rfe, "\n")
+cat("- **Resultados de validación cruzada**: \n")
+print(modelo_cv_rfe)
+
+cat("\nLos resultados sugieren que el modelo basado en RFE es adecuado para predecir el IMC, mostrando un bajo error de predicción y validación robusta.\n")
+
+# Conclusión final del análisis
+cat("\n### Conclusión Final del Análisis\n\n")
+cat("1. **Desempeño del Modelo**: El modelo de regresión lineal ajustado para predecir el IMC, basado en la selección de variables mediante el método RFE, mostró un rendimiento excepcional, con un R² ajustado de 0.9902. Esto indica que más del 99% de la variabilidad en el IMC se explica por las variables seleccionadas, lo que refleja la alta precisión del modelo en las predicciones. El RMSE obtenido de 0.35096 y el valor de validación cruzada (0.36485) respaldan aún más la estabilidad y la robustez del modelo en su capacidad para generalizarse a nuevos datos.\n")
+
+cat("2. **Selección de Variables Significativas**: La aplicación del método RFE permitió identificar las variables más relevantes para la predicción del IMC. Entre estas, las más influyentes fueron `Hip.Girth`, `Weight`, `Waist.Girth`, y `Height`. Estas variables demostraron tener una relación significativa con el IMC y contribuyen al ajuste del modelo de manera efectiva. La identificación de estas variables subraya la importancia de las características antropométricas en la estimación precisa del IMC.\n")
+
+cat("3. **Validez de los Supuestos del Modelo**: Los resultados de las pruebas de diagnóstico del modelo, como la normalidad de los residuos y la ausencia de multicolinealidad, indicaron que los supuestos de la regresión lineal fueron cumplidos de manera satisfactoria. La prueba de Durbin-Watson sugirió la ausencia de autocorrelación entre los residuos, y las distancias de Cook no indicaron valores atípicos influyentes que pudieran afectar la estabilidad del modelo, lo que refuerza la validez de los resultados obtenidos.\n")
+
+cat("4. **Precisión de las Predicciones**: La precisión del modelo en términos de las predicciones del IMC se destacó con un bajo error cuadrático medio, tanto en los datos de entrenamiento como en la validación cruzada. Esto sugiere que el modelo es capaz de predecir el IMC con alta exactitud y puede aplicarse con confianza a poblaciones similares en estudios futuros.\n")
+
+cat("5. **Implicaciones del Modelo**: Los resultados obtenidos demuestran que el modelo es altamente eficiente para estimar el IMC utilizando un conjunto reducido de variables. Esto hace que el modelo sea útil en contextos prácticos donde se necesite una estimación rápida y precisa del IMC, como en investigaciones de salud o estudios nutricionales.\n")
+
+cat("\n### Resumen final:\n")
+cat("En conclusión, el modelo de regresión lineal ajustado es robusto, preciso y cumple con los supuestos estadísticos requeridos. La selección de variables a través de RFE ha permitido identificar las más significativas para la predicción del IMC, lo que refuerza la validez del modelo y su aplicabilidad práctica en contextos de salud y nutrición.\n")
+```

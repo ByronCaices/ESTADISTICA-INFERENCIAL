@@ -1,0 +1,114 @@
+---
+title: 'Resultado-equipo-7'
+date: "2024-10-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggpattern)
+require(dplyr)
+library(ggpubr)
+library(kableExtra)
+library(tidyverse)
+library(RVAideMemoire)
+library(rcompanion)
+
+# nuevas librerias 
+
+library(tidyverse)
+library(ggpubr)
+library(dplyr)
+library(nlme)
+library(ez)
+```
+Enunciado:
+
+¿Existen diferencias en el tiempo de resolución de cubos 2x2x2 entre participantes de Colombia, Chile y Uruguay?
+
+Desarrollo:
+
+```{r}
+# Carga de archivo
+data<- read.csv2("EP05 Datos.csv")
+
+
+# Filtrado de datos
+data_util <- data %>% filter(tipo == "2x2x2" & (pais == "Colombia" | pais == "Chile" | pais == "Uruguay"))
+
+head(data_util)
+```
+
+Hipotesis:
+
+Hipotesis nula: No existe diferencia entre las medias de tiempo de resolución de cubos 2x2x2 entre los paises Chile, Colombia y Uruguay.
+(Ho: mu_Chile = mu=_Colombia = mu_Uruguay)
+
+Hipotesis alternativa: Existe diferencia entre al menos un par de medias de tiempo de resolución de cubos 2x2x2 entre los paises Chile, Colombia y Uruguay.
+(Ha: Existe al menos un par de paises (i,j) tal que mu_i != mu_j)
+
+```{r}
+# Condiciones
+
+## Normalidad
+data_util[["pais"]] <- factor(data_util[["pais"]]) #independiente
+data_util[["id"]] <- factor(data_util[["id"]]) #Instancias
+# Graficar Q-Q plot
+g <- ggqqplot(data_util, x = "tiempo", color = "pais")
+g <- g + facet_wrap(~ pais, scales = "free")#independiente
+g <- g + rremove("x.ticks") + rremove("x.text")
+g <- g + rremove("y.ticks") + rremove("y.text")
+g <- g + rremove("axis.title")
+print(g)
+
+# Shapiro test
+test<- data_util %>%
+  group_by(pais) %>%
+  summarise(shapiro_p =shapiro.test(tiempo)$p.value)
+
+print(test)
+```
+
+La primera condición del test ANOVA de una vía se verifica, puesto que para una instancia de 20 [s] y otra de 30 [s] se tiene una diferencia de 10 [s], en donde se tiene la misma diferencia para otras instancias de 35 [s] y 45 [s], debido a la naturaleza de la unidad del tiempo.
+
+La segunda condición del test ANOVA de una vía se verifica dado a que en el enunciado se especifica que las muestras son aleatorias y por otro lado los grupos son independientes dado a que son de distintos paises.
+
+La tercera condición del test ANOVA de una via se verifica que se sigue una distribución normal dado a que en el grafico Q-Q no hay valores atipicos y por el otro lado en el test de shapiro se indica que no hay suficiente evidencia para rechazar normalidad con un 95% de confianza, debido a que en todos los p-value de los paises en shapiro-test son mayores a 0.05.
+
+En base a lo anterior se realiza la prueba ezANOVA, con el fin de poner a prueba un test de Levene para la homogeneidad de la varianza y en caso de ser exitosa revisar si existe realmente una diferencia como se menciona en la hipotesis.
+
+```{r}
+# Test ezANOVA
+anova <- ezANOVA(data = data_util, dv = tiempo, between = pais,
+                  wid = id, return_aov = TRUE, type = 2)
+
+# Imprimir resultados del ANOVA
+cat("\nResultados del ANOVA:\n")
+print(anova)
+
+```
+Ya que el test de Levene el p-value es mayor que 0.05 no hay suficiente evidencia para rechazar la homogeneidad de las varianzas con un 95% de confianza, y por lo tanto el resultado del test ezANOVA tiene validez, dado a que se cumplen todas las condiciones del procedimiento.
+
+De ANOVA se puede concluir con un 95% de confianza que se rechaza la hipotesis nula en favor de la alternativa, y por lo tanto existe al menos una diferencia entre 2 medias de tiempo entre los paises. Para saber cual, se realiza un analisis Post-Hoc, especificamente HSD de Tukey debido a que es la mas robusta para ANOVA independiente de una via.
+```{r}
+# Analisis Post-Hoc
+
+## Test aov para obtener objeto necesario como entrada de tukey
+anova2 <- aov(tiempo ~ pais,data = data_util)
+
+## HSD de Tukey
+tukey <- TukeyHSD(anova2,
+                  "pais",
+                  ordered=TRUE,
+                  conf.level = 0.95)
+
+# Imprimir resultados
+print(tukey)
+
+```
+Como se puede observar en el resultado de Tukey, se tiene un p-value menor a 0.05 tanto en la comparacion Colombia-Chile y Colombia-Uruguay, por lo que exclusivamente para estos 2 pares se puede decir con un 95% de confianza que existe diferencia entre sus tiempos medios.
+
+Conclusion:
+
+Para finalizar, podemos afirmar con un 95% de confianza que existe diferencia en el tiempo medio de resolución de cubos 2x2x2 entre participantes de Colombia y Chile, asi como Colombia y Uruguay, y por otro lado se puede decir que para los tiempos medios de Chile-Uruguay no hay suficiente evidencia para afirmar que exista una diferencia significativa.
+

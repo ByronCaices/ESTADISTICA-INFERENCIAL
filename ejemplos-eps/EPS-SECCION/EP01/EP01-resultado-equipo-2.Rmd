@@ -1,0 +1,68 @@
+---
+title: "Tarea1"
+author: "Thomas Riffo"
+date: "2024-09-24"
+output: html_document
+---
+
+Integrantes: 
+
+   Isidora Oyanedel
+   Arina Bilan
+   Thomas Riffo
+
+Somos el grupo 2 y nos toco la pregunta:
+
+**Equipo 2**
+*¿Tienen hombres y mujeres ingresos similares en la RM?*
+
+En el excel entregado en la plataforma de U virtual, se pueden apreciar muchas variables de las cuales se usaremos dos, el sexo y el ytot que nos ayudaran a responder la pregunta:
+
+sexo: variable cualitativa, nominal.
+ytot: variable cuantitativa, discreta.
+
+Además para responder esta pregunta, la media estadistica que usaremos sera la media de los sueldos de ambos trabajadores.
+
+Para poder responder la pregunta, usaremos filter para obtener las filas especificas de cada género que queremos y luego comparamos los diferentes resultados obtenidos para saber si los ingresos son similares.
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+#Cargamos los datos desde un archivo CSV
+datos <- read.csv2("EP01-Datos-Casen-2017.csv")
+
+#Conseguimos los sueldos y los generos
+genero = datos$sexo
+Sueldos = datos$ytot
+
+#Conseguimos los datos respecto al género de la persona aplicando filter
+Mujeres = datos %>% filter(sexo == "Mujer")
+Hombres = datos %>% filter (sexo == "Hombre")
+
+#Aplicamos summary para saber la media, moda y mediana
+summary(Mujeres$ytot)
+summary(Hombres$ytot)
+
+#Conseguimos los sueldos respecto al genero
+Sueldos_hombres = Hombres$ytot
+Sueldos_mujeres = Mujeres$ytot
+
+#Vemos el sueldo total por género
+Sueldo_total_hombres = sum(Sueldos_hombres)
+Sueldo_total_mujeres = sum(Sueldos_mujeres)
+
+#Mostramos los sueldos
+Sueldo_total_hombres
+Sueldo_total_mujeres
+```
+
+Vamos hacer un grafico de barra para poder apreciar la diferencia de sueldo entre género
+```{r}
+grafico_hombres = ggplot(datos, aes(x = sexo, y = ytot, fill = sexo)) +
+  geom_bar(stat = "summary", fun = "mean", position = "dodge") +
+  labs(x = "género", y = "Sueldo", title  = "diferencia de ingresos entre hombres y mujeres")
+
+grafico_hombres
+```
+Podemos concluir que los hombres y las mujeres no tienen ingresos similares, ya que como se puede apreciar en la media y en el grafico, los hombres ganan mucho más que las mujeres

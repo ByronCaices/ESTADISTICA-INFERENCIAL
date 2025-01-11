@@ -1,0 +1,123 @@
+---
+title: "EP05 Grupo 6"
+date: "`r Sys.Date()`"
+output: html_document 
+        
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(repos = c(CRAN = "https://cran.rstudio.com/"))
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(tidyr)) install.packages("tidyr")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(ggpubr)) install.packages("ggpubr")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(ggmosaic)) install.packages("ggmosaic")
+if(!require(kableExtra)) install.packages("kableExtra")
+if(!require(ggpattern)) install.packages("ggpattern")
+if(!require(pwr)) install.packages("pwr")
+if(!require(tidyverse)) install.packages("tidyverse")
+if(!require(rcompanion)) install.packages("rcompanion")
+if(!require(RVAideMemoire)) install.packages("RVAideMemoire")
+
+```
+
+```{=html}
+<style>
+body {
+text-align: justify}
+</style>
+```
+
+## Pregunta ¿Existen diferencias en el tiempo de resolución de cubos Megaminx entre participantes de Uruguay, Perú y Colombia?
+
+* **Hipótesis nula:** No existen diferencias en el tiempo de resolución de cubos Megaminx entre participantes de Uruguay, Perú y Colombia.
+
+* **Hipótesis alternativa:** Existen diferencias en el tiempo de resolución de cubos Megaminx entre participantes de Uruguay, Perú y Colombia.
+
+* Verificación de condiciones
+
+1) La escala con que se mide la variable dependiente tiene las propiedades de una escala de intervalos iguales.
+
+* Lo anterior sí se cumple, ya que el tiempo de resolución de cubos Megaminx es una variable continua que se mide en segundos, y se puede considerar que la diferencia entre 1 y 2 segundos es la misma que entre 2 y 3 segundos.
+
+2) Las k muestras son obtenidas de manera aleatoria e independiente desde las poblaciones de origen.
+
+* Por el mismo enunciado se menciona que los datos son obtenidos de una competencia de cubos Rubik, por lo que se puede considerar que los datos son obtenidos de manera aleatoria e independiente.
+
+3) Se puede suponer que las poblaciones de origen siguen una distribución normal.
+
+* Para lo anterior se realizará un gráfico Q-Q plot para verificar si los datos siguen una distribución normal:
+```{r b}
+# Obtengo los datos
+datos <- read.csv2("EP05 Datos.csv")
+
+# Recopilo los datos de tiempo de resolución de cubos Megaminx, dejandolos en formato largo
+datos <- datos %>% filter(tipo == "Megaminx") %>% select(pais, tiempo) %>% filter(pais == "Uruguay" | pais == "Perú" | pais == "Colombia")
+
+# Realizo un Q-Q plot
+g <- ggqqplot(datos, x = "tiempo", y = "pais", color = "pais") + facet_wrap(~ pais)
+g <- g + rremove("x.ticks") + rremove("x.text")
+g <- g + rremove("y.ticks") + rremove("y.text")
+g <- g + rremove("axis.title")
+print(g)
+```
+
+Se puede notar por el gráfico que los datos siguen razonablemente una distribución normal. (para reforzar se podría hacer tambien una prueba Shapiro-wilk)
+
+4) Si las muestras provienen de más de una población, estas tienen la misma varianza.
+
+* Para lo anterior se calcula la varianza de cada grupo, y se obtiene la mínima y máxima varianza para dividir la varianza máxima entre la mínima y verificar si es menor a 1.5.
+```{r c}
+# Se calcula la varianza de cada grupo
+varianza <- datos %>% group_by(pais) %>% summarise(varianza = var(tiempo))
+
+# Se obtiene la varianza máxima y mínima
+varianza_max <- max(varianza$varianza)
+varianza_min <- min(varianza$varianza)
+
+# Se obtiene la relación entre la varianza máxima y mínima
+relacion <- varianza_max / varianza_min
+
+# Se muestran los resultados
+print(relacion)
+
+```
+Como la relación es menor a 1.5, se puede considerar que las varianzas son iguales y por ende, se cumple la condición de homocedasticidad.
+
+Con lo anterior, se cumplieron todas las condiciones para realizar un ANOVA de un factor.
+
+```{r a}
+alfa <- 0.05
+
+# Mostrar los primeros datos
+head(datos)
+
+# Hacer la prueba de ANOVA
+modelo <- aov(tiempo ~ pais, data = datos)
+print(summary(modelo))
+```
+
+Del resultado obtenido por la prueba ANOVA, se obtuvo un p-value 2.52e-13, valor claramente menor a cualquier valor de significancia estándar para el uso en estadística, por lo cual se rechaza la hipótesis nula en favor de la hipótesis alternativa. Por lo tanto se concluye que sí existe una diferencia en los tiempos para completar un cubo Megaminx entre los los participantes de Uruguay, Perú y Colombia.
+
+Como el test de ANOVA no entrega información respecto a cuáles países poseen diferencias significativas, se procederá a hacer un procedimiento post_hoc, lo anterior para determinar entre qué países existen estas diferencias.
+
+```{r d}
+# Utilizo el post_hoc de Tukey
+post_hoc <- TukeyHSD(modelo,
+                     "pais",
+                     ordered = TRUE,
+                     conf.level = 1 - alfa)
+
+
+print(post_hoc)
+```
+
+Con el resultado de post_hoc Tukey, se obtuvo que el p-value entre:
+* Uruguay-Perú: 0.4380439
+* Colombia-Perú: 0
+* Colombia-Uruguay: 0
+
+Por lo que se puede concluir que existen diferencias significativas en los tiempos de resolución del cubo Megaminx entre Colombia y Perú, y entre Colombia y Uruguay, pero no entre Uruguay y Perú.

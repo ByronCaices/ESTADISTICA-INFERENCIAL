@@ -1,0 +1,123 @@
+---
+title: "R Notebook"
+author: "Equipo 4"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(ggpubr)
+library(ez)
+library(latex2exp)
+```
+
+```{r}
+datos = read.csv2("EP05 Datos.csv")
+
+# Datos en formato largo
+data <- datos %>% filter(tipo == "2x2x2" & (pais == "Colombia" | pais == "Argentina" | pais == "Ecuador"))
+```
+
+Formulación de Hipótesis
+
+H0:El tiempo en promedio necesitado para resolver el cubo de 2x2x2 (u^(2x2x2)) es igual para Colombia, Ecuador y Argentina.
+
+Ha: El tiempo en promedio necesitado para resolver el cubo de 2x2x2 es diferente para al menos un país.
+
+Matemáticamente
+
+H0: u_Colombia^(2x2x2}) = u_Ecuador^(2x2x2) = u_Argentina^(2x2x2)
+
+Ha: ∃ i, j ∈ {Colombia, Ecuador, Argentina}, i != j or u_i^(2x2x2) != u_j^(2x2x2)
+
+Prueba de condiciones
+
+1.  Al medir en base al tiempo, se determina que efectivamente es una escala con interrvalos iguales, ya que el tiempo es una magnitud física.
+
+2.  En base al enunciado se comprueba que las muestras fueron obtenidas de manera aleatoria e independiente.
+
+```{r}
+# 3. Comprobación de normalidad
+data[["pais"]] = factor(data[["pais"]])
+data[["instancia"]] = factor(1:nrow(data))
+
+# Crear gráfico Q-Q para la columna 'tiempo'
+g = ggqqplot(data,
+             x = "tiempo",
+             y = "pais",
+             color = "pais")
+g = g + facet_wrap(~ pais)
+g = g + rremove("x.ticks") + rremove("x.text")
+g = g + rremove("y.ticks") + rremove("y.text")
+g = g + rremove("axis.title")
+
+# Imprimir el gráfico
+print(g)
+```
+
+```{r}
+test_normalidad = data %>% group_by(pais) %>% summarise(p = shapiro.test(tiempo)$p.value)
+print(test_normalidad)
+```
+
+Gracias al gráfico y el test de Shapiro Wilk, se determina que la muestra efectivamente sigue una distribución normal.
+
+```{r}
+# 4. Verificar condición de homocedasticidad y prueba ezANOVA
+prueba = ezANOVA(data = data, dv = tiempo, between = pais, wid = instancia, type = 2, return_aov = TRUE)
+
+print(prueba)
+```
+
+Según el resultado de la prueba de homocedasticidad de varianza con un p-value: 0.7860277 se puede determinar que efectivamente las varianzas cumplen la condición de homogeneidad.
+
+Interpretación prueba omnibus
+
+Según el p-value de la prueba ANOVA, el cual es prácticamente cero, se puede determinar que existe una diferencia significativa entre, por lo menos, dos países. Esto permite que se rechace la hipótesis nula en favor de la alternativa.
+
+
+Interpretación de la prueba ommnibus
+
+```{r}
+#Gráfico tamaño del efecto
+
+g2 <-ezPlot(
+  data = data,
+  dv = tiempo,
+  wid = instancia,
+  between = pais,
+  y_lab = "Tiempo promedio para resolver un cubo 2X2X2 [S]",
+  x = pais
+)
+
+g2 <- g2 + theme_pubr()
+
+print(g2)
+```
+
+
+Prueba post hoc 
+
+Dado que el ANOVA indica diferencias entre diferencias estadísticas significativas entre al menos dos países, es necesario realizar un análisis extra para saber entre cuáles países existe dicha diferencia.
+
+Para esto haremos uso de la prueba Post-hoc
+
+```{r}
+
+
+#Procedimiento TukeyHSD
+
+anova <- aov(tiempo ~ pais, data = data)
+
+post_hoc <- TukeyHSD(anova, 
+                     "pais",
+                     ordered =TRUE,
+                     conf.level = 1- 0.05)
+
+print(post_hoc)
+
+```
+El análisis post-hoc muestra que el tiempo promedio de resolución es significativamente distinto en Ecuador a comparación de Colombia y Argentina, mientras que no se encontraron diferencias significativas entre Argentina y Colombia utilizando el ajuste de Bonferroni, pero sí hay diferencia significativa entre ambos si se utiliza el ajuste de Holm. Sin embargo, no es suficiente para asegurar que realmente existe dicha diferencia.
+
+En conclusión, con un nivel de significacia de (a = 0.05). Si miramos el gráfico del efecto obtenido para el procedimiento ANOVA, podemos concluir con un 95% de confianza que en Ecuador tienen un tiempo de resolución promedio menor al de Colombia o Argentina. Respecto a Argentina y Colombia, no hay diferencias significativas entre sus medias.

@@ -1,0 +1,470 @@
+---
+title: "EP08-Equipo-8"
+author: "Equipo 8"
+date: "2024-11-18"
+output: pdf_document
+---
+
+```{r, echo =FALSE, warning=FALSE, message=FALSE}
+if (!requireNamespace('ggpubr', quietly = TRUE)){
+  install.packages('ggpubr')
+}
+library(ggpubr)
+if (!requireNamespace('ggplot2', quietly = TRUE)){
+  install.packages('ggplot2')
+}
+library(ggplot2)
+if (!requireNamespace('dplyr', quietly = TRUE)){
+  install.packages('dplyr')
+}
+library(dplyr)
+if (!requireNamespace('boot', quietly = TRUE)){
+  install.packages('boot')
+}
+library(boot)
+if (!requireNamespace('ez', quietly = TRUE)){
+  install.packages('ez')
+}
+library(ez)
+if (!requireNamespace('WRS2', quietly = TRUE)){
+  install.packages('WRS2')
+}
+library(WRS2)
+```
+
+Como habíamos visto a comienzos del semestre, la Encuesta de Caracterización Socioeconómica Nacional (Casen) es realizada por el Ministerio de Desarrollo Social de forma periódica para conocer la situación de los hogares chilenos con relación a aspectos demográficos, de educación, salud, vivienda, trabajo e ingresos. Es la principal fuente de información para estimar la magnitud de la pobreza y la distribución del ingreso en el país.
+
+Cargamos los datos de la encuesta Casen 2017 y los guardamos en un objeto llamado `casen`. Luego, filtramos las columnas de interés para nuestro análisis y guardamos el resultado en un objeto llamado `casen_filtrado`.
+
+```{r}
+casen <- read.csv("EP08 Datos CASEN 2017.csv")
+
+#Mostramos los primeros datos
+head(casen)
+```
+
+Mostramos todas las variables involucradas para conocer el dataset
+
+```{r}
+str(casen)
+```
+
+# Pregunta 1
+
+Propongan una pregunta de investigación original, que involucre la comparación de una frecuencia de un evento o característica en dos grupos independientes (más abajo se dan unos ejemplos). Fijando una semilla propia, seleccionen una muestra aleatoria de hogares (100 \< n \< 150) y respondan la pregunta propuesta utilizando una prueba de permutaciones Monte Carlo. Indicación: creen su propio código, específicamente para este problema, no usen directamente el script del apunte.
+
+**Pregunta de investigación**
+
+Como estudiantes de ingeniería civil informática, se nos pidió trabajar con los datos Casen del año 2017, en donde al visualizar los datos, nos dimos cuenta que existen diferentes grupos y tipos de datos, siendo un dato importante el ingreso total de cada persona encuestada, es por eso que nos preguntamos lo siguiente: ¿Existe una diferencia significativa en la proporción de hombres y mujeres que perciben ingresos superiores a \$1,000,000 en la Región Metropolitana de Santiago?
+
+Para comenzar a responder esta pregunta, comenzaremos filtrando los datos para obtener las muestras de hombres y mujeres que perciben ingresos superiores a \$1,000,000 en la Región Metropolitana de Santiago.
+
+```{r}
+#Filtramos los datos para obtener las muestras de hombres y mujeres que perciben ingresos superiores a $1,000,000 en la Región Metropolitana de Santiago.
+
+# Primero seleccionamos una muestra aleatoria de la Región Metropolitana
+n_muestra <- sample(100:150, 1)
+Datos_filtrados_aleatorios <- casen %>% 
+  filter(region == "Región Metropolitana de Santiago") %>% 
+  sample_n(size = n_muestra, replace = FALSE)
+
+head(Datos_filtrados_aleatorios)
+```
+
+**Formulamos las hipótesis**
+
+H0: La proporción de hombres y mujeres que perciben ingresos superiores a \$1,000,000 en la Región Metropolitana de Santiago es la misma.
+
+(Proporcion_hombres = Proporcion_mujeres)
+
+Ha: La proporción de hombres y mujeres que perciben ingresos superiores a \$1,000,000 en la Región Metropolitana de Santiago es distinta.
+
+(Proporcion_hombres != Proporcion_mujeres)
+
+**Se elige la diferencia de proporciones como estadístico de interés ya que permite cuantificar directamente la brecha entre géneros en términos de la proporción que supera el millón de pesos de ingreso. Este estadístico es apropiado para comparar frecuencias entre dos grupos independientes.**
+
+Para responder esta pregunta, utilizaremos un remuestreo de permutaciones Monte Carlo. En este caso, la prueba de permutaciones Monte Carlo se realizará de la siguiente manera:
+
+```{r}
+# Creamos las muestras binarias (1 si gana más de 1 millón, 0 si no)
+datos_binarios <- Datos_filtrados_aleatorios %>% 
+  mutate(sobre_millon = ifelse(ytot > 1000000, 1, 0))
+
+hombres <- datos_binarios %>% 
+  filter(sexo == "Hombre") %>% 
+  pull(sobre_millon)
+
+mujeres <- datos_binarios %>% 
+  filter(sexo == "Mujer") %>% 
+  pull(sobre_millon)
+
+# Visualización de los datos
+ggplot(datos_binarios, aes(x = sexo, fill = factor(sobre_millon))) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c("#E69F00", "#56B4E9"),
+                   labels = c("≤ $1,000,000", "> $1,000,000")) +
+  labs(title = "Proporción de ingresos por género",
+       y = "Proporción",
+       fill = "Nivel de ingreso") +
+  theme_minimal()
+
+# Mostramos estadísticas descriptivas
+cat("Resumen de la muestra:\n")
+cat("Número de hombres:", length(hombres), "\n")
+cat("Número de mujeres:", length(mujeres), "\n")
+cat("Proporción de hombres que ganan más de $1,000,000:", mean(hombres), "\n")
+cat("Proporción de mujeres que ganan más de $1,000,000:", mean(mujeres), "\n\n")
+```
+
+Luego de obtener la muestra de la población aleatoriamente, procedemos a realizar la prueba de permutaciones Monte Carlo utilizando una cantidad de 9999 permutaciones.
+
+Se elige el método de Monte Carlo porque:
+
+1.  No requiere supuestos sobre la distribución de los datos.
+2.  Es apropiado para comparar proporciones entre grupos independientes.
+3.  Maneja bien muestras pequeñas y desbalanceadas.
+4.  Se pide en el enunciado de la pregunta utilizar este método.
+
+```{r}
+#Fijamos la semilla
+set.seed(1234)
+
+#Definimos la cantidad de permutaciones
+B <- 9999
+
+#Función para obtener una permutación
+Obt_permutacion = function(i, muestra_1, muestra_2) {
+  n_1 = length(muestra_1)
+  combinada = c(muestra_1, muestra_2)
+  n = length(combinada)
+  permutacion = sample(combinada, n, replace = FALSE)
+  nueva_1 = permutacion[1:n_1]
+  nueva_2 = permutacion[(n_1+1):n]
+  return(list(nueva_1, nueva_2))
+}
+
+#Función para calcular la diferencia de proporciones
+calcular_diferencia = function(muestras) {
+  muestra_1 = muestras[[1]]
+  muestra_2 = muestras[[2]]
+  diferencia = mean(muestra_1) - mean(muestra_2)  # Ahora calcula diferencia de proporciones
+  return(diferencia)
+}
+
+#Función para calcular el valor p
+calcular_valor_p = function(distribucion, valor_observado,
+                          repeticiones, alternative) {
+  if(alternative == "two.sided") {    
+    numerador = sum(abs(distribucion) > abs(valor_observado)) + 1
+    denominador = repeticiones + 1
+    valor_p = numerador/denominador
+  }
+  else if(alternative == "greater") {
+    numerador = sum(distribucion > valor_observado) + 1
+    denominador = repeticiones + 1
+    valor_p = numerador/denominador
+  }
+  else {
+    numerador = sum(distribucion < valor_observado) + 1
+    denominador = repeticiones + 1
+    valor_p = numerador/denominador
+  }
+  return(valor_p)
+}
+
+# Función para hacer la prueba de permutaciones
+contrastar_hipotesis_permutaciones = function(muestra_1, muestra_2,
+                                            repeticiones, alternative, ...) {
+  cat("Prueba de permutaciones para diferencia de proporciones\n\n")
+  cat("Hipótesis alternativa: ", alternative, "\n")
+  
+  #Calcular el valor observado (diferencia de proporciones original)
+  observado = mean(muestra_1) - mean(muestra_2)
+  cat("Diferencia de proporciones observada: ", round(observado, 4), "\n")
+  
+  #Generar permutaciones
+  permutaciones = lapply(1:repeticiones, Obt_permutacion, muestra_1, muestra_2)
+  
+  #Generar la distribución
+  distribucion = sapply(permutaciones, calcular_diferencia)
+  
+  #Calcular el valor p
+  valor_p = calcular_valor_p(distribucion, observado, repeticiones, alternative)
+  
+  cat("Valor p: ", valor_p, "\n\n")
+}
+
+#Realizamos la prueba de hipótesis
+contrastar_hipotesis_permutaciones(hombres, mujeres, repeticiones = B, alternative = "two.sided",)
+```
+
+**Conclusión** Luego de realizar la prueba de permutaciones utilizando el método de Monte Carlo, se obtuvo un valor p de 0.4322, lo que nos indica que no existe evidencia suficiente para rechazar la hipótesis nula. Observamos que la proporción de hombres que ganan más de 1,000,000 es 13.11% mientras que en mujeres es 8.8%, pero esta diferencia no es estadísticamente significativa. Por lo tanto, no podemos afirmar que exista una diferencia significativa en la proporción de hombres y mujeres que perciben ingresos superiores a 1,000,000 en la Región Metropolitana de Santiago.
+
+# Pregunta 2
+
+Propongan una pregunta de investigación original, que involucre la comparación de las medias de más de dos grupos independientes (más abajo se dan unos ejemplos). Fijando una semilla distinta a la anterior, seleccionen una muestra aleatoria de hogares (200 \< n \< 300) y respondan la pregunta propuesta utilizando bootstrapping. Solo por ejercicio académico, aplique un análisis post-hoc con bootstrapping aunque este no fuera necesario. Indicación: consideren que el análisis post-hoc debe hacerse con las mismas remuestras usadas para la prueba ómnibus. Algunos ejemplos (que no pueden ser ocupados en este ejercicio) son:
+
+**Pregunta de investigación**
+
+En este caso, la pregunta que planteamos es: ¿Es igual el ingreso total para hombres y mujeres para las provincias de  Cordillera, Maipo y Talagante?
+
+Una vez con la pregunta planteada procedemos a realizar el filtrado de los datos para obtener una muestra aleatoria de hogares con un tamaño de 250 y que pertenezcan a las provincias de Maipo, Cordillera y Talagante.
+
+```{r}
+#Filtrado de datos para cumplir las condiciones y que sean los datos de interés
+set.seed(498)
+tamaño_2 <- 250
+
+muestra_2 <- casen %>% filter(provincia %in% c("Maipo", "Cordillera", "Talagante")) %>% select(ytot, provincia) %>% sample_n(tamaño_2)
+
+```
+
+Una vez que obtenemos los datos de interés procedemos a graficarlos para revisar su comportamiento.
+
+```{r}
+# Boxplot para comparar provincias
+ggplot(muestra_2, aes(x = provincia, y = ytot, fill = provincia)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Distribución de ingresos totales por provincia", x = "Provincia", y = "Ingresos totales")
+
+# Histograma por provincia
+ggplot(muestra_2, aes(x = ytot, fill = provincia)) +
+  geom_histogram(bins = 30, alpha = 0.7, position = "identity") +
+  facet_wrap(~provincia) +
+  theme_minimal() +
+  labs(title = "Distribución de ingresos totales por provincia", x = "Ingresos totales", y = "Frecuencia")
+```
+
+Vemos que para cada muestra contamos con valores atípicos por lo cual es necesario realizar un remuestreo mediante bootstrapping para que estos valores problemáticos no influyan sobre la certeza de las pruebas. Pero antes de esto presentamos las hipótesis a contrastar:
+
+**Formulación de hipótesis**
+
+Donde u1, u2 y u3 son las medias de los ingresos totales para hombres y mujeres para las provincias de Maipo, Cordillera y Talagante respectivamente.
+
+H0: La media de los ingresos totales para hombres y mujeres para las provincias de Maipo, Cordillera y Talagante son iguales.
+
+Ha: Hay al menos una media de los ingresos totales para hombres y mujeres que es diferente a al menos una.
+
+Matemáticamente: H0: $$u1 = u2 = u3$$
+
+Ha: $$ \exists i, j \in \{1,2,3\} \ni \mu_i \neq \mu_j $$
+
+Continuando con el análisis estadístico resulta necesario contrastar las medias de 3 grupos independientes, como hay más de 2 medias no podemos compararlas directamente sus diferencias por lo cual lo más conveniente es hacer uso del estadístico F para evaluarlos.
+
+Con lo anterior en mente pasamos a realizar el remuestreo con bootstrapping con ANOVA para 2500 repeticiones.
+
+Se eligió un método de bootstrapping porque:
+
+1.  Los datos muestran valores atípicos significativos.
+2.  Las distribuciones son asimétricas.
+3.  El bootstrapping no requiere supuestos de normalidad.
+4.  Es robusto ante la presencia de valores extremos.
+5.  Se pide por enunciado utilizar el método de bootstrapping para resolver la pregunta.
+
+```{r}
+#Separacion de muestras por provincia
+n_Talagante <- which(muestra_2[["provincia"]] == "Talagante")
+
+n_Maipo <- which(muestra_2[["provincia"]] == "Maipo")
+
+n_Cordillera <- which(muestra_2[["provincia"]] == "Cordillera")
+
+```
+
+Para obtener el estadístico F se realizará la prueba ANOVA. Por lo mismo, se genera una función que tome los datos de las provincias, los ingrese en un vector para así generar un data frame con los datos y obtener un estadístico F.
+
+```{r}
+# Función para calcular el estadístico F
+obtener_F <- function(df, A, B, C){
+  # Crear vector de índices
+  i <- c(A, B, C)
+  # Crear factor para ids
+  id <- factor(1:length(i))
+  # Asegurarse que provincia es factor
+  df[["provincia"]] <- factor(df[["provincia"]])
+  # Crear data frame para ANOVA
+  data <- data.frame(
+    id = id,
+    ytot = df[i, "ytot"],
+    provincia = df[i, "provincia"]
+  )
+  
+  # Realizar ANOVA
+  ANOVA <- ezANOVA(data, dv = ytot, wid = id, between = provincia, type = 2)
+  
+  return(ANOVA[["ANOVA"]][["F"]])
+}
+
+#Estadistico F de la muestra original
+
+f_obs <- obtener_F(muestra_2,  n_Cordillera, n_Maipo, n_Talagante )
+
+cat("El estadístico F de la muestra es:", f_obs)
+```
+El estadístico F de la muestra arrojó un valor mayor a 1, lo cual sugiere la existencia de diferencias significativas entre los grupos analizados. Para determinar la significancia estadística mediante un valor p, es necesario contar con una distribución nula que permita contrastar con la distribución observada. Sin embargo, el bootstrapping no logra generar una distribución nula adecuada, ya que este método preserva las diferencias entre grupos presentes en los datos originales. A diferencia de otros análisis donde es posible utilizar un desplazamiento para generar una distribución nula, la naturaleza del estadístico F no permite este ajuste, por lo que se buscará cumplir la hipótesis nula mediante otra distribución, por lo cual en esta se ajustan los datos para que tengan la misma media y varianza, y así poder obtener un valor p.
+
+
+```{r}
+#Medidas generales
+media_G <- mean(muestra_2$ytot)
+sigma_G <- sd(muestra_2$ytot)
+
+cat("Media general:", round(media_G, 3), "\n")
+cat("Desviación estándar general:", round(sigma_G, 3), "\n")
+
+#Medidas por provincias
+media_provincias <- muestra_2 %>% group_by(provincia) %>%
+  summarise(media = mean(ytot), sigma = sd(ytot)) %>%
+  as.data.frame()
+
+#Desplazamiento de los valores para igualar medidas (media y varianza)
+
+muestra_2_igual_medidas <- muestra_2
+
+ muestra_2_igual_medidas[n_Cordillera, "ytot"] <- media_G + (muestra_2_igual_medidas[n_Cordillera, "ytot"] - media_provincias[1, "media"]) * (sigma_G / media_provincias[1, "sigma"])
+ 
+ muestra_2_igual_medidas[n_Maipo, "ytot"] <- media_G + (muestra_2_igual_medidas[n_Maipo, "ytot"] - media_provincias[2, "media"]) * (sigma_G / media_provincias[2, "sigma"])
+ 
+ muestra_2_igual_medidas[n_Talagante, "ytot"] <- media_G + (muestra_2_igual_medidas[n_Talagante, "ytot"] - media_provincias[3, "media"]) * (sigma_G / media_provincias[3, "sigma"])
+ 
+```
+Una vez que igualamos las medias y varianzas de las provincias, procedemos a realizar el remuestreo de 2500 repeticiones.
+
+```{r}
+#Número de remuestreos
+B <- 2500  # Puedes ajustar este número
+
+# Realizar el remuestreo para cada provincia
+set.seed(9028)  # Para reproducibilidad
+remuestreo_Cordillera <- lapply(1:B, function(i) 
+  sample(n_Cordillera, replace = TRUE))
+
+remuestreo_Maipo <- lapply(1:B, function(i) 
+  sample(n_Maipo, replace = TRUE))
+
+remuestreo_Talagante <- lapply(1:B, function(i) 
+  sample(n_Talagante, replace = TRUE))
+
+```
+
+
+```{r}
+# Función para el bootstrapping
+F_bootstraping <- function(i, df){
+  F_val <- tryCatch({
+    obtener_F(df, 
+                  remuestreo_Cordillera[[i]], 
+                  remuestreo_Maipo[[i]], 
+                  remuestreo_Talagante[[i]])
+  }, error = function(e) {
+    cat("Error en iteración", i, ":", e$message, "\n")
+    return(NA)
+  })
+  return(F_val)
+}
+
+cat("Realizando bootstrapping...\n")
+
+# Realizar el bootstrapping con manejo de errores
+distribucion <- suppressMessages(suppressWarnings(
+  sapply(1:B, function(i) F_bootstraping(i, muestra_2_igual_medidas))
+))
+
+cat("Boostrapping completado")
+```
+
+
+```{r}
+p2 <- gghistogram(data.frame(distribucion), x = "distribucion",
+                  title = "Distribución permutada",
+                  xlab = "Estadístico F", ylab = "Frecuencia",
+                  bins = 30, fill = "blue")
+ p2 <- p2 + geom_vline(xintercept = f_obs, colour="red")
+ print(p2)
+```
+
+Tal como vemos en el gráfico, obtenemos una distribución alejada del F observado, pero con las características necesarias como para poder cumplir con la hipótesis nula, de tal manera que se encuentra el valor p con esta distribución.
+
+```{r}
+f_crit <- quantile(distribucion, 0.95)
+cat("F crítico con 95% de confianza:", round(f_crit, 3), "\n")
+ 
+p_value <- (sum(distribucion > f_obs) + 1) / (B + 1)
+cat("P-value:", round(p_value, 3))
+```
+Vemos que la hipótesis nula es correcta, ya que f_obs (2.168) no debiese ser mayor a 2.951 con 95% de confianza. Aparte, contamos con un p-value de 0.119, lo cual resulta mayor a 0.05, por lo cual no contamos con la suficiente información para rechazar la hipótesis nula, por lo cual, con un 95% de confianza, podemos decir que Cordillera, Maipo y Talagante tienen medias de ingresos totales para hombres y mujeres iguales.
+
+Antes de pasar a realizar el análisis post-hoc (con fines académicos), verificamos utilizando la función t1way de la librería WRS2 que el p-value fue bien estimado.
+
+```{r}
+t1waybt(ytot ~ provincia, data = muestra_2, R = B)
+```
+Vemos que el p-value obtenido y el estimado son muy cercanos, por lo cual ahora pasamos a realizar el análisis post-hoc.
+
+```{r}
+#Funcion para la diferencia de medias para el analisis post-hoc
+dif_medias <- function(df, A, B) {
+  media_A <- mean(df[A, "ytot"])
+  media_B <- mean(df[B, "ytot"])
+  return(media_A - media_B) 
+}
+
+#Diferencia de medias entre cada par de provincias
+dif_Cord_Maipo <- dif_medias(muestra_2, n_Cordillera, n_Maipo)
+dif_Cord_Talag <- dif_medias(muestra_2, n_Cordillera, n_Talagante)
+dif_Maipo_Talagante <- dif_medias(muestra_2, n_Maipo, n_Talagante)
+
+cat("Diferencia de medias entre Cordillera vs Maipo:", round(dif_Cord_Maipo), "\n")
+cat("Diferencia de medias entre Cordillera vs Talagante:", round(dif_Cord_Talag), "\n")
+cat("Diferencia de medias entre Maipo vs Talagante:", round(dif_Maipo_Talagante), "\n")
+ 
+#Realizar el remuestreo para cada par de provincias
+
+boot_dist_Cord_Maipo <- sapply(1:B,
+                            function(i) dif_medias(muestra_2_igual_medidas,
+                                                       remuestreo_Cordillera[[i]],
+                                                       remuestreo_Maipo[[i]]))
+boot_dist_Cord_Talag <- sapply(1:B,
+                            function(i) dif_medias(muestra_2_igual_medidas,
+                                                       remuestreo_Cordillera[[i]],
+                                                       remuestreo_Talagante[[i]]))
+boot_dist_Maipo_Talag <- sapply(1:B,
+                            function(i) dif_medias(muestra_2_igual_medidas,
+                                                       remuestreo_Maipo[[i]],
+                                                       remuestreo_Talagante[[i]]))
+ 
+#Intervalos de confianza al 95%
+ 
+intervalo_confianza_cord_maip <- quantile(boot_dist_Cord_Maipo, c(0.025, 0.975))
+intervalo_confianza_cord_talag <- quantile(boot_dist_Cord_Talag, c(0.025, 0.975))
+intervalo_confianza_maipo_talag <- quantile(boot_dist_Maipo_Talag, c(0.025, 0.975))
+
+cat("\n")
+cat("Intervalos de confianza \n")
+cat("Cordillera vs Maipo: [", round(intervalo_confianza_cord_maip, 3), "]\n")
+cat("Cordillera vs Talagante: [", round(intervalo_confianza_cord_talag, 3), "]\n")
+cat("Maipo vs Talagante: [", round(intervalo_confianza_maipo_talag, 3), "]\n")
+ 
+```
+```{r}
+#Diferencias bilaterales
+valor_p.A.C <- (sum(abs(boot_dist_Cord_Maipo) > abs(dif_Cord_Maipo)) + 1) / (B + 1)
+ valor_p.A.M <- (sum(abs(boot_dist_Cord_Talag) > abs(dif_Cord_Talag)) + 1) / (B + 1)
+ valor_p.C.M <- (sum(abs(boot_dist_Maipo_Talag) > abs(dif_Maipo_Talagante)) + 1) / (B + 1)
+ 
+ valores_p.adj <- p.adjust(c(valor_p.A.C, valor_p.A.M, valor_p.C.M), method = "BH")
+ 
+ cat("Valores p de pruebas bilaterales:\n")
+ cat("Atacama - Coquimbo:", round(valores_p.adj[1], 3), "\n")
+ cat("Atacama - Maule   :", round(valores_p.adj[2],3), "\n")
+ cat("Coquimbo - Maule  :", round(valores_p.adj[3], 3), "\n") 
+```
+
+## Conclusión del análisis post-hoc
+
+Los intervalos de confianza al 95% para las diferencias de medias entre cada par de provincias son los siguientes:
+
+Cordillera vs Maipo: [ -157938.1 145712.4 ] Cordillera vs Talagante: [ -207964.5 171624.8 ] Maipo vs Talagante: [ -209525.4 182351.6 ]
+
+Dado que todos los intervalos de confianza incluyen el valor 0, no hay evidencia suficiente para afirmar que existen diferencias significativas en las medias de los ingresos totales entre las provincias de Maipo, Cordillera y Talagante. Además de esto, se puede observar que ninguno de los valores p obtenidos es menor al nivel de significancia establecido. Por lo tanto, concluimos con un 95% de confianza que las medias de los ingresos totales para hombres y mujeres en estas provincias son estadísticamente similares.

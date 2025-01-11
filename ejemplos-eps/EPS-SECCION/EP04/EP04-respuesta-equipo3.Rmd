@@ -1,0 +1,198 @@
+---
+title: "EP04-Grupo3"
+output:
+  html_document:
+    df_print: paged
+date: "2024-10-14"
+editor_options:
+  markdown:
+    wrap: sentence
+---
+
+```{r libraries}
+library(tidyverse)
+library(RVAideMemoire)
+library(rcompanion)
+```
+
+# Pregunta 1
+
+Se realiza un estudio sobre las preferencias de consumo de dos tipos de chocolate, “Chocolate Blanco” y “Chocolate Negro”, entre dos grupos etarios distintos: personas adultas y personas menores de edad (niños, niños y adolecentes).
+Después de entrevistar a un total de 15 adultos y 9 menores de edad, se encontró que 7 menores prefieren el chocolate blanco, mientras que 10 personas adultas prefieren el chocolate negro.
+¿El tipo de chocolate preferido está influenciado por el grupo etario de las y los consumidores?
+
+Debido a que hay valores menores a 5 se decide usar la prueba exacta de Fisher para comprobar independencia entre el grupo etario y el sabor de chocolate.
+Se usará un nivel de significancia de 95% para las concluciones, es decir, un alfa de 0.05.
+
+Hipótesis:
+
+$H_0$: No hay influencia entre el grupo etario y la preferencia del chocolate.
+
+$H_a$: Hay influencia entre el grupo etario y la preferencia del chocolate.
+
+```{r p1}
+# Datos
+chocolate <- c(rep("Blanco", 12), rep("Negro", 12))
+grupoEtario <- c(rep("Adulto", 5), rep("Menores", 7),
+                 rep("Adulto", 10), rep("Menores", 2))
+datos <- data.frame(grupoEtario, chocolate)
+tabla <- xtabs(~., datos)
+print(tabla)
+
+# Prueba de Fisher para la tabla
+prueba_1 <- fisher.test(tabla)
+print(prueba_1)
+
+# Prueba de Fisher para las muestras
+prueba_2 <- fisher.test(chocolate, grupoEtario)
+print(prueba_2)
+```
+
+Se obtiene un valor p de 0.08938 si consideramos un valor alfa de 0.05, se puede concluir que se falla en rechazar la hipótesis nula y podemos afirmar con un 95% de confianza que no hay evidencia suficiente para afirmar que hay influencia entre el grupo etario y la preferencia del chocolate.
+
+# Pregunta 2
+
+Se llevó a cabo una encuesta para investigar si hay una distribución homogénea de pasatiempos favoritos entre dos grupos de personas: hombres y mujeres.
+Se seleccionaron aleatoriamente 30 personas de cada grupo y se les preguntó sobre sus pasatiempos favoritos, obteniéndose que entre los hombres 12 prefieren actividades relacionadas con la lectura, 11 con el deporte y 7 con música; mientras que entre las mujeres 15 se inclinan por actividades relacionadas con la música, 7 con la lectura y 8 con deportes.
+¿Existe evidencia suficiente para concluir que la distribución de los pasatiempos favoritos es la misma entre hombres y mujeres?
+
+Se planea usar test Chi Cuadrado de homogeneidad para comprobar si existe evidencia suficiente para concluir que la distribución de los pasatiempos favoritos es la misma entre hombres y mujeres, pero para usar ese test primero se debe comprobar si todos los valores esperados son mayores a 5.
+Se usará un nivel de significancia de 95% para las concluciones, es decir, un alfa de 0.05.
+
+Hipótesis:
+
+$H_0$ : Los hombres y las mujeres tienen las mismas preferencias de pasatiempos (tienen distribuciones homogeneas)
+
+$H_a$ : Los hombres y las mujeres tienen las distintas preferencias de pasatiempos (tienen distribuciones distintas)
+
+```{r p2a}
+# Datos
+# lectura, deporte, musica
+hombres <- c(12, 11, 7)
+mujeres <- c(7, 8, 15)
+tabla <- as.table(rbind(hombres, mujeres))
+dimnames(tabla) = list(genero = c("hombres", "mujeres"), actividad = c("Lectura", "Deporte", "Musica"))
+
+
+total = hombres + mujeres
+
+
+tabla = rbind(tabla, total)
+
+total_1 = rowSums(tabla)
+
+# Tabla de contingencia de los datos
+tabla = cbind(tabla, total_1)
+
+# Tabla
+valores_esperados = tabla
+
+for (i in 1:nrow(tabla)) {
+  for (j in 1:ncol(tabla)) {
+    valores_esperados[i, j] = (tabla[i, "total_1"] * tabla["total", j]) / tabla["total", "total_1"]
+  }
+}
+
+print(tabla)
+cat("\n")
+print(valores_esperados)
+
+```
+
+Como todos los valores esperados son mayores a 5 se puede utilizar el test Chi Cuadrado de homogeneidad.
+
+```{r p2b}
+prueba_chi <- chisq.test(tabla)
+print(prueba_chi)
+```
+
+Como el valor p obtenido es de 0.583 y es notoriamente mayor a un valor alfa 0.05, por lo cual se puede concluir con un 95% de confianza que no existe evidencia suficiente para rechazar la hipótesis nula, por lo que no se puede afirmar que las distribuciones de los pasatiempos de los hombres y las mujeres sean distintas.
+
+# Pregunta 3
+
+Una investigación reciente en un laboratorio de Kanto se enfocó en analizar el efecto de una nueva técnica de entrenamiento en el rendimiento del ataque inicial de criaturas Pokémon.
+Para ello, se seleccionaron aleatoriamente 20 criaturas y registró su poder de ataque inicial.
+Luego, a este grupo se les sometió al entrenamiento nuevo y, al finalizar, se les registró nuevamente los niveles de ataque inicial.
+Los resultados se presentan a continuación: 2 criaturas tenían un nivel bajo de ataque antes y después del entrenamiento.
+15 criaturas con nivel bajo de ataque inicial mostraron un aumento en su ataque después del entrenamiento.
+2 criaturas mantuvieron un alto nivel de ataque antes y después del entrenamiento.
+la otra criatura mostró un nivel alto de ataque inicial, pero se redujo después del entrenamiento.
+¿Hay evidencia de que el nuevo entrenamiento tiene un efecto significativo en el rendimiento del ataque inicial de las criaturas Pokémon?
+
+Considerando que cuando se dice que el nivel de ataque de un pokemon aumenta se refiere a que el pokemon logra un nivel de ataque alto y cuando se dice que disminuye el pokemon logra un nivel de ataque bajo, se podría decir que lo que solamente se tienen variables categóricas dicotómicas y como se pregunta por si existe un efecto signicativo, se piensa usar el test de McNemar para comprbar si existe un cambio significativo en los resutados del entrenamiento.
+Se usará un nivel de significancia de 95% para las concluciones, es decir, un alfa de 0.05.
+
+Hipótesis:
+
+$H_0$ : el nuevo entrenamiento no tiene un efecto significativo en el rendimiento del ataque inicial de las criaturas Pokémon
+
+$H_a$ : el nuevo entrenamiento si tiene un efecto significativo en el rendimiento del ataque inicial de las criaturas Pokémon
+
+```{r p3}
+# Datos
+pokemon <- seq(1:20)
+
+antes_entrenamiento <-c(rep("Ataque Bajo", 17), rep("Ataque Alto", 3))
+despues_entrenamiento <- c(rep("Ataque Bajo", 2), rep("Ataque Alto", 15), rep("Ataque Bajo", 1), rep("Ataque Alto", 2))
+
+datos <- data.frame(pokemon, despues_entrenamiento, antes_entrenamiento)
+tabla <- table(despues_entrenamiento, antes_entrenamiento)
+
+print(tabla)
+
+# Aplicar la prueba de McNemar a la tabla
+prueba_31 <- mcnemar.test(tabla)
+cat("\n")
+print(prueba_31)
+
+# Aplicar la prueba de McNemar a las muestras
+prueba_32 <- mcnemar.test(despues_entrenamiento, antes_entrenamiento)
+cat("\n")
+print(prueba_32)
+
+```
+
+Luego de realizar el test de McNemar se obtiene un valor p de 0.001154 el cual es menor al valor alfa escogido (0.05), por lo tanto se rechaza la hipótesis nula y con un 95% de confianza que hay evidencia suficiente para afirmar que el nuevo entrenamiento si tiene un efecto significativo en el rendimiento del ataque inicial de las criaturas Pokémon
+
+# Pregunta 4
+
+Una agencia de marketing desea determinar si hay una diferencia significativa en la efectividad de tres estrategias publicitarias utilizadas para promocionar un nuevo producto.
+Para ello, se ha recopilado información de personas que fueron expuestas a las tres estrategias publicitarias, registrando si mostraron una aceptación (A) o rechazo (R) a cada una de ellas.
+¿Qué puede concluir la agencia de marketing sobre la efectividad de las estrategias publicitarias para promover el nuevo producto?
+Indicación: obtenga la muestra de 50 personas a partir del archivo “EP04 Datos.csv” que se encuentra en el directorio compartido, usando la semilla 321.
+Considere un nivel de significación α=0,05.
+
+Como la variable indepentiente, en este caso el tipo de estrategia es politómica, y la variable de respuesta es dicotómica, se planea usar el test Q de Cochran para comprobar la efectividad de las estrategias publicitarias para promover el nuevo producto.
+Se usará un nivel de significancia de 95% para las concluciones, es decir, un alfa de 0.05.
+
+Hipótesis:
+
+$H_0$ : efectividad de las estrategias publicitarias para promover el nuevo producto es la misma.
+
+$H_a$ : efectividad de las estrategias publicitarias para promover el nuevo producto es distinta.
+
+```{r p4}
+# Datos
+datos_ep4 <- read.csv2("EP04 Datos.csv")
+
+datos <- data.frame(datos_ep4)
+
+set.seed(321)
+datos_p4 <- datos_ep4[sample(nrow(datos_ep4),size = 50),]
+
+datos_p4 <- datos_p4 %>% pivot_longer(c("estrategia_1", "estrategia_2", "estrategia_3"),
+                                      names_to = "estrategias",
+                                      values_to = "resultado")
+
+datos_p4[["id"]] <- factor(datos_p4[["id"]])
+datos_p4[["estrategias"]] <- factor(datos_p4[["estrategias"]])
+
+# Aplicar prueba Q de Cochran
+prueba_4 <- cochran.qtest(resultado ~ estrategias | id,
+                          datos_p4,alpha = 0.05)
+
+print(prueba_4)
+
+```
+
+Como el valor p obtenido luegos de aplicar el test Q de Cochran es 0.1938 que es mayor al valor alfa escogido (0.05), se falla en rechazar la hipótesis nula, por lo cual con un 95% de confianza, se puede concluir que no existe evidencia suficiente para afirmar que la efectividad de las estrategias publicitarias es la distinta.

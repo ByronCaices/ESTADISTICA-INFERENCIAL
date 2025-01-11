@@ -1,0 +1,221 @@
+---
+title: "EP07- equipo 1"
+output: html_document
+date: "2024-10-29"
+---
+
+### Pregunta 1:
+Observando los datos, la memorista sospecha que hay diferencias significativas en el tiempo de ejecución entre las versiones A y B del algoritmo cuando las instancias tienen 70 o más nodos. ¿Los datos respaldan la intuición de la memorista? Para responder, filtren los datos para tener las instancias con 70 o más nodos y seleccionen las columnas de los tiempos de ejecución de las versiones A y B (en formato ancho). Usando como semilla el valor 73, obtengan muestras aleatorias independientes de 24 tiempos registrados por la versión A y 20 tiempos registrados por la versión B del algoritmo. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+Para evaluar el tipo de prueba a realizar primero se verifica la condición de normalidad.
+
+```{r}
+
+library(ggpubr)
+library(ez)
+library(tidyverse)
+set.seed(73)
+alfa <- 0.05
+datos <- read.csv("EP07 Datos.csv")
+head(datos)
+
+datos_filtrados <- datos %>% filter(n.nodos >= 70) %>% select(tiempo.A, tiempo.B)
+
+# Filtrar los datos solicitados
+muestra_A <- datos_filtrados  %>% sample_n(24, replace = FALSE) %>% pull(tiempo.A)
+muestra_B <- datos_filtrados  %>% sample_n(20, replace = FALSE) %>% pull(tiempo.B)
+
+# Se verifica la normalidad de las muestras
+shapiro.test(muestra_A)
+shapiro.test(muestra_B)
+
+```
+Si consideramos un nivel de confianza del 95%, la prueba de Shapiro-Wilk rechaza la hipótesis de normalidad para la muestra A debido a que el valor de p obtenido es menor al nivel de significancia estipulado. Esto indica que esta muestra no sigue una distribución normal. Dado que no se cumple la condición de normalidad para las poblaciones de cada muestra, procedemos a utilizar una prueba no paramétrica para evaluar las diferencias en los tiempos de ejecución entre las versiones A y B del algoritmo, a partir de las sospechas de la memorista. Es por ello que se ha seleccionado la prueba de Wilcoxon-Mann-Whitney, ya que no se cumplen las condiciones para realizar una prueba que requiera normalidad de las poblaciones de las muestras.
+
+Por esta razón, se procede a verificar las condiciones para realizar la prueba mencionada
+1. Las observaciones de ambas muestras son independientes: Dicha condicion se cumple, ya que se obtienen muestras de forma aleatoria e independiente, como es mencionado en el enunciado.
+2. La escala de medición, debe ser a lo mas ordinal: Esta condición se cumple debido a que los tiempos de ejecución se miden en segundos.
+
+Dado que ambas condiciones se cumplen, se procede a plantear la hipótesis para nuestra prueba:
+- Hipótesis nula: no hay diferencias significativas en el tiempo de ejecución entre las versiones A y B del algoritmo cuando las instancias tienen 70 o más nodos.
+
+- Hipótesis alternativa: hay diferencias significativas en el tiempo de ejecución entre las versiones A y B del algoritmo cuando las instancias tienen 70 o más nodos.
+
+
+```{r}
+test <- wilcox.test(muestra_A, muestra_B, alternative = "two.sided", conf.int = TRUE, conf.level = 1 - alfa)
+test
+```
+Por lo tanto, dado que el valor de p es igual a 0.06047, que corresponde a un valor mayor que el nivel de significancia previamente establecido, por este motivo podemos decir que no hay suficiente evidencia para rechazar la hipotesis nula. En consecuencia, podemos decir con un 95% de confianza que no hay diferencias significativas en el tiempo de ejecución entre las versiones A y B del algoritmo cuando las instancias tienen 70 o más nodos.
+
+### Pregunta 2:
+La memorista también sospecha que, al comparar las mismas instancias de prueba con iguales características, las mejores soluciones encontradas por las versiones B y C tienen rendimientos distintos. ¿Estará en lo cierto? Para responder, filtren los datos para tener las instancias con 70 o más nodos y seleccionen las columnas con el mejor rendimiento de las versiones B y C en formato ancho. Usando como semilla el valor 71, obtengan una muestra aleatoria de 24 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+Al igual que la pregunta anterior, se debe evaluar la condición de normalidad para poder utilizar pruebas paramétricas.
+
+```{r}
+# Se filtran los datos para obtener las muestras del enunciado
+set.seed(71)
+datos_filtadrados_2 <- datos %>% filter(n.nodos >= 70) %>% select(mejor.B, mejor.C)
+cantidad_muestras <- 24
+muestra_B_2 <- datos_filtadrados_2 %>% sample_n(cantidad_muestras, replace = FALSE) %>% pull(mejor.B)
+muestra_C_2 <- datos_filtadrados_2 %>% sample_n(cantidad_muestras, replace = FALSE) %>% pull(mejor.C)
+
+# Evaluar la normalidad de las muestras provenientes
+shapiro.test(muestra_B_2)
+shapiro.test(muestra_C_2)
+```
+
+Dado que la prueba de Shapiro-Wilk ha indicado que ambas muestras no siguen una distribución normal, no se cumplen las condiciones necesarias para emplear una prueba paramétrica. En consecuencia, se procede a evaluar las diferencias en los rendimientos utilizando la prueba de Wilcoxon-Mann-Whitney.
+
+Para evaluar los rendimientos de ambas versiones, se plantean las siguientes hipótesis:
+- Hipótesis nula: no hay diferencias significativas en el tiempo de ejecución entre las versiones B y C del algoritmo cuando las instancias tienen 70 o más nodos.
+
+- Hipótesis alternativa: hay diferencias significativas en el tiempo de ejecución entre las versiones B y C del algoritmo cuando las instancias tienen 70 o más nodos.
+
+
+```{r}
+test_2 <- wilcox.test(muestra_B_2, muestra_C_2, alternative = "two.sided", conf.int = TRUE, conf.level = 1 - alfa)
+test_2
+```
+
+Como conclusión, dado que el valor de p es menor al nivel de significancia previamente establecido, podemos decir con un 95% de confianza que no hay suficiente evidencia para rechazar la hipótesis nula. Por este motivo podemos afirmar que no hay diferencias significativas en el tiempo de ejecución entre las versiones B y C del algoritmo cuando las instancias tienen 70 o más nodos.
+
+### Pregunta 3:
+La memorista además cree que hay diferencias significativas en el tiempo de ejecución entre las diferentes versiones del algoritmo cuando las instancias de prueba tienen 50 o más nodos. ¿Los datos respaldan la intuición de la memorista?
+Para responder, filtren los datos para tener las instancias con 50 o más nodos y seleccionen las columnas con los tiempos de ejecución registrados (en formato ancho). Usando como semilla el valor 31, obtengan muestras aleatorias independientes de 14, 12 y 13 tiempos registrados por las versiones A, B y C, respectivamente. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+Primero verificamos si se cumplen las condiciones necesarias para realizar una prueba paramétrica.
+```{r}
+datosF3 <- datos %>%
+  filter(n.nodos >= 50) %>%
+  select(instancia, tiempo.A, tiempo.B, tiempo.C)
+
+tamA <- 14; tamB <- 12; tamC <- 13
+tamT <- tamA + tamB + tamC
+
+set.seed(31)
+t <- sample(1:nrow(datosF3), tamT)
+seleccion <- datosF3[t, ]
+tiempo.A <- seleccion[["tiempo.A"]][1:tamA]
+tiempo.B <- seleccion[["tiempo.B"]][(tamA+1):(tamA+tamB)]
+tiempo.C <- seleccion[["tiempo.C"]][(tamA+tamB+1):tamT]
+
+datosL3 <- data.frame(
+  Instancia = seleccion[["instancia"]],
+  Algoritmo = c(rep("A", tamA), rep("B", tamB), rep("C", tamC)),
+  Tiempo = c(tiempo.A, tiempo.B, tiempo.C)
+)
+datosL3[["Instancia"]] <- factor(datosL3[["Instancia"]])
+datosL3[["Algoritmo"]] <- factor(datosL3[["Algoritmo"]])
+
+#Creamos el gráfico para verificar distribución
+datosL3[["Tiempo"]] <- datosL3[["Tiempo"]] / 1000 / 60
+g3 <- gghistogram(
+  datosL3,
+  x = "Tiempo",
+  color = "Algoritmo", fill = "Algoritmo",
+  bins = 10,
+  xlab = "Tiempo",
+  ylab = "Frecuencia"
+)
+g3 <- g3 + facet_grid(~ Algoritmo)
+print(g3)
+```
+Como podemos observar, los datos en el histograma no siguen una distribución cercana a la normal, por este motivo no se puede suponer que los datos sigan dicha distribución. Debido a ello se sugiere utilizar una prueba de Kruskal-Wallis en este caso ya que no es necesario calcular las medias de los datos.
+
+Primero, para realizar dicha prueba es necesario verificar las condiciones:
+
+1. La variable independiente debe tener a lo menos dos niveles: En este caso tenemos 3 niveles correspondientes a las versiones A, B, C.
+2. La escala de la variable dependiente deber ser, a lo menos, ordinal: Esta condición se cumple pués la unidad de medida del tiempo es en segundos, lo que cumple dicha condición.
+3. Las observaciones son independientes entre sí: Debido al enunciado podemos verificar que se cumple con la condición pués las muestras se han obtenido de forma aleatoria he independiente.
+
+Ya que se cumplen con todas las condiciones, se puede plantear la hipótesis:
+
+- Hipótesis nula: no hay existencia de una diferencia significativa entre los tiempos de ejecución entre las distintas versiones.
+- Hipótesis alternativa: a lo menos uno de las distintas versiones presenta un tiempo de ejecuión distinto de los démas. 
+
+```{r}
+alfa <- 0.05
+prueba3 <- kruskal.test(Tiempo ~ Algoritmo, data = datosL3)
+print(prueba3)
+
+posthoc <- pairwise.wilcox.test(
+  datosL3[["Tiempo"]],
+  datosL3[["Algoritmo"]],
+  p.adjust.method = "BH",
+  paired = FALSE
+)
+print(posthoc)
+
+```
+Los resultados de la prueba de Kruskal-Wallis muestran un valor p de 0.03422 el cual es menor al nivel de significancia de 0.05, por este motivo podemos decir con un 95% de confianza, que hay suficiente evidencia para rechazar la hipotesis nula en favor de la alternativa, concluyendo que existen diferencias significativas en los tiempos de ejecución entre las versiones A, B y C del algoritmo. 
+
+Dado a que nos interesa conocer que donde se encuentra dicha diferencias en los tiempos, se realiza un análisis post-hoc, el cual revela que no hay diferencias significativas entre los algoritmos A y B ni entre A y C, por el contrario sí hay una diferencia significativa entre los algoritmos B y C. Por lo tanto, se concluye que el algoritmo B presenta un rendimiento significativamente diferente al del algoritmo C.
+
+### Pregunta 4:
+La memorista también intuye que, al comparar las mismas instancias de prueba con iguales características, las mejores soluciones encontradas por las diferentes versiones del algoritmo tienen rendimientos distintos. ¿Estará en lo cierto?
+Para responder, filtren los datos para tener las instancias con 50 o más nodos y seleccionen las columnas con los mejores rendimientos registrados. Usando como semilla el valor 31, obtengan una muestra aleatoria de 22 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+
+De nuevo repetimos el procedimiento para evaluar la condiciones para aplicar una prueba paramétrica:
+
+```{r}
+tamano <- 22
+set.seed(31)
+datosF4 <- datos %>%
+  filter(n.nodos >= 50) %>%
+  select(instancia, mejor.A, mejor.B, mejor.C) %>%
+  sample_n(tamano)
+
+datosL4 <- datosF4 %>%
+  pivot_longer(
+    cols = c("mejor.A", "mejor.B", "mejor.C"),
+    names_to = "Algoritmo",
+    values_to = "resultado"
+  )
+datosL4[["instancia"]] <- factor(datosL4[["instancia"]])
+datosL4[["Algoritmo"]] <- factor(datosL4[["Algoritmo"]], labels = c("A", "B", "C"))
+
+# Gráficamos por medio de un diagrama de cajas para evaluar la condición de esfericidad
+g4 <- ggboxplot(
+  datosL4,
+  x = "Algoritmo", y = "resultado",
+  ylab = "Mejor resultado",
+  color = "Algoritmo"
+)
+print(g4)
+```
+
+Evaluando los diagramas de caja esbozados, se puede ver cierta asimetria en su forma con respecto a cada grupo, lo que sugiere que probablemente no se cumpla con la condición de esfericidad. Consecuente a lo planteado con anterioridad, se plantea el uso de una prueba de Friedman, ya que según el enunciado se repiten las medidas. Por esta razón se evaluan las condiciones para realizar esta prueba.
+
+1. La variable dependiente  deber ser categorica  y tener a lo menos tres niveles: En este caso la variable es catégorica pues se hacen comparaciones entre los valores
+
+2. La escala de la variable dependiente debe ser, a lo menos ordinal: Dicha condición se cumple debido a que la escala de la variable dependiente es medida en segundos. 
+
+3. Las muestras son una muestra aleatoria e independiente de la población:  Por el enunciado la muestras han sido seleccionadas de forma aleatoria con cada muestra seleccionada de forma independiente a la otra.
+
+```{r}
+
+prueba4 <- friedman.test(
+  resultado ~ Algoritmo | instancia,
+  data = datosL4
+)
+print(prueba4)
+```
+
+La prueba de Friedman, nos da como resultado un p value menor al nivel de significancia estipulado, y con ello, podemos decir con un 95% de confianza que hay evidencia suficiente para rechazar la hipótesis nula en favor de la alternativa y de este modo concluir que hay diferencias significativas en los tiempos de ejecución de entre las versiones del algortimo. En consecuencia a ello, se procede a realizar un analisis post-hoc para encontrar donde estan las diferencias
+ 
+```{r}
+posthoc2 <- pairwise.wilcox.test(
+  datosL4[["resultado"]],
+  datosL4[["Algoritmo"]],
+  p.adjust.method = "BH",
+  paired = TRUE
+)
+
+print(posthoc2)
+
+```
+Evaluando los resultados obtenidos en la prueba de Wilcoxon, se concluye que existen diferencias entre los pares de algoritmos A-B y A-C, por el contrario no hay diferencia alguna en los pares B-C.
+

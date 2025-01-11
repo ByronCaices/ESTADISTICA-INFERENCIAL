@@ -1,0 +1,156 @@
+---
+title: "Untitled"
+author: "Sofia Gacitua Lopez y Milovan Valenzuela Lobos"
+date: "2024-10-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(dplyr)
+library(ggpubr)
+library(kableExtra)
+```
+
+```{r}
+#equipo 7
+#Carga de archivo 
+data<- read.csv2("EP02 Datos.csv")
+head(data)
+tail(data)
+```
+
+```{r}
+# Pregunta 1
+
+# El Comité Olímpico cree que el mejor tiempo medio de los atletas de raza negra después de ingresar al programa de entrenamiento es 12,9 segundos. ¿Soportan los datos esta afirmación?
+data_raza_n<- data  %>% filter(Raza == "Negra")
+head(data_raza_n)
+tail(data_raza_n)
+
+mu <- 12.9
+alfa <- 0.05
+
+# Hipótesis nula = El tiempo medio de los atletas de raza negra después de ingresar al programa de entrenamiento es igual a 12.9 segundos (Ho: u_n = 12.9)
+
+# Hipótesis alternatinva = El tiempo medio de los atletas de raza negra después de ingresar al programa de entrenamiento es distinto de 12.9 segundos (Ha: u_n != 12.9)
+
+# Test de normalidad
+shapiro.test(data_raza_n$Posterior)
+g <- ggqqplot(data = data_raza_n,
+              x = "Posterior",
+              color = "red")
+g
+
+# Luego de realizar el test y obtener un p_value de 0.2225 y utilizando un nivel de significancia de 0.05 podemos decir que los datos podrian seguir una distribucion normal 
+
+# t_test
+t.test(data_raza_n$Posterior,alternative = "two.side",mu = mu, conf.level = 1 - alfa)
+# Luego de relizar el t test, se obtiene un p-value de 0.1488 y ,con un nivel de significancia de 0.05, se tiene 0.1488 > 0.05, por lo que no hay evidencia suficiente para rechazar la hipótesis nula.
+
+```
+
+```{r}
+# Pregunta 2
+
+# ¿Sugieren los datos que la mejor marca de los atletas de raza blanca se reduce en promedio menos de 2,8 segundos tras el entrenamiento?
+data_raza_b<- data %>% filter(Raza == "Blanca")
+head(data_raza_b)
+
+
+# Hipótesis nula = La diferencia de la media de los tiempos ( PREVIO - POSTERIOR ) de los atletas de raza blanca es  igual  2.8 segundos (Ho: u_dif = 2.8)
+
+# Hipótesis alternativa = La diferencia de la media de los tiempos ( PREVIO - POSTERIOR ) de los atletas de raza blanca es menor a 2.8 segundos (Ha: u_dif < 2.8)
+
+# Calcular diferencias 
+data_raza_b$reduccion <-  data_raza_b$Previo - data_raza_b$Posterior 
+
+# Test de normalidad 
+shapiro.test(data_raza_b$reduccion)
+g <- ggqqplot(data = data_raza_b,
+              x = "reduccion",
+              color = "red")
+g
+
+#grafico para verificar si el resultado de el test es correcto
+b2_box<-ggboxplot(data_raza_b[["reduccion"]],
+  ylab="diferencia")
+b2_box
+
+# Luego de realizar el shapiro test y obtener un p-value de 0.3375 , con un nivel de significancia de 0.05 podemos decir que los datos siguen una distribucion cercana a la normal
+
+# t test
+t.test(data_raza_b$reduccion,alternative = "less", mu=2.8, conf.level = 1 - alfa)
+# Luego de realizar la prueba t de student y obtener un p-value de 0.9977 con un nivel de significancia de 0.05 podemos concluir que no existe evidencia suficiente para rechazar la hipótesis nula
+```
+
+```{r}
+# Pregunta 3 
+
+#¿Es posible afirmar que, en promedio, los atletas de raza blanca superan a los de raza oriental por más de 1,6 segundos después del entrenamiento?
+
+
+# Hipótesis nula: La diferencia de los tiempos medios  después del entrenamiento  de los atletas de raza blanca y los atletas de raza oriental es igual a 1.6 segundos (Ho: u_B-u_O=1.6)
+
+# Hipótesis alternativa: La diferencia de los tiempos medios despues del entrenamiento de los atletas de raza blanca y los atletas de raza oriental es mayor 1.6 segundos (Ha: u_B-u_O>1.6)
+
+# Filtrar datos
+data_raza_o <- data %>% filter(Raza == "Oriental")
+
+
+# Prueba de normalidad de cada muestra por separado
+shapiro.test(data_raza_b$Posterior)
+g1 <- ggqqplot(data = data_raza_b,
+               x = "Posterior",
+               color = "red")
+g1
+
+shapiro.test(data_raza_o$Posterior)
+g2 <- ggqqplot(data = data_raza_o,
+               x = "Posterior",
+               color = "red")
+
+# Para cada muestra se obtiene un p-value mayor al nivel de significancia (0.05), por lo que se consideran ambas muestras cercanas a una distribución normal
+
+# t test
+t.test(data_raza_b$Posterior,data_raza_o$Posterior,alternative = "greater",mu=-1.6,conf.level = 1 - alfa, paired = FALSE)
+
+#grafico para verificar si el resultado de el test es correcto
+dl <- data.frame(Posterior = c(data_raza_b[["Posterior"]], data_raza_o[["Posterior"]]),
+                 raza = factor(c(rep("b", nrow(data_raza_b)), rep("o", nrow(data_raza_o)))))
+
+# grafico de caja
+c_b <- ggboxplot(dl, x = "raza", y = "Posterior",
+                 color = "raza",
+                   ylab="tiempo posterior")
+c_b
+
+#Se obtiene un p-value = 0.1472 usando un nivel de significancia de 0.05, es decir, 0.1472 > 0.05, por lo tanto, se concluye que, con un 95% de confianza, no hay evidencia suficiente para rechazar la hipótesis nula
+
+```
+
+```{r}
+#pregunta 4
+
+# ¿Será cierto que hay más atletas de raza oriental que redujeron sus mejores marcas en al menos 4,7 segundos que atletas de raza negra que lo hicieron en al menos 1,7 segundos?
+
+# Hipótesis nula: La proporción de atletas de raza oriental que redujeron sus marcas en al menos 4.7 segundos es igual a la proporción de atletas de raza negra que lo hicieron en 1.7 segundos (Ho: P_o-P_n = 0)
+
+# Hipótesis alternativa: La proporción de atletas de raza oriental que redujeron sus marcas en almenos 4.7 segundos es mayor a la proporción de atletas de raza negra que lo hicieron en 1.7 segundos (Ha: P_o-P_n > 0)
+
+# Data competidores orientales 
+data_raza_o$reduccion<- data_raza_o$Previo - data_raza_o$Posterior
+data_raza_o_exito<-sum(data_raza_o$reduccion >=4.7)
+data_raza_o_totales<- nrow(data_raza_o)
+
+# Data competidores negros
+data_raza_n$reduccion<- data_raza_n$Previo - data_raza_n$Posterior
+data_raza_n_exito<-sum(data_raza_n$reduccion >=1.7)
+data_raza_n_totales<- nrow(data_raza_n)
+
+n<-c(data_raza_o_totales,data_raza_n_totales)
+p<-c(data_raza_o_exito,data_raza_n_exito)
+prop.test(p,n=n, alternative = "greater",conf.level = 1 - alfa)
+
+# Al realizar prop.test se obtiene un p-value = 0.003794 y ,usando un nivel de significancia del 0.05, se concluye que existe evidencia suficiente para rechazar la hipótesis nula en favor de la hipótesis alternativa
+```

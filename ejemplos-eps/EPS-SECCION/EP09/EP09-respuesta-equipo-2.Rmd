@@ -1,0 +1,224 @@
+---
+title: "EP09"
+author: "Equipo 2"
+date: "2024-12-02"
+output:
+    html_document:
+    highlight: tango
+    word_document: default
+    pdf_document: default
+---
+
+```{=html}
+<style>
+body {
+  font-family: 'Calibri', sans-serif;
+}
+</style>
+```
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo =FALSE, warning=FALSE, message=FALSE}
+options(repos = c(CRAN = "https://cran.rstudio.com/"))
+
+if (!requireNamespace('tidyverse', quietly = TRUE)){
+  install.packages('tidyverse')
+}
+library(tidyverse)
+if (!requireNamespace('ggpubr', quietly = TRUE)){
+  install.packages('ggpubr')
+}
+library(car)
+if (!requireNamespace('car', quietly = TRUE)){
+  install.packages('car')
+}
+library(ggpubr)
+if (!requireNamespace('ez', quietly = TRUE)){
+  install.packages('ez')
+}
+library(ez)
+if (!requireNamespace('RVAideMemoire', quietly = TRUE)){
+  install.packages('RVAideMemoire')
+}
+library(RVAideMemoire)
+if (!requireNamespace('rcompanion', quietly = TRUE)){
+  install.packages('rcompanion')
+}
+library(rcompanion)
+if (!requireNamespace('dplyr', quietly = TRUE)){
+  install.packages('dplyr')
+}
+library(dplyr)
+if (!requireNamespace('WRS2', quietly = TRUE)){
+  install.packages('WRS2')
+}
+library(WRS2)
+```
+
+#### Contexto:
+#### Un estudio recolectó medidas anatómicas de 247 hombres y 260 mujeres (Heinz et al., 2003). El estudio incluyó nueve mediciones del esqueleto (ocho diámetros y una profundidad de hueso a hueso) y doce mediciones de grosor (circunferencias) que incluyen el tejido.
+#### Se nos pide completar las siguientes tareas:
+
+#### 1. Definir la semilla a utilizar, que corresponde a los últimos cuatro dígitos del RUN (sin considerar el dígito verificador) del integrante de menor edad del equipo.
+#### 2. Seleccionar una muestra aleatoria de 100 mujeres (si la semilla es un número par) o 100 hombres (si la semilla es impar), y separar 70 casos para trabajar en la construcción de modelos y 30 para su evaluación en datos no vistos.
+#### 3. Seleccionar de forma aleatoria ocho posibles variables predictoras.
+#### 4. Seleccionar, de las otras variables, una que el equipo considere que podría ser útil para predecir la variable Peso (sin considerar la estatura), justificando bien esta selección.
+#### 5. Usando el entorno R y paquetes estándares, construir un modelo de regresión lineal simple con el predictor seleccionado en el paso anterior.
+#### 6. Usando herramientas estándares para la exploración de modelos del entorno R, buscar entre dos y cinco predictores de entre las variables seleccionadas al azar en el punto 3, para agregar al modelo de regresión lineal simple obtenido en el paso 5.
+#### 7. Evaluar la bondad de ajuste (incluyendo el análisis de casos atípicos y casos influyentes) y la generalidad (condiciones para RLM) de los modelos y “arreglarlos” en caso de que presenten algún problema.
+#### 8. Evaluar el poder predictivo del modelo con los datos no utilizados para construirlo.
+
+### Obtención de datos:
+
+Primero leemos los datos.
+```{r leer archivo}
+datosGenerales <- read.csv2("EP09 Datos.csv")
+head(datosGenerales)
+```
+
+Luego fijamos una semilla y, como la semilla es impar, obtenemos una muestra aleatoria de 100 hombres, donde usamos 70 muestras para generar el modelo de regresión simple y múltiple. Además, obtenemos ocho variables aleatoriamente como posibles predictoras.
+
+```{r muestras}
+set.seed(7525)
+
+datos = datosGenerales %>% filter(Gender == 1) %>% sample_n(100)
+
+i_datos = sample.int(n = 100, size = 70, replace = FALSE)
+
+datosModelos = datos[i_datos,]
+datosPruebas = datos[-i_datos,]
+
+predictores = sample(colnames(datos), 8)
+
+print(predictores)
+```
+
+### Modelo de regresión lineal simple:
+
+Creamos el modelo simple con la variable "Waist.Girth" que corresponde al grosor de la cintura, pues se justifica al considerar la relación general entre las dimensiones corporales y el peso corporal. Por ejemplo, estudios han demostrado que el índice de masa corporal (IMC), una métrica clave para evaluar la composición corporal, establece que *a una altura dada, un mayor peso se asocia con un mayor porcentaje de grasa corporal* [Arif et al. (2022)]. Aunque esta cita específica se refiere al contorno de la cintura, el principio puede extenderse a otras dimensiones corporales, como el ancho de cadera, que también podrían correlacionarse con el peso corporal como parte de la composición general del cuerpo.
+
+```{r grafico modelo simple}
+p1 <- ggscatter(datosModelos, x = "Waist.Girth", y = "Weight",
+                add = "reg.line", add.params = list(color = "blue"))
+print(p1)
+```
+
+```{r modelo simple}
+modeloSimple = lm(Weight ~ Waist.Girth, data = datosModelos)
+print(summary(modeloSimple))
+```
+
+### Selección de variables aleatorias para agregar al modelo:
+
+Empezamos a crear un modelo múltiple con base en el modelo simple aplicando la estrategia de eliminación hacia atrás, para esto creamos un dataframe solo con las variables obtenidas aleatoriamente y generamos un modelo considerando todas las variables obtenidas como predictoras, para la eliminación de predictores, eliminaremos el predictor que presente un menor valor del estadístico F.
+
+```{r nuevo df}
+datosModelos = datosModelos %>% 
+  select(Weight, Waist.Girth, Knee.Girth, Chest.diameter, Wrist.Minimum.Girth, Thigh.Girth, Height, Calf.Maximum.Girth) # Gender no aplica
+
+modeloCompleto = lm(Weight ~ ., data = datosModelos)
+print(summary(modeloCompleto))
+```
+Ahora comenzamos con la regresión paso a paso, donde primero generamos los resultados de los modelos al eliminar un predictor.
+
+```{r modelo multiple 1}
+paso = drop1(modeloCompleto, test = "F")
+print(paso, digits = 3, signif.legend = TRUE)
+```
+
+Observamos que el predictor Knee.Girth tiene un menor valor del estadístico F por lo que lo eliminamos del modelo y hacemos otro paso más de la regresión paso a paso.
+
+```{r modelo multiple 2}
+modeloMultiple1 = update(modeloCompleto, . ~ . - Knee.Girth)
+
+paso = drop1(modeloMultiple1, test = "F")
+print(paso, digits = 3, signif.legend = TRUE)
+```
+
+Observamos que el predictor Chest.diameter tiene un menor valor del estadístico F por lo que lo eliminamos del modelo y hacemos otro paso más de la regresión paso a paso.
+
+```{r modelo multiple 3}
+modeloMultiple2 = update(modeloMultiple1, . ~ . - Chest.diameter)
+
+paso = drop1(modeloMultiple2, test = "F")
+print(paso, digits = 3, signif.legend = TRUE)
+```
+
+Observamos que el predictor Calf.Maximum.Girth. Tiene un menor valor del estadístico F por lo que lo eliminamos del modelo y hacemos otro paso más de la regresión paso a paso. Cabe resaltar que, si bien tiene un menor valor del estadístico F, también posee un valor p muy pequeño, por lo cual comparamos el modelo con y sin este predictor.
+
+```{r modelo multiple 4}
+modeloMultiple3 = update(modeloMultiple2, . ~ . - Calf.Maximum.Girth)
+print(summary(modeloMultiple2))
+print(summary(modeloMultiple3))
+
+modeloMultiple = modeloMultiple2
+```
+Observamos que el modelo con el predictor Calf.Maximum.Girth posee un mayor valor R cuadrado que el modelo sin este predictor, por lo cual dejamos el modelo que contiene este predictor.
+
+Se agregaron 4 nuevos predictores al modelo: Wrist.Minimum.Girth, Thigh.Girth, Height y Calf.Maximum.Girth
+
+### Bondad de ajuste de los modelos
+
+Considerando un nivel de significancia  estándar de 0.05, podemos afirmar que:
+
+Con respecto al modelo simple, podemos observar que se obtiene un r cuadrado de 0,685 por lo cual podemos afirmar que el modelo basado en el grosor de la cintura reduce en un 68,5% la varianza aleatoria respecto al modelo nulo, además de que esta reducción es significativa, puesto que el valor p obtenido del modelo es mucho menor al nivel de significancia establecido.
+
+Y con respecto al modelo múltiple que considera como predictores las variables que representan, el grosor de la cintura, el grosor promedio de la parte más delgada de ambas muñecas, el grosor promedio de ambos muslos bajo el pliegue del glúteo, la altura y el grosor promedio de la parte más ancha de ambas pantorrillas, este obtiene un r cuadrado de 0,9606 por lo cual podemos afirmar que el modelo múltiple reduce en un 96,05% la varianza aleatoria respecto al modelo nulo, además de que esta reducción es significativa, puesto que el valor p obtenido del modelo es mucho menor al nivel de significancia establecido.
+
+```{r generalidad}
+g1 = residualPlots(modeloSimple, type = "rstandard", id=list(method = "r", n = 3, cex = 0.7, location = "lr"),
+                   col = "steelblue", pch = 20, col.quad = c("steelblue", "red"))
+print(durbinWatsonTest(modeloSimple))
+
+mm1 = marginalModelPlots(modeloSimple, sd = TRUE, id=list(method = "r", n = 3, cex = 0.7, location = "lr"),
+                   col = "steelblue", pch = 20, col.quad = c("steelblue", "red"))
+```
+
+A partir del gráfico de residuos podemos observar que se cumplen todas las condiciones para aplicar el método de mínimos cuadrados, puesto que podemos observar que los valores forman una banda horizontal en torno a la línea del valor 0, los residuos no forman un patrón reconocible y, por lo tanto, tampoco hay valores que se alejan del patrón que forma los demás. Cabe resaltar que el valor p obtenido por la prueba de no aditividad es significativo, puesto que es menor al nivel de significancia, por lo cual podríamos afirmar que existe evidencia para creer que la relación entre el grosor de la cintura y el peso no es lineal, además la prueba de Durbin-Watson reporta un valor p de 0,102, el cual es mayor al nivel de significancia por lo cual fallamos en rechazar la hipótesis nula de la prueba y concluimos que con estos datos no podemos descartar que las observaciones no presentan autocorrelación.
+
+### Calidad Predictiva
+
+Para estudiar la calidad predictiva, procederemos con la estrategia de validación cruzada en el modelo simple y múltiple.
+Usando las muestras previamente separadas, tenemos un conjunto de entrenamiento de 70 observaciones y uno de prueba de 30 observaciones, elegidos al azar.
+
+```{r rendimiento modelos}
+
+#modelo simple
+rmse_modeloSimple = sqrt(mean(resid(modeloSimple) ** 2))
+prediccionesSimple = predict(modeloSimple, datosPruebas)
+errorSimple = datosPruebas[["Weight"]] - prediccionesSimple
+rmse_pruebaSimple = sqrt(mean(errorSimple) ** 2)
+cambioError = (rmse_pruebaSimple -rmse_modeloSimple) / rmse_modeloSimple * 100
+
+#modelo multiple
+rmse_modeloMultiple = sqrt(mean(resid(modeloMultiple)**2))
+prediccionesMultiple = predict(modeloMultiple,datosPruebas)
+errorMultiple = datosPruebas[["Weight"]] -prediccionesMultiple
+rmse_pruebaMultiple = sqrt(mean(errorMultiple) ** 2)
+cambioError2 = (rmse_pruebaMultiple - rmse_modeloMultiple) / rmse_modeloMultiple * 100
+
+cat("Rendimiento del modelo de RLS:\n
+    RMSE para el conjunto de entrenamiento:", round(rmse_modeloSimple, 3), "\n
+    RMSE para el conjunto de prueba:", round(rmse_pruebaSimple, 3), "\n
+    Cambio en el error:", round(cambioError, 2), "\n
+    \n
+    Rendimiento del modelo de RLM:\n
+    RMSE para el conjunto de entrenamiento:", round(rmse_modeloMultiple, 3), "\n
+    RMSE para el conjunto de prueba:", round(rmse_pruebaMultiple, 3), "\n
+    Cambio en el error:", round(cambioError2, 2), "\n")
+```
+
+De los resultados obtenidos, notamos que en ambos casos, la diferencia entre la raíz del error cuadrático medio de los conjuntos de prueba y entrenamiento, tanto para el modelo simple como el múltiple, es considerable, por lo que no podemos decir que el modelo conseguido generaliza del todo bien los datos.
+No obstante, es notable que el conjunto de entrenamiento del modelo RLM disminuye la tasa de error en comparación al RLS, lo que no es el caso para el conjunto de prueba.
+
+### Conclusiones
+
+En conclusión, se dice que no es posible descartar que el grosor de la cintura, o que, en su conjunto; el grosor de la cintura, el grosor promedio de la parte más delgada de ambas muñecas, el grosor promedio de ambos muslos bajo el pliegue del glúteo, la altura y el grosor promedio de la parte más ancha de ambas pantorrillas, estén correlacionados con el peso de los hombres según el estudio. Particularmente, cada uno de los valores considerados del conjunto aportan a mejorar el modelo.
+No obstante, se considera que ninguno de los modelos cuenta con una calidad predictiva aceptable. Se recomienda en este punto probar con una nueva semilla para obtener nuevas muestras aleatorias y observar si se repite la situación, también considerar incluir más datos, pues se usaron solo 100 de los 247 hombres disponibles del estudio.
+
+
+### Referencias
+
+Arif, M., Gaur, D. K., Gemini, N., Iqbal, Z. A., & Alghadir, A. H. (2022). Correlation of percentage body fat, waist circumference and waist-to-hip ratio with abdominal muscle strength. International Journal of Environmental Research and Public Health, 19(12), 1234. https://doi.org/10.3390/ijerph19124321

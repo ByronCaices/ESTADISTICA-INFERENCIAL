@@ -1,0 +1,144 @@
+---
+title: "EP10-respuesta-grupo5"
+output: html_document
+date: "2024-12-10"
+---
+
+Este análisis tiene como objetivo construir y evaluar modelos de regresión logística para predecir el estado nutricional (EN) en base a un conjunto de variables
+
+Definimos la semilla utilizando los últimos cuatro dígitos del RUN del integrante de mayor edad del equipo.
+
+```{r}
+set.seed(2625)
+library(leaps)
+library(pROC)
+library(tidyverse)
+library(ggpubr)
+library(car)
+```
+
+Cargamos los datos desde un archivo CSV y seleccionamos solo hombres (Gender == 1), dado que la semilla es impar. Calculamos el índice de masa corporal (IMC) y definimos el estado nutricional (EN) según el valor del IMC: 0 si es menor a 23.2 y 1 si es mayor o igual. A continuación, seleccionamos una muestra balanceada de 150 hombres, donde 75 tienen sobrepeso (EN == 1) y 75 no tienen sobrepeso (EN == 0).
+
+Seleccionamos aleatoriamente ocho variables predictoras en ejercicios anteriores. Estas variables son: Chest.Girth, Height, Ankles.diameter, Knees.diameter, Navel.Girth, Wrists.diameter, Knee.Girth, Ankle.Minimum.Girth.
+```{r}
+datos = read.csv2("EP09 Datos.csv")
+library(dplyr)
+
+
+datos_filtrados = datos %>%
+  filter(Gender == 1) %>%
+  dplyr::select(-Gender) %>%
+  mutate(IMC = Weight / ((Height / 100) ^ 2)) %>%
+  mutate(EN = ifelse(IMC < 23.2, 0, 1))
+
+datosConSobrepeso = datos_filtrados %>% filter(EN == 1) %>% sample_n(75)
+datosSinSobrepeso = datos_filtrados %>% filter(EN == 0) %>% sample_n(75)
+datos_filtrados = rbind(datosConSobrepeso, datosSinSobrepeso)
+datos_filtrados = datos_filtrados[c("Chest.Girth", "Height", "Ankles.diameter", "Knees.diameter", "Navel.Girth", "Wrists.diameter", "Knee.Girth", "Ankle.Minimum.Girth", "IMC", "EN", "Waist.Girth")]
+```
+Elegimos la variable Waist.Girth como predictor adicional para la variable EN. Dividimos los datos en dos conjuntos: 100 hombres para construir los modelos (entrenamiento) y 50 hombres para evaluarlos (prueba). Construimos un modelo de regresión logística utilizando Waist.Girth como predictor para predecir EN.
+
+```{r}
+i_muestra = sample.int(n = nrow(datos_filtrados), size = 100, replace = F)
+datos_ent = datos_filtrados[i_muestra,]
+datos_pru = datos_filtrados[-i_muestra,]
+
+modelo_ent = glm(EN ~ Waist.Girth, 
+                 data = datos_ent, 
+                 family = binomial(link = "logit"))
+probs_ent = fitted(modelo_ent)
+summary(modelo_ent)
+BIC(modelo_ent)
+```
+
+Usamos búsqueda exhaustiva para identificar combinaciones de dos a cinco variables predictoras entre las seleccionadas al azar (Paso 3) que mejoran el modelo inicial. Analizamos los valores de BIC y R^2 ajustado para identificar las combinaciones óptimas. 
+
+```{r}
+datos_comb = 
+combinaciones <- regsubsets(EN ~ ., data = datos_ent %>% dplyr::select(-IMC, -Height), nbest = 1, nvmax = 16, method = "exhaustive")
+resumen <- summary(combinaciones)
+plot(combinaciones)
+
+comb_summary = summary(combinaciones)
+i_min_bic = which.min(comb_summary$bic)
+i_min_r2a = which.max(comb_summary$adjr2)
+
+mejor_comb_bic = comb_summary[["which"]][i_min_bic,]
+mejor_comb_r2a = comb_summary[["which"]][i_min_r2a,]
+
+variables_bic = names(mejor_comb_bic[mejor_comb_bic == TRUE])
+variables_r2a = names(mejor_comb_r2a[mejor_comb_r2a == TRUE])
+print(variables_bic)
+print(variables_r2a)
+```
+
+Elegimos Chest.Girth y Navel.Girth como predictores adicionales para predecir EN. Ajustamos un nuevo modelo con estas variables y calculamos el BIC.
+
+```{r}
+modelo = glm(EN ~ Chest.Girth + Navel.Girth, data = datos_ent, family = binomial(link = "logit"))
+BIC(modelo)
+```
+
+Combinamos estas variables con Waist.Girth y ajustamos un modelo final para analizar su confiabilidad.
+
+```{r}
+modelo_ent = glm(EN ~ Waist.Girth + Chest.Girth + Navel.Girth, 
+                 data = datos_ent, 
+                 family = binomial(link = "logit"))
+summary(modelo_ent)
+```
+Vemos que Waist.Girth tiene un coeficiente de 0,167 aproximadamente, y un p valor inferior a 0,5. Esto nos indica que el predictor es significativo, y que tiene un efecto estadísticamente relevante a la hora de predecir el estado nutricional. Por otro lado, Chest.Girth tiene un coeficiente de 0,216, y un p valor inferior a 0,5; lo que indica que este valor también es relevante. Por último, Navel.Girth tiene un p valor superior a 0,5; lo cual significa que no hay evidencia suficiente para afirmar que tiene un efecto significativo en la probabilidad de tener un IMC > 23,2. 
+
+Analizamos la confiabilidad del modelo final mediante gráficos de residuos y puntos de influencia. Evaluamos su capacidad predictiva en el conjunto de prueba calculando el AUC (área bajo la curva) y determinamos el umbral óptimo basado en la distancia euclidiana.
+
+```{r}
+residualPlots(modelo_ent, fitted = FALSE)
+influencePlot(modelo_ent)
+```
+Si hablamos de lo que entrega la función residualPlots, podemos ver los parametros de Waist.Girth y Chest.Girth se ven que siguen una estabilidad con una curvatura en el centro. En el caso de Navel.Girth, se ve una mayor disperción en comparación a los 2 anteriores. En base a lo anterior,se puede decir que no hay patrones claros que indiquen heterocedasticidad.
+Ahora bien, si analizamos los valores de p obtenidos por cada paremetro, son mayores al valor que uno define comunmente (0.05) y dando a entender que es un modelo adecuado, que no presenta problemas de multicolinealidad y que los parametros son significativos.
+
+
+```{r}
+probs_ent = fitted(modelo_ent)
+ROC_ent = roc(datos_ent$EN, probs_ent)
+texto_ent = sprintf("AUC = %2f", ROC_ent[["auc"]])
+g_roc_ent = ggroc(ROC_ent, color=2)
+g_roc_ent = g_roc_ent + geom_segment(aes(x = 1, y = 0, xend=0, yend = 1), linetype = 2)
+g_roc_ent = g_roc_ent + annotate("text", x=0.3, y=0.3, label = texto_ent)
+g_roc_ent = g_roc_ent + theme_pubr()
+print(g_roc_ent)
+
+coord_ent <- coords(ROC_ent, x = "all", transpose = FALSE)
+coord_ent[["dist_euc"]] <- sqrt((1 - coord_ent[["sensitivity"]])^2 +
+                                  (1 - coord_ent[["specificity"]])^2)
+i_min <- which.min(coord_ent[["dist_euc"]])[1]
+mejor_umbral <- coord_ent[["threshold"]][i_min]
+cat("\n")
+cat(sprintf("Mejor umbral: %.3f\n", mejor_umbral))
+probs_pru = fitted(modelo_ent)
+evaluar = function(umbral){
+  VP = sum((datos_pru$EN == 1) & (probs_pru > umbral))
+  FP = sum((datos_pru$EN == 0) & (probs_pru > umbral))
+  VN = sum((datos_pru$EN == 0) & (probs_pru <= umbral))
+  FN = sum((datos_pru$EN == 1) & (probs_pru <= umbral))
+  c(VP, FN, FP, VN)
+  n = (VP + VN + FP + FN)
+  exactitud = (VP + VN) / n
+  cat("exactitud: ",exactitud, "\n")
+  error = 1 -exactitud
+  cat("error: ",error, "\n")
+  sensibilidad = VP / (VP + FN)
+  cat("sensibilidad: ",sensibilidad, "\n")
+  especificidad = VN / (VN + FP)
+  cat("especificidad: ",especificidad, "\n")
+  VPP = VP / (VP + FP)
+  cat("VPP: ",VPP, "\n")
+  VPN = VN / (VN + FN)
+  cat("VPN: ",VPN, "\n")  
+}
+evaluar(mejor_umbral)
+
+```
+
+Dado al los valores que nos entregan, el modelo presenta un rendimiento bajo, con una exactitud baja y un error alto. La sensibilidad y especificidad son bajas, lo que nos indica que el modelo no es capaz de predecir correctamente el estado nutricional de los individuos.

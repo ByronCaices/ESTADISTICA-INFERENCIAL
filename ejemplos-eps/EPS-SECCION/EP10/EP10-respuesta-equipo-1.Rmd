@@ -1,0 +1,382 @@
+---
+title: "EP10 Grupo 1"
+output: html_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+# Cargo las librerías necesarias
+if(!require(tidyr)) install.packages("tidyr")
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(ggpubr)) install.packages("ggpubr")
+if(!require(car)) install.packages("car")
+if(!require(kableExtra)) install.packages("kableExtra")
+if(!require(ggfortify)) install.packages("ggfortify")
+```
+
+```{=html}
+<style>
+body {
+text-align: justify}
+</style>
+```
+
+
+En esta tarea nos pidió realizar los siguientes pasos:
+
+1.-Definir la semilla a utilizar, que corresponde a los últimos cuatro dígitos del RUN (sin considerar el dígito verificador) del integrante de mayor edad del equipo.
+
+2.-Seleccionar una muestra de 150 mujeres (si la semilla es un número par) o 150 hombres (si la semilla es impar), asegurando que la mitad tenga estado nutricional “sobrepeso” y la otra mitad “no sobrepeso” en cada caso. Dividir esta muestra en dos conjuntos: los datos de 100 personas (50 con EN “sobrepeso”) para utilizar en la construcción de los modelos y 50 personas (25 con EN “sobrepeso”) para poder evaluarlos.
+
+3.-Recordar las ocho posibles variables predictoras seleccionadas de forma aleatoria en el ejercicio anterior.
+
+4.-Seleccionar, de las otras variables, una que el equipo considere que podría ser útil para predecir la clase EN, justificando bien esta selección (idealmente con literatura).
+
+5.-Usando el entorno R, construir un modelo de regresión logística con el predictor seleccionado en el paso anterior y utilizando de la muestra obtenida.
+
+6.-Usando estas herramientas para la exploración de modelos del entorno R1, buscar entre dos y cinco predictores de entre las variables seleccionadas al azar, recordadas en el punto 3, para agregar al modelo obtenido en el paso 5.
+
+7.-Evaluar la confiabilidad de los modelos (i.e. que tengan un buen nivel de ajuste y sean generalizables) y “arreglarlos” en caso de que tengan algún problema.
+
+8.-Usando código estándar, evaluar el poder predictivo de los modelos con los datos de las 50 personas que no se incluyeron en su construcción en términos de sensibilidad y especificidad.
+
+
+```{r cargar_datos}
+# Leo los datos
+datos <- read.csv2(file = "EP09 Datos.csv", stringsAsFactors = TRUE)
+```
+
+
+A continuación se realizarón los pasos 1 y 2, es decir, se escogio la semilla y se filtraron los datos para obtener la muestra de 150 hombres, asegurando que la mitad tenga estado nutricional “sobrepeso” y la otra mitad “no sobrepeso” en cada caso. Posteriormente se dividió la muestra en dos conjuntos: los datos de 100 personas (50 con EN [estado nutricional] “sobrepeso”) para utilizar en la construcción de los modelos y 50 personas (25 con EN [estado nutricional] “sobrepeso”) para poder evaluarlos a futuro:
+
+```{r fitrar_datos}
+
+# Semilla a utilizar
+set.seed(8365)
+
+# Filtro los datos
+datos_filtrados = datos %>% filter(Gender == 1) %>% select(-Gender) %>% mutate(IMC = Weight / ((Height/100) ^2)) %>% mutate(EN = ifelse(IMC > 23.2, 0, 1))
+
+datos_filtrados[["EN"]] <- factor(datos_filtrados[["EN"]])
+
+muestraConSobrepeso <- datos_filtrados %>% filter(EN == 1) %>% sample_n(75)
+muestraSinSobrepeso <- datos_filtrados %>% filter(EN == 0) %>% sample_n(75)
+
+i_train <- sample(1:75, 50)
+
+muestraEntrenamiento <- rbind(muestraConSobrepeso[i_train, ], muestraSinSobrepeso[i_train, ]) 
+muestraTest <- rbind(muestraConSobrepeso[-i_train, ], muestraSinSobrepeso[-i_train, ])
+
+```
+
+A continuación se presentan las ocho variables predictoras seleccionadas en el capítulo anterior:
+
+```{r predictoresCapAnterior}
+nombre_respuesta <- "EN"
+variables_seleccionadas <- c("Knee.Girth", "Biacromial.diameter", "Ankles.diameter", "Bitrochanteric.diameter", "Forearm.Girth", "Navel.Girth", "Calf.Maximum.Girth", "Wrist.Minimum.Girth")
+
+print(variables_seleccionadas)
+```
+
+## Regresión Logística Simple
+
+Se nos pide seleccionar una variable fuera de las ocho seleccionadas en el capítulo anterior, es por esto, que una vez realizando una pequeña investigación en la literatura, escogimos usar la variable Waist.Girth ya que la circunferencia de la cintura permite evaluar directamente el riesgo asociado a la grasa abdominal. Es por lo anteriorque se realizo el modelo de regresión logística simple con la variable ya mencionada.
+
+```{r regresion_logistica_simple}
+predictor <- "Waist.Girth"
+
+modeloRLogitS <- glm(EN ~ Waist.Girth, family = binomial(link = "logit"), data = muestraEntrenamiento)
+
+cat("Modelo de regresión logística simple\n")
+print(summary(modeloRLogitS))
+```
+
+## Regresión Logística Múltiple
+
+Se nos solicita buscar entre dos y cinco predictores de entre las variables seleccionadas al azar, recordadas en el punto 3, para agregar al modelo obtenido en el paso 5. Es por esto que se realizo el modelo de regresión logística múltiple con algunas de las variables seleccionadas al azar, tal y como se muestra a continuación:
+
+```{r regresion_logistica_multiple}  
+predictores <- c("Knee.Girth", "Biacromial.diameter", "Ankles.diameter", "Bitrochanteric.diameter", "Forearm.Girth", "Navel.Girth", "Calf.Maximum.Girth", "Wrist.Minimum.Girth", "EN", "Waist.Girth")
+
+muestraEntrenamiento_predictores <- muestraEntrenamiento %>% select(all_of(predictores)) %>% slice(sample(n()))
+
+cota_inf <- glm(EN ~ Waist.Girth, family = binomial(link = "logit"),muestraEntrenamiento)
+
+# Definir modelos inicial y máximo.
+max <- glm(EN ~ ., family = binomial(link = "logit"), data = muestraEntrenamiento_predictores)
+
+# Revisar un paso hacia adelante.
+cat("\nIteración número 1:\n")
+cat("------\n")
+print(add1(cota_inf, scope = max))
+```
+
+```{r}
+# actualizar el modelo
+modelo1 <- update(cota_inf, . ~ . + Forearm.Girth)
+
+cat("\nIteración número 2:\n")
+cat("------\n")
+print(add1(modelo1, scope = max))
+```
+
+```{r}
+# actualizar el modelo
+modelo2 <- update(modelo1, . ~ . + Biacromial.diameter)
+
+cat("\nIteración número 3:\n")
+cat("------\n")
+print(add1(modelo2, scope = max))
+```
+
+```{r}
+# actualizar el modelo
+modelo3 <- update(modelo2, . ~ . + Calf.Maximum.Girth )
+
+cat("\nIteración número 4:\n")
+cat("------\n")
+print(add1(modelo3, scope = max))
+```
+
+Como ya no hay más variables predictoras que mejoren el modelo usando la regresión paso a paso hacia adelante, se procede a mostrar el modelo obtenido (modelo3):
+
+```{r modelo_final}
+cat("\nModelo de regresión logística múltiple\n")
+
+seleccion <- c("Forearm.Girth", "Biacromial.diameter", "Calf.Maximum.Girth")
+modeloRLogitM <- glm(EN ~ Waist.Girth + Forearm.Girth + Biacromial.diameter + Calf.Maximum.Girth, family = binomial(link = "logit"), data = muestraEntrenamiento)
+
+print(summary(modeloRLogitM))
+```
+
+## Confiabilidad de los modelos
+
+A continuación se cumplirá con la instrucción 7, la cual consiste en evaluar la confiabilidad de los modelos (i.e. que tengan un buen nivel de ajuste y sean generalizables) y “arreglarlos” en caso de que tengan algún problema.
+
+### Confiabilidad del Modelo de Regresión Logística Simple
+
+Primero, comenzaremos evaluando la confiabilidad del modelo de regresión logística simple:
+
+#### Bondad de Ajuste
+
+```{r bondad_ajuste_modeloRLogitS}
+# Bondad de ajuste
+cat("Bondad de ajuste del modelo univariado:\n")
+rlogits_lrt <- anova(modeloRLogitS, test = "LRT")
+print(rlogits_lrt)
+```
+
+Podemos ver que el modelo de regresión logística simple obtiene una reducción significativa en la devianza ($ \chi^2(1) = 54.595$, p < 0.001) en comparación con un modelo nulo, lo que sugiere que el modelo es significativo, por lo que el modelo logra una buena bondad de ajuste.
+
+#### Prueba de curvatura
+
+```{r curvatura_modeloRLogitS}
+cat("\nPrueba de curvatura para el predictor del modelo de RLogitS:\n")
+residualPlots(modeloRLogitS, type = "rstandard", fitted = FALSE, smooth = list(col = "violet"))
+
+```
+
+Como se puede observar en el gráfico anterior, no se observa un patrón claro en los residuos estandarizados, lo que sugiere que no hay problemas de curvatura en el modelo y esto se puede observar viendo que el p-value = 0.8913, lo que indica que la curvatura no es significativa.
+
+#### Relaciones lineales
+
+```{r relaciones_lineales_modeloRLogitS}
+# Modelo simple
+rlogits_lin_df <- data.frame(
+  muestraEntrenamiento[[predictor]],
+  log(fitted(modeloRLogitS) / (1 - fitted(modeloRLogitS)))
+)
+colnames(rlogits_lin_df) <- c(predictor, "Logit")
+
+p_rlogits_lin <- ggscatter(rlogits_lin_df, x = predictor, y = "Logit",
+                           add = "reg.line", add.params = list(color = "violet"))
+print(p_rlogits_lin)
+```
+
+Podemos ver que la relación entre la variable predictora y el logit de la probabilidad es lineal, lo que sugiere que no hay problemas de relación lineal en el modelo.
+
+#### Diagnóstico de casos influyentes
+
+```{r casos_influyentes_modeloRLogitS}
+cat("\nCasos notorios para el modelo de regresión logistica simple:\n")
+rlogits_inf_estad <- influencePlot(modeloRLogitS, id = list(n = 3))
+print(rlogits_inf_estad)
+```
+
+Como se puede ver, no hay casos influyentes en el modelo de regresión logística simple.
+
+#### Independencia de los residuos
+
+```{r independencia_residuos_modeloRLogitS}
+cat("Prueba de la independencia de los residuos para el modelo de RLogitS:\n")
+print(durbinWatsonTest(modeloRLogitS))
+```
+
+
+### Confiabilidad del Modelo de Regresión Logística Múltiple
+
+#### Bondad de Ajuste
+```{r bondad_ajuste_modeloRLogitM}
+# Bondad de ajuste
+cat("Bondad de ajuste del modelo multivariado:\n")
+rlogitm_lrt <- anova(modeloRLogitS, modeloRLogitM, test = "LRT")
+print(rlogitm_lrt)
+```
+Podemos ver que el modelo de regresión logística múltiple obtiene una reducción significativa en la devianza ($ \chi^2(1) = 24.441$, p < 0.001) en comparación con el modelo simple, lo que sugiere que el modelo es significativo, por lo que el modelo logra una buena bondad de ajuste.
+
+
+#### Prueba de curvatura
+
+```{r curvatura_modeloRLogitM}
+cat("\nPrueba de curvatura para el predictor del modelo de RLogitM:\n")
+residualPlots(modeloRLogitM, type = "rstandard", fitted = FALSE, smooth = list(col = "violet"))
+```
+
+Notemos que claramente las desviaciones de las medias no son significativas, por lo que el ajuste del modelo parece correcto.
+
+#### Relaciones lineales
+
+```{r relaciones_lineales_modeloRLogitM}
+
+rlogitm_lin_df <- muestraEntrenamiento[, c(predictor, seleccion)]
+rlogitm_lin_df[["Logit"]] <- log(fitted(modeloRLogitM) / (1 - fitted(modeloRLogitM)))
+rlogitm_lin_dfl <- pivot_longer(rlogitm_lin_df, -Logit, names_to = "Predictor", values_to = "Valor")
+
+p_rlogitm_lin <- ggscatter(data = rlogitm_lin_dfl, x = "Valor", y = "Logit",
+                           add = "reg.line", add.params = list(color = "violet")) +
+                 facet_wrap(~ Predictor, scales = "free_x")
+print(p_rlogitm_lin)
+
+```
+
+Claramente el modelo logra establecer relaciones lineales con los predictores, aunque se pueden generar un poco de dudas con el Biacromial.diameter.
+
+#### Diagnóstico de casos influyentes
+
+```{r casos_influyentes_modeloRLogitM}
+cat("\nCasos notorios para el modelo de regresión logística múltiple:\n")
+rlogitm_inf_estad <- influencePlot(modeloRLogitM, id = list(n = 3))
+print(rlogitm_inf_estad)
+
+```
+
+Como se puede ver, no hay casos influyentes en el modelo de regresión logística múltiple.
+
+#### Independencia de los residuos
+
+```{r independencia_residuos_modeloRLogitM}
+cat("Prueba de la independencia de los residuos para el modelo de RLogitM:\n")
+print(durbinWatsonTest(modeloRLogitM))
+
+```
+
+#### Multicolinealidad
+
+```{r multicolinealidad_modeloRLogitM}
+cat("Multicolinealidad para el modelo de RLogitM:\n")
+print(vif(modeloRLogitM))
+```
+
+Notemos que todos los valores obtenidos son menores a 3, lo que sugiere que no hay problemas de multicolinealidad en el modelo.
+
+## Poder predictivo de los modelos
+
+Antes de obtener el poder predictivo de los modelos, definiremos ciertas funciones que nos permitirán evaluar el rendimiento de los modelos.
+
+```{r funciones_metricas}
+# Calcular metricas de rendimiento
+metricas <- function(matriz) {
+  exactitud <- sum(diag(matriz)) / sum(matriz)
+  sensibilidad <- matriz[2, 2] / sum(matriz[, 2]) 
+  especificidad <- matriz[1, 1] / sum(matriz[, 1])
+  cat(sprintf("Exactitud: %.2f\nSensibilidad: %.2f\nEspecificidad: %.2f\n", exactitud,sensibilidad,especificidad))
+  list(exactitud = exactitud, sensibilidad = sensibilidad, especificidad = especificidad)
+}
+
+# Comparar cambios entre entrenamiento y prueba
+metricasDif <- function(entrenamiento, prueba) {
+  cambio <- (entrenamiento - prueba) / prueba * 100
+  return(cambio)
+}
+```
+
+
+### Poder predictivo del modelo de regresión logística simple
+
+```{r poder_predictivo_modeloRLogitS}
+# Umbral incial
+umbral <- 0.5
+
+# Prediccion conjunto de entrenamiento
+probabilidadesEntrenamiento <- predict(modeloRLogitS, muestraEntrenamiento, type = "response")
+prediccionEntrenamiento <- ifelse(probabilidadesEntrenamiento >= umbral, 1, 0)
+
+# Prediccion conjunto de prueba
+probabilidadesTest <- predict(modeloRLogitS, muestraTest, type = "response")
+prediccionPrueba <- ifelse(probabilidadesTest >= umbral, 1, 0)
+
+# Matrices de confusión
+matrizEntrenamiento <- table(Predicho = prediccionEntrenamiento, Observado = muestraEntrenamiento$EN)
+matrizPrueba <- table(Predicho = prediccionPrueba, Observado = muestraTest$EN)
+
+# Mostrar las matrices de confusión
+cat("Matriz de confusión entrenamiento:\n")
+print(matrizEntrenamiento)
+cat("\nMatriz de confusión prueba:\n")
+print(matrizPrueba)
+
+# Obtener métricas
+cat("\nRendimiento del modelo simple de entrenamiento:\n")
+metricasEntrenamiento <- metricas(matrizEntrenamiento)
+
+cat("\nRendimiento del modelo simple de prueba:\n")
+metricasPrueba <- metricas(matrizPrueba)
+
+cat(sprintf("\nCambios entre modelos de entrenamiento a prueba:\nCambio en Exactitud: %.2f%%\nCambio en Sensibilidad: %.2f%%\nCambio en Especificidad: %.2f%%\n", 
+            metricasDif(metricasEntrenamiento$exactitud, metricasPrueba$exactitud),
+            metricasDif(metricasEntrenamiento$sensibilidad,metricasPrueba$sensibilidad),
+            metricasDif(metricasEntrenamiento$especificidad, metricasPrueba$especificidad)))
+```
+
+Como podemos observar en los resultados, el rendimiento del modelo simple de prueba fue mejor que el de entrenamiento en varios aspectos, lo que sugiere que el modelo es generalizable, a su vez, el modelo es bastante preciso, con una exactitud de 0.84, una sensibilidad de 0.96 y una especificidad de 0.72 en los resultados del modelo de prueba.
+
+### Poder predictivo del modelo de regresión logística múltiple
+  
+```{r poder_predictivo_modeloRLogitM}
+# Predicciones para el conjunto de entrenamiento
+probabilidadesEntrenamiento <- predict(modeloRLogitM, muestraEntrenamiento, type = "response")
+prediccionEntrenamiento <- ifelse(probabilidadesEntrenamiento >= umbral, 1, 0)
+
+# Predicciones para el conjunto de prueba
+probabilidadesPrueba <- predict(modeloRLogitM, muestraTest, type = "response")
+prediccionPrueba <- ifelse(probabilidadesPrueba >= umbral, 1, 0)
+
+# Matrices de confusión
+matrizEntrenamiento <- table(Predicho = prediccionEntrenamiento, Observado = muestraEntrenamiento$EN)
+matrizPrueba <- table(Predicho = prediccionPrueba, Observado = muestraTest$EN)
+
+# Mostrar las matrices de confusión
+cat("Matriz de confusión entrenamiento:\n")
+print(matrizEntrenamiento)
+cat("\nMatriz de confusión prueba:\n")
+print(matrizPrueba)
+
+# Obtener métricas
+cat("\nRendimiento del modelo múltiple de entrenamiento:\n")
+metricasEntrenamiento <- metricas(matrizEntrenamiento)
+
+cat("\nRendimiento del modelo múltiple de prueba:\n")
+metricasPrueba <- metricas(matrizPrueba)
+
+cat(sprintf("\nCambios entre modelos de entrenamiento a prueba:\nCambio en Exactitud: %.2f%%\nCambio en Sensibilidad: %.2f%%\nCambio en Especificidad: %.2f%%\n", 
+            metricasDif(metricasEntrenamiento$exactitud, metricasPrueba$exactitud),
+            metricasDif(metricasEntrenamiento$sensibilidad,metricasPrueba$sensibilidad),
+            metricasDif(metricasEntrenamiento$especificidad, metricasPrueba$especificidad)))
+```
+
+Como podemos observar en los resultados, el rendimiento del modelo múltiple de prueba fue similar al de entrenamiento, lo que sugiere que el modelo es generalizable, a su vez, el modelo es bastante preciso, con una exactitud de 0.86, una sensibilidad de 0.92 y una especificidad de 0.8 en los resultados del modelo de prueba.
+
+## Conclusiones
+
+Los modelos presentan valores similares en los datos de entrenamiento y prueba, lo que sugiere que son generalizables.Además, comparando el modeloRLogitS con el modeloRLogitM, se puede observar que el modeloRLogitM presenta una mejor exactitud, sensibilidad y especificidad en los datos de entrenamiento, lo que sugiere que el modeloRLogitM es mejor que el modeloRLogitS en términos de poder predictivo.
+

@@ -1,0 +1,393 @@
+---
+title: "EP10-respuesta-equipo-3"
+output: html_document
+date: "2024-12-03"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r, echo =FALSE, warning=FALSE, message=FALSE}
+if (!requireNamespace('ggpubr', quietly = TRUE)){
+  install.packages('ggpubr')
+}
+library(ggpubr)
+if (!requireNamespace('ggplot2', quietly = TRUE)){
+  install.packages('ggplot2')
+}
+library(ggplot2)
+if (!requireNamespace('tidyverse', quietly = TRUE)){
+  install.packages('tidyverse')
+}
+library(tidyverse)
+if (!requireNamespace('car', quietly = TRUE)){
+  install.packages('car')
+}
+library(car)
+if (!requireNamespace('ggfortify', quietly = TRUE)){
+  install.packages('ggfortify')
+}
+library(ggfortify)
+```
+
+Lectura de datos
+
+```{r}
+# Leer csv
+datos <- read.csv2("EP09 Datos.csv")
+
+# Mostrar datos
+head(datos)
+```
+
+Se define la semilla a utilizar y se extraen los datos especificados en el enunciado además de generar las columnas del IMC(Índice de masa corporal) y EN (Estado nutricional). as condiciones asociadas.
+
+```{r}
+set.seed(2026)
+# Se calcula el IMC para todos los datos y se agrega como columna
+datosColumna <- datos %>%
+  mutate(IMC = Weight / (Height/100)^2,
+         EN = as.numeric(IMC > 23.2)) %>%
+  filter(Gender == 0)
+# Se filtra inmediatamente a las observaciones con genero mujer
+# debido a que la semilla que se va a usar es 2026 (par)
+```
+
+Luego de esto filtramos los datos generando una muestra 50/50 de personas con y sin sobrepeso base al resultado obtenido con EN, para luego generar las submuestras de entrenamiento y prueba.
+
+```{r}
+# Se asigna la semilla mencionada anteriormente (punto 1)
+set.seed(2026)
+
+muestra_EN0 <- datosColumna %>% filter(EN == 0) %>% sample_n(75, replace =F)
+  
+muestra_EN1 <- datosColumna %>% filter(EN == 1) %>% sample_n(75, replace =F)
+
+submuestra_pruebaEN0 <- muestra_EN0 %>% sample_n(25, replace = FALSE)
+submuestra_pruebaEN1 <- muestra_EN1 %>% sample_n(25, replace = FALSE)
+submuestra_entrenamientoEN0 <- setdiff(muestra_EN0,submuestra_pruebaEN0)
+submuestra_entrenamientoEN1 <- setdiff(muestra_EN1,submuestra_pruebaEN1)
+
+datosEntrenamiento <- rbind(submuestra_entrenamientoEN0, submuestra_entrenamientoEN1)
+datosEntrenamiento <- datosEntrenamiento[sample(nrow(datosEntrenamiento)), ]
+datosPrueba <- rbind(submuestra_pruebaEN0, submuestra_pruebaEN1)
+datosPrueba <- datosPrueba[sample(nrow(datosPrueba)), ]
+```
+
+Para el punto 3 recuperamos los predictores obtenidos del ejercicio anterior:
+
+"Biiliac.diameter"    "Gender"              "Wrist.Minimum.Girth" 
+"Bicep.Girth"         "Thigh.Girth"         "Knees.diameter"     
+"Age"                 "Forearm.Girth"
+
+
+Luego de las otras variables:
+"Biacromial.diameter"     "Bitrochanteric.diameter" "Chest.depth"             "Chest.diameter"          "Elbows.diameter"        
+"Wrists.diameter"         "Ankles.diameter"         "Shoulder.Girth"          "Chest.Girth"             "Waist.Girth"            
+"Navel.Girth"             "Hip.Girth"               "Knee.Girth"              "Calf.Maximum.Girth"      "Ankle.Minimum.Girth"
+
+Seleccionamos un predictor para el punto 4.
+
+```{r}
+# Correlación de candidatos a predictor en relación al IMC
+print(cor(datosColumna[, c("Biacromial.diameter", "Bitrochanteric.diameter", "Chest.depth",             "Chest.diameter",          "Elbows.diameter",        
+"Wrists.diameter",         "Ankles.diameter",         "Shoulder.Girth",          "Chest.Girth",             "Waist.Girth",            
+"Navel.Girth",             "Hip.Girth",               "Knee.Girth",              "Calf.Maximum.Girth",      "Ankle.Minimum.Girth"  )], datosColumna$IMC))
+```
+
+Notamos que Waist.Girth, o sea Grosor a la altura de la cintura, es el predictor con la mayor correlación con un 0.87. Por otro lado, el siguiente articulo:
+https://apjcn.qdu.edu.cn/14_1_14.pdf
+corrobora la información de que el predictor mencionado es el más significativo en comparación a los demás candidatos (Heinz, 2005).
+
+```{r}
+# Correlación del predictor seleccionado
+print(cor(datosColumna[, c("Waist.Girth")], datosColumna$IMC))
+```
+Luego se construye el modelo con el predictor seleccionado para el punto 5.
+```{r}
+
+modelo <- glm(EN ~ Waist.Girth, family = binomial(link = "logit"), data = datosEntrenamiento)
+print(summary(modelo))
+```
+
+Filtramos los datos de entrenamiento únicamente con las variables de interés (las que fueron seleccionadas de manera aleatoria del punto 3), para desarrollar el punto 6.
+```{r}
+
+variables_interes <- c("Biiliac.diameter", "Gender", "Wrist.Minimum.Girth", 
+                      "Bicep.Girth", "Thigh.Girth", "Knees.diameter", 
+                      "Age", "Forearm.Girth", "EN", "Waist.Girth")
+
+
+print(cor(datosColumna[, variables_interes], datosColumna$IMC))
+# Definir las variables de interés
+
+# Filtrar el dataframe
+datosEntrenamiento8 <- datosEntrenamiento[, variables_interes]
+```
+
+```{r}
+set.seed(2026)
+# Definir modelos inicial y máximo.
+nulo <- glm(EN ~ Waist.Girth, family = binomial(link = "logit"), data = datosEntrenamiento8)
+maxi <- glm(EN ~ ., family = binomial(link = "logit"), data = datosEntrenamiento8)
+```
+
+```{r}
+# Revisar un paso hacia adelante.
+cat("\nPaso 1:\n")
+cat("-----\n")
+print(add1(nulo, scope = maxi))
+
+# Actualizar el modelo.
+modelo1 <- update(nulo, . ~ . + Thigh.Girth)
+```
+
+```{r}
+# Revisar un paso hacia adelante.
+cat("\nPaso 2:\n")
+cat("-----\n")
+print(add1(modelo1, scope = maxi))
+
+# Actualizar el modelo.
+modelo2 <- update(modelo1, . ~ . + Forearm.Girth)
+```
+
+```{r}
+# Revisar un paso hacia adelante.
+cat("\nPaso 3:\n")
+cat("-----\n")
+print(add1(modelo2, scope = maxi))
+
+# Actualizar el modelo.
+modelo3 <- update(modelo2, . ~ . + Age)
+```
+
+```{r}
+# Revisar un paso hacia adelante.
+cat("\nPaso 4:\n")
+cat("-----\n")
+print(add1(modelo3, scope = maxi))
+```
+
+```{r}
+# Mostrar el modelo obtenido.
+cat("\nModelo RLog conseguido con regresión hacia adelante:\n")
+cat("------------------------------------------------\n")
+print(summary(modelo3))
+
+# Comparación de los modelos considerados
+cat("Comparación de los modelos considerados:\n")
+cat("----------------------------------------\n")
+print(anova(nulo, modelo1, modelo2, modelo3, test = "LRT"))
+
+```
+
+## Ahora comprobaremos la confiabilidad de los modelos generados. (modelo y modelo3)
+
+Primero revisaremos la bondad de ajuste
+
+```{r}
+## RLogits
+lrts <- anova(modelo,test="LRT")
+## Rlogitm
+lrtm <- anova(modelo, modelo3, test = "LRT")
+
+print(lrts)
+print(lrtm)
+```
+
+Como se puede ver, tanto el modelo simple, como el modelo múltiple
+logran una reducción significativa en la deviación con valores p < 0.001.
+
+Ahora tenemos que comprobar que los residuos estandarizados mantienen
+una media cercana a cero, con la función residualPlots()
+
+```{r}
+residualPlots(modelo, type = "rstandard", fitted = FALSE,
+              smooth = list(col="blue"))
+```
+Pareciera que la media, tiene una leve desviación del cero, pero no se ve un patrón evidente, además con la prueba entregada por la función, podemos determinar que esta desviación no es significativa, por lo tanto, no hay evidencia suficiente para descartar que los residuos cumplan la condición.
+
+```{r}
+residualPlots(modelo3, type = "rstandard", fitted = FALSE,
+              smooth = list(col="blue"))
+```
+En este caso se ve que la media si es cercana a 0, sin patrones evidentes, además apoyado con el test, tampoco hay evidencia suficiente, por lo tanto, el ajuste del modelo parece correcto.
+
+Ahora comprobaremos el supuesto de linealidad.
+```{r}
+crPlots(modelo)
+```
+Se puede observar que el modelo cumple también con el supuesto de linealidad.
+```{r}
+crPlots(modelo3)
+```
+Los resultados indican que no existe suficiente evidencia para descartar linealidad entre los predictores (p-value > 0.05 en todos los predictores) y la respuesta transformada y por lo tanto se cumple la condición.
+
+
+Ahora procederemos a verificar la independencia de residuos.
+```{r}
+set.seed(2026)
+durbinWatsonTest(modelo)
+
+durbinWatsonTest(modelo3)
+```
+Se puede ver en el resultado de la prueba que el p-value > 0.05, por lo tanto, no existe suficiente evidencia para descartar que los residuos no sean independientes entre sí.
+
+Ahora verificaremos la multicolinealidad del modelo múltiple
+
+```{r}
+print(vif(modelo3))
+
+print(1/vif(modelo3))
+```
+Como podemos observar, todos los valores del factor de inflación de la varianza están distantes del valor critico 5, y también ninguna tolerancia está por debajo de 0,2 por lo tanto no hay presencia de multicolinealidad.
+
+
+Ahora verificaremos si el modelo tiene algunos casos influyentes.
+```{r}
+rLogits_influ <- influencePlot(modelo)
+print(rLogits_influ)
+```
+Como se puede observar ningún caso presenta una distancia de Cook mayor a 1, ni tampoco se presenta apalancamiento, por lo tanto 
+no es necesario realizar modificaciones al modelo.
+
+```{r}
+rLogitm_influ <- influencePlot(modelo3)
+print(rLogitm_influ)
+```
+Como se puede observar, también ningún caso presenta una distancia de Cook mayor a 1, ni tampoco se presenta apalancamiento, por lo tanto 
+no es necesario realizar modificaciones al modelo.
+
+Últimamente revisaremos los puntos de Información incompleta y Separación perfecta.
+Para el punto de información incompleta, podemos verificar que tenemos más observaciones que las requeridas por este punto, 
+que estarían alrededor de 60 observaciones, y poseemos 100.
+Para el punto de separación perfecta, 
+```{r}
+# Predicciones para el conjunto de entrenamiento
+probabs <- predict(modelo3, datosEntrenamiento8, type = "response")
+predicts <- ifelse(probabs >= 0.6, 1, 0)
+matrizConf <- table(Predichos = predicts, Observados = datosEntrenamiento8$EN)
+print(matrizConf)
+```
+A partir de la tabla podemos ver que los predictores no generan una separación perfecta, ya que el modelo tiene errores.
+
+Finalmente procederemos a verificar el poder predictivo de los modelos, tanto en sensibilidad y especificidad.
+
+```{r}
+umbral <- 0.6
+
+probsEnt_RLogS <- predict(modelo, datosEntrenamiento8, type = "response")
+probsEnt_RLogS <- sapply(probsEnt_RLogS, 
+                  function(p) ifelse (p < umbral, "NoSobrepeso", "Sobrepeso"))
+probsEnt_RLogS <- factor(probsEnt_RLogS, levels = c("NoSobrepeso", "Sobrepeso"))
+obsEnt_RLogS <- factor(datosEntrenamiento8$EN, levels = c(0, 1), labels = c("NoSobrepeso", "Sobrepeso"))
+
+
+matrizConfEntre_RLogS <- table(Predicho = probsEnt_RLogS, Observado = obsEnt_RLogS)
+print(matrizConfEntre_RLogS)
+```
+
+```{r}
+probsPru_RLogS <- predict(modelo, datosPrueba, type = "response")
+probsPru_RLogS <- sapply(probsPru_RLogS, 
+                  function(p) ifelse (p < umbral, "NoSobrepeso", "Sobrepeso"))
+probsPru_RLogS <- factor(probsPru_RLogS, levels = c("NoSobrepeso", "Sobrepeso"))
+obsPru_RLogS <- factor(datosPrueba$EN, levels = c(0, 1), labels = c("NoSobrepeso", "Sobrepeso"))
+
+
+matrizConfPrueba_RLogS <- table(Predicho = probsPru_RLogS, Observado = obsPru_RLogS)
+print(matrizConfPrueba_RLogS)
+```
+
+
+```{r}
+probsEnt_RLogM <- predict(modelo3, datosEntrenamiento8, type = "response")
+probsEnt_RLogM <- sapply(probsEnt_RLogM, 
+                  function(p) ifelse (p < umbral, "NoSobrepeso", "Sobrepeso"))
+probsEnt_RLogM <- factor(probsEnt_RLogM, levels = c("NoSobrepeso", "Sobrepeso"))
+obsEnt_RLogM <- factor(datosEntrenamiento8$EN, levels = c(0, 1), labels = c("NoSobrepeso", "Sobrepeso"))
+
+
+matrizConfEntre_RLogM <- table(Predicho = probsEnt_RLogM, Observado = obsEnt_RLogM)
+print(matrizConfEntre_RLogM)
+```
+
+
+```{r}
+probsPru_RLogM <- predict(modelo3, datosPrueba, type = "response")
+probsPru_RLogM <- sapply(probsPru_RLogM, 
+                  function(p) ifelse (p < umbral, "NoSobrepeso", "Sobrepeso"))
+probsPru_RLogM <- factor(probsPru_RLogM, levels = c("NoSobrepeso", "Sobrepeso"))
+obsPru_RLogM <- factor(datosPrueba$EN, levels = c(0, 1), labels = c("NoSobrepeso", "Sobrepeso"))
+
+
+matrizConfPrueba_RLogM <- table(Predicho = probsPru_RLogM, Observado = obsPru_RLogM)
+print(matrizConfPrueba_RLogM)
+```
+
+Ahora procederemos a calcular los índices Exactitud, Sensibilidad y Especificidad.
+
+Simple con Entrenamiento
+```{r}
+ExacRLogSEntre <- (matrizConfEntre_RLogS[1,1]+ matrizConfEntre_RLogS[2,2]) / sum(matrizConfEntre_RLogS)
+SensRlogSEntre <- matrizConfEntre_RLogS[2,2]/sum(matrizConfEntre_RLogS[,2])
+EspeRlogSEnrte <- matrizConfEntre_RLogS[1,1] / sum(matrizConfEntre_RLogS[,1])
+```
+
+Simple con Prueba
+```{r}
+ExacRLogSPru <- (matrizConfPrueba_RLogS[1,1]+ matrizConfPrueba_RLogS[2,2]) / sum(matrizConfPrueba_RLogS)
+SensRlogSPru <- matrizConfPrueba_RLogS[2,2]/sum(matrizConfPrueba_RLogS[,2])
+EspeRlogSPru <- matrizConfPrueba_RLogS[1,1] / sum(matrizConfPrueba_RLogS[,1])
+```
+
+Múltiple con Entrenamiento
+```{r}
+ExacRLogMEntre <- (matrizConfEntre_RLogM[1,1]+ matrizConfEntre_RLogM[2,2]) / sum(matrizConfEntre_RLogM)
+SensRlogMEntre <- matrizConfEntre_RLogM[2,2]/sum(matrizConfEntre_RLogM[,2])
+EspeRlogMEnrte <- matrizConfEntre_RLogM[1,1] / sum(matrizConfEntre_RLogM[,1])
+```
+
+Múltiple con Prueba
+```{r}
+ExacRLogMPru <- (matrizConfPrueba_RLogM[1,1]+ matrizConfPrueba_RLogM[2,2]) / sum(matrizConfPrueba_RLogM)
+SensRlogMPru <- matrizConfPrueba_RLogM[2,2]/sum(matrizConfPrueba_RLogM[,2])
+EspeRlogMPru <- matrizConfPrueba_RLogM[1,1] / sum(matrizConfPrueba_RLogM[,1])
+```
+
+
+Ahora calcularemos las diferencias porcentuales respecto a los Datos de entrenamiento y Datos de prueba, para ver la generalización de los modelos.
+RlogS
+```{r}
+cat("Valores del Modelo RlogS")
+cat("\n\nDatos de Entrenamiento")
+cat("\n\nExactitud:", ExacRLogSEntre)
+cat("\nSensibilidad:", SensRlogSEntre)
+cat("\nEspecificidad: ", EspeRlogSEnrte)
+
+cat("\n\nDatos de Prueba")
+cat("\n\nExactitud:", ExacRLogSPru)
+cat("\nSensibilidad:", SensRlogSPru)
+cat("\nEspecificidad: ", EspeRlogSPru)
+```
+Como podemos observar, el modelo de Regresión Logística Simple no pierde poder predictivo, es más, el poder aumenta cuando se utilizan los datos de prueba, entonces podemos decir que el modelo tiene una buena generalización.
+
+RlogM
+```{r}
+cat("Valores del Modelo RlogM")
+cat("\n\nDatos de Entrenamiento")
+cat("\n\nExactitud:", ExacRLogMEntre)
+cat("\nSensibilidad:", SensRlogMEntre)
+cat("\nEspecificidad: ", EspeRlogMEnrte)
+
+cat("\n\nDatos de Prueba")
+cat("\n\nExactitud:", ExacRLogMPru)
+cat("\nSensibilidad:", SensRlogMPru)
+cat("\nEspecificidad: ", EspeRlogMPru)
+```
+Como podemos observar, el modelo aumenta la sensibilidad, pero disminuye levemente su Exactitud y Especificidad. Como esta variación es tan pequeña, no es significativa, por lo tanto, el modelo también posee una buena generalización.
+
+# Conclusión
+Finalmente podemos concluir que ambos modelos presentan una buena calidad predictiva, con una sensibilidad, especificidad y Exactitud sobre el 84%, en datos de Prueba. También existe suficiente evidencia para decir que ambos modelos son confiables, debido a que cumplen todas las condiciones asociadas. 
+

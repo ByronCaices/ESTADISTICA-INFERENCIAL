@@ -1,0 +1,240 @@
+---
+title: "EP07-grupo-7"
+author: ""
+date: "2024-10-24"
+output: pdf_document
+---
+
+1. Observando los datos, la memorista sospecha que hay diferencias significativas en el tiempo de ejecución entre las versiones B y C del algoritmo cuando las instancias tienen 60 o más nodos. ¿Los datos respaldan la intuición de la memorista?
+Para responder, filtren los datos para tener las instancias con 60 o más nodos y seleccionen las columnas de los tiempos de ejecución de las versiones B y C en formato ancho. Usando como semilla el valor 71, obtenga muestras aleatorias independientes de 22 tiempos registrados por la versión B y 19 tiempos registrados por la versión C del algoritmo. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+Respuesta:
+Se selecciona la prueba de Wilcoxon-Mann-Whitney, para poder utilizarla hay que cumplir las siguientes condiciones.
+1.- Las Observaciones de ambas muestras son independientes.
+2. La escala de medición tiene que ser a lo menos ordinal.
+
+Para la primera condición, podemos decir que se cumple debido a que las muestras son independientes y aleatorias para cada muestra, obtenidos mediante seed(71).
+Para la segunda condición, esto también se cumple debido a que la escala tiempo es de razón, cumpliendo con que sea a lo menos ordinal.
+
+$H_0$: No existen diferencias significativas entre los tiempos de ejecución del algoritmo B y C cuando el número de nodos es mayor a 60.
+$H_A$: Si existen diferencias significativas entre los tiempos de ejecución del algoritmo B y C cuando el número de nodos es mayor a 60.
+
+Se procede a aplicar la prueba
+```{r}
+library(dplyr)
+#P1
+datos <- read.csv("EP07 Datos.csv")
+datosFiltrados <- datos %>% filter(`n.nodos` >= 60)
+
+tiemposBC <- datosFiltrados %>% select(`tiempo.B`, `tiempo.C`)
+
+set.seed(71)
+
+muestraB <- sample(tiemposBC$`tiempo.B`, 22)
+muestraC <- sample(tiemposBC$`tiempo.C`, 19)
+
+# Prueba de Mann-Whitney
+resultadoMannWhitney <- wilcox.test(muestraB, muestraC, alternative = "two.sided")
+print(resultadoMannWhitney)
+
+```
+
+
+R: como $p < 0.01$ se rechaza $H_0$ en favor de $H_A$. Entonces se puede concluir con un 99% de confianza que existen diferencias significativas entre los tiempos de ejecución del algoritmo B y C cuando el número de nodos es mayor a 60.
+
+
+# Pregunta 2
+La memorista también sospecha que, al comparar las mismas instancias de iguales características, las mejores soluciones encontradas por las versiones B y C tienen rendimientos distintos. ¿Estará en lo cierto?
+Para responder, filtren los datos para tener las instancias con 60 o más nodos y seleccionen las columnas con el mejor rendimiento de las versiones B y C en formato ancho. Usando como semilla el valor 33, obtengan una muestra aleatoria de 20 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+Respuesta: 
+
+
+Para responder esta pregunta se escogió la prueba de suma de rangos de wilcoxon. Para poder utilizar esta prueba se deben cumplir las siguientes condiciones.
+1.- Las Observaciones de ambas muestras son independientes.
+2. La escala de medición tiene que ser a lo menos ordinal.
+
+Para la primera condición se puede decir que son muestras independientes y aleatorias, generadas por seed()
+Para la segunda condición tambien se cumple debido a que el tiempo esta en escala de razón, cuempliendo con ser a lo menos ordinal.
+
+$H_0$: las mejores soluciones encontradas por las versiones B y C tienen rendimientos iguales.
+$H_A$: las mejores soluciones encontradas por las versiones B y C tienen rendimientos distintos.
+```{r}
+#P2
+
+datosFiltradosP2 <- datos %>%
+  filter(`n.nodos` >= 60) %>%
+  select(instancia, mejor.B, mejor.C)
+
+set.seed(33)
+muestraRendimientos <- datosFiltradosP2 %>% sample_n(20)
+resultadoWilcoxon <- wilcox.test(muestraRendimientos$mejor.B, muestraRendimientos$mejor.C, paired = TRUE)
+
+print(resultadoWilcoxon)
+
+```
+R: Como $p < 0.05$ se rechaza $H_0$ en favor de $H_A$. Entonces se puede concluir con un 95% de confianza que existe una diferencia significativa en el rendimiento entre las mejores pruebas de B y C.
+
+
+# Pregunta 3
+La memorista sospecha que hay diferencias significativas en el tiempo de ejecución entre las versiones del algoritmo cuando las instancias de prueba tienen 60 o más nodos. ¿Los datos respaldan la intuición de la memorista?
+Para responder, filtren los datos para tener las instancias con 60 o más nodos y seleccionen las columnas con los tiempos de ejecución registrados (en formato ancho). Usando como semilla el valor 31, obtengan muestras aleatorias independientes de 15, 14 y 13 tiempos registrados por las versiones A, B y C, respectivamente. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+R: Para este ejercicio se escogió la prueba ANOVA independiente, para poder utilizar esta prueba se deben cumplir las siguientes condiciones.
+
+1. La escala de medida de la variable dependiente es de escala de intervalos iguales.
+2. Las k muestras obtenidas de manera aleatoria e independiente desde las poblaciones de origen.
+3. Se puede suponer razonablemente que las poblaciones de origen siguen una distribucion normal.
+4. Si las muestras provienen de mas de una población, estas tienen las mismas varianzas.
+
+La primera condición se cumple ya que el tiempo esta en escala de razón, donde cumple ser de intervalos iguales.
+La segunda condición, se cumple ya que se obtuvieron de manera aleatoria con seed().
+
+Para la tercera condición se debe realizar los gráficos QQ o la prueba shapiro.wilk
+
+
+```{r}
+library(ggpubr)
+library(tidyverse)
+library(tidyr)
+set.seed(31)
+##Se extraen las muestras con seed 31.
+muestraA <- sample(datosFiltrados$tiempo.A,15)
+muestraB <- sample(datosFiltrados$tiempo.B,14)
+muestraC <- sample(datosFiltrados$tiempo.C,13)
+```
+
+
+```{r}
+##Comprobacion de normalidad.
+shapiro.test(muestraA)
+shapiro.test(muestraB)
+shapiro.test(muestraC)
+```
+Como la muestraA no sigue una distribucion normal, se intentará corregir aplicando una corrección de boxCox.
+```{r}
+library(DescTools)
+lambda <- BoxCoxLambda(x = muestraA,lower = -3, upper = 3)
+
+muestraABox <- BoxCox(muestraA,lambda = lambda)
+muestraBBox <- BoxCox(muestraB,lambda = lambda)
+muestraCBox <- BoxCox(muestraC,lambda = lambda)
+
+shapiro.test(muestraABox)
+shapiro.test(muestraBBox)
+shapiro.test(muestraCBox)
+```
+Como se puede apreciar, la transformación aplicada a todas las muestras arrojan que siguen una distribución normal, por lo tanto se puede confirmar que la tercera condición se cumple.
+
+```{r}
+df <- data.frame(
+  tiempo = c(muestraABox, muestraBBox, muestraCBox),
+  Algoritmo = factor(rep(c("A", "B", "C"), times = c(15, 14, 13)))
+)
+```
+
+Por último tenemos que calcular que la razón entre la mínima y máxima varianza es de máximo 1,5.
+```{r}
+varianzas <- df %>%
+  group_by(Algoritmo) %>%
+  summarise(varianza = var(tiempo))
+
+medias <- df %>%
+  group_by(Algoritmo) %>%
+  summarise(media = mean(tiempo))
+
+razon <- max(varianzas$varianza)/min(varianzas$varianza)
+```
+
+Como la razón entre la máxima y mínima varianza es mayor a 1.5, no se puede realizar un test ANOVA para muestras independientes, por lo tanto se realizará la opción no paramétrica para este ejercicio, el test de Kruskal-Wallis. Cabe destacar que se utilizarán los datos que no estan modificados.
+
+La prueba de Kruskal-Wallis tiene las siguientes condiciones que son menos estrictas:
+1.- La variable independientes tiene a lo menos 2 niveles.
+2.- La escala de la variable dependiente debe ser, a lo menos, ordinal.
+3.- Las observaciones son independientes entre sí.
+
+Para la primera condición, ya que la variable independiente tiene 3 niveles.
+Para la segunda condición se cumple, ya que la variable dependiente se cumple, debido a que la escala es de razón.
+Para la tercera condición se cumple debido a que segun el enunciado son independientes y seleccionadas aleatoriamente, dado por la seed 31.
+
+Para esta prueba se proponen las siguientes Hipótesis:
+
+$H_0$: Los tiempos de ejecucion de los algoritmos A, B y C con instancias de 60 o más nodos son iguales.
+
+$H_A$: Existe almenos un algoritmo donde el tiempo de ejecución con instancias de 60 o más nodos es distinto al resto.
+
+Como las tres condiciones se cumplen, procedemos a realizar la prueba.
+```{r}
+df2 <- data.frame(
+  tiempo = c(muestraA, muestraB, muestraC),
+  Algoritmo = factor(rep(c("A", "B", "C"), times = c(15, 14, 13)))
+)
+
+kruskal.test(tiempo ~ Algoritmo, df2)
+```
+
+Como $p < 0.01$, se rechaza $H_0$ en favor de $H_A$. Por lo tanto se puede concluir con un 99% de confianza que existe al menos un algoritmo de resolución que tiene un tiempo distinto al resto. Por lo tanto se realizara una prueba post hoc para averiguar donde se encuentra esta diferencia.
+```{r}
+post_hoc <- pairwise.wilcox.test(df2[["tiempo"]],
+                     df2[["Algoritmo"]],
+                     p.adjust.method = "BH",
+                     paired = FALSE,
+                     exact = FALSE)
+print(post_hoc)
+
+```
+Luego de realizar la prueba post_hoc con la correccion de Benjamini-Hochberg, se puede decir que existen diferencias significativas entre los tiempos A-B y B-C. Entonces se puede decir el tiempo de ejecucion del algoritmo B tiene diferencias significativas con los tiempos de los Algoritmos A y C.
+
+#Pregunta 4
+
+La memorista también sospecha que, al comparar las mismas instancias con iguales características, las mejores soluciones encontradas por las diferentes versiones del algoritmo tienen rendimientos distintos. ¿Estará en lo cierto?
+Para responder, filtren los datos para tener las instancias con 60 o más nodos y seleccionen las columnas con los mejores rendimientos registrados. Usando como semilla el valor 73, obtengan una muestra aleatoria de 22 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+En este caso, se optará por aplicar la prueba no paramétrica de Friedman, puesto que los datos son correlacionados. Primero, debemos verificar las condiciones:
+
+1.- La variable independiente debe ser categórica y tener por lo menos tres niveles. Vemos que esto se cumple, puesto que son exactamente tres.
+2.- La escala de la variable dependiente debe ser, a lo menos, ordinal. Esto también se cumple.
+3.- Las observaciones son aleatorias e independientes. Esto se cumple, porque las muestras se tomaron de forma aleatoria con una semilla.
+
+Cumplidas las condiciones, se procede a hacer la prueba en sí. Para esto, planteamos las siguientes hipótesis:
+
+$H_0$: No hay diferencias significativas en los rendimientos entre las versiones.
+$H_A$: Hay diferencias significativas en los rendimientos entre al menos dos versiones.
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(rstatix)
+
+datosFiltradosP4 <- datos %>%
+  filter(`n.nodos` >= 60) %>%
+  select(instancia, mejor.A, mejor.B, mejor.C)
+
+set.seed(73)
+muestra_rendimiento <- datosFiltradosP4 %>% sample_n(22)
+
+# Convertir a formato largo
+muestra_largo <- muestra_rendimiento %>%
+  pivot_longer(cols = c(mejor.A, mejor.B, mejor.C), names_to = "version", values_to = "mejor_rendimiento")
+
+muestra_largo$version <- as.factor(muestra_largo$version)
+
+friedman_resultado <- friedman.test(mejor_rendimiento ~ version | instancia, data = muestra_largo)
+print(friedman_resultado)
+
+```
+
+Como el valor de p es menor a 0.05, podemos rechazar la hipótesis nula en favor de la alternativa, y decir que, efectivamente, existe por lo menos un par de versiones que tienen medias significativamente distintas. Ahora, hay que determinar cuáles son esas dos versiones del algoritmo. Para esto, utilizamos una prueba Post-Hoc.
+
+```{r}
+posthocResultado <- pairwise_wilcox_test(
+  muestra_largo, mejor_rendimiento ~ version,
+  paired = TRUE,
+  p.adjust.method = "bonferroni"
+)
+
+print(posthocResultado)
+
+```
+
+Tras hacer esta prueba, observamos que hay diferencias significativas entre los mejores rendimientos del algoritmo A y el algoritmo B, pues el valor p ajustado entre ambos es de 0.014, en cuanto al resto, vemos que los valores p son mayores al nivel de significancia, por lo que no podemos decir que existen diferencias significativas.

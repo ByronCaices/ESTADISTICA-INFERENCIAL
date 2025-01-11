@@ -1,0 +1,76 @@
+---
+title: "Tarea 1"
+author: "Javier Villegas G, Sofia Gacitua L, Milovan Valenzuela L"
+date: "2024-09-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+require(dplyr)
+library(kableExtra)
+```
+
+# equipo 6
+
+```{r cars}
+#carga de datos
+data <- read.csv2("EP01 Datos Casen 2017.csv")
+#verificamos que los datos estan correctos
+head(data)
+
+
+#crear dataframe de las varibles de interes en este caso de region, sexo e ytot 
+dataframe_interes<- data.frame(
+  variables_int=c("region","sexo","ytot"),
+  descripcion=c("Región","Sexo de la persona","Ingreso total"),
+  Clasificacion=c("Categórica", "Categórica", "Numérica")
+)
+
+
+# Generar la tabla de forma más compacta
+dataframe_interes %>%
+  kbl(caption = "Tabla 1. Descripción general de las variables de interes") %>%
+  kable_styling()
+
+ 
+hombres_RM <- data %>% filter(region == "Región Metropolitana de Santiago", sexo == "Hombre")
+
+# Revisamos datos con respecto a ingresos totales de hombres en la region metropolitana
+summary(hombres_RM$ytot)
+
+# Histograma con breaks de 1000 para toda la variable ytot
+hist(x = hombres_RM$ytot, breaks = 1000, 
+     main = "Distribución de Ingresos Totales - Hombres RM (Todos)",
+     xlab = "Ingresos Totales", ylab = "Frecuencia")
+
+
+# Filtrado hasta el tercer cuartil
+hombres_RM_zoom <- hombres_RM %>% filter(ytot <= 725000)
+
+
+# Histograma con breaks de 50 para los valores filtrados
+hist(x = hombres_RM_zoom$ytot, breaks = 50, 
+     main = "Distribución de Ingresos Totales - Hombres RM (Hasta 3er Cuartil)",
+     xlab = "Ingresos Totales (Hasta 725,000)", ylab = "Frecuencia")
+
+
+# Diagrama de dispersión para hombres_RM$ytot
+plot(hombres_RM$ytot,
+     main = "Diagrama de Dispersión de Ingresos Totales - Hombres RM",
+     xlab = "Índice", 
+     ylab = "Ingresos Totales",
+     col = "blue")  
+
+
+# Diagrama de dispersión para hombres_RM_zoom$ytot
+plot(hombres_RM_zoom$ytot,
+     main = "Diagrama hasta 3er cuartil",
+     xlab = "Índice", 
+     ylab = "Ingresos Totales",
+     col = "blue") 
+
+```
+
+Luego de verificar el histograma de los ingresos totales de los hombres en la RM (todos) podemos concluir que los ingresos son asimetricos.\n\n Luego de analizar el diagrama de dispersion de los ingresos de los hombres de la RM conlcuimos que los datos son disperson ya que se encuentran esparcidos por el diagrama , esto queda mas evidenciado si realizamos un zoom a los datos. \n\n Luego de hacer un zoom a los datos y graficar un histograma con los datos de ingresos de los hombres de la RM (hasta 3er cuartil podemos concluir que los datos son multimodales dado que se observan valores altos seguidos de valores mas altos esto se repite en varias ocaciones  lo que sugiere una estructura multimodal.

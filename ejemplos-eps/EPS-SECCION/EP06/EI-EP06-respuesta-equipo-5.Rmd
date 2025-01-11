@@ -1,0 +1,117 @@
+---
+title: "EP06"
+author: "Grupo 5"
+date: "2024-10-24"
+output: html_document
+---
+
+#### **Importante**
+
+Antes de comenzar con el análisis, se importarán las librerías necesarias para el trabajo, siendo estas las siguientes: *kableExtra*, *ggpubr*, *gridExtra*, *ez*, *nlme*, *emmeans* y *dplyr*.
+
+```{r, echo = F, message = F}
+library(kableExtra)
+library(dplyr)
+library(ggpubr)
+library(gridExtra)
+library(ez)
+library(nlme)
+library(emmeans)
+```
+
+#### **Contexto**
+
+Un equipo de investigadores del área de interacción humano-información está estudiando si el área temática y el nivel de dificultad del problema de información influyen en el tiempo (en segundos) que toma un usuario en formular una consulta de búsqueda para resolver dicho problema. Para ello, han reclutado a un grupo de participantes voluntarios, asignados aleatoriamente a distintos grupos. Cada participante debe resolver tres problemas de información con diferentes niveles de dificultad: baja, media y alta. A su vez, cada grupo debe resolver problemas relacionados a una temática diferente. Los datos recolectados contemplan las siguientes variables:
+
+```{r, echo = F}
+data <- data.frame("Variable" = c("id", "area", "dificultad", "tiempo"),
+                    "Descripción" = c("Identificador único de cada participante",
+                                      "Área temática de los problemas que el participante debe responder. Variable categórica con los niveles Arquitectura, Biología, Computación, Economía, Física, Leyes, Literatura, Matemáticas, Música, Pedagogía, Psicología, Química.",
+                                      "Nivel de dificultad del problema resuelto. Variable categórica con los niveles Baja, Media y Alta.",
+                                      "Tiempo, en segundos, que toma al participante formular la consulta."))
+
+tabla <- kable(data, 
+               caption = "Tabla 1.- Contexto") %>%
+              kable_styling(full_width = F) %>%
+              column_spec(1, bold = T, border_right = T)
+tabla
+```
+
+#### Pregunta 1.- En este momento, los investigadores buscan determinar si existen diferencias en el tiempo que tardan los usuarios en formular consultas para problemas con diferente nivel de dificultad en el área de economía.
+
+R: En primer lugar, se hará lectura de los datos a través de la función nativa de R, *read.csv2*. Y para poder hacer el filtrado de los datos, donde se nos piden los datos del área de economía, se utilizará la función nativa de R *filter.*
+
+```{r, echo = F}
+datos <- read.csv("EP06 Data.csv")
+datosEconomia <- datos %>%
+  filter(area == "Economía")
+datosEconomia <- select(datosEconomia, -id, -area)
+datosEconomia$dificultad <- factor(datosEconomia$dificultad)
+datosEconomia$instancia <- rep(1:(nrow(datosEconomia)/3), each = 3)
+```
+
+Como se nos pide determinar si existen diferencias en el tiempo que tardan los usuarios con diferente nivel de dificultad, esto es análogo a decir que tenemos un diseño con medidas repetidas, donde para diversos tipos de de dificultad, se hacen mediciones de tiempo. Antes de proceder, se enunciarán las hipótesis:
+
+-   **Hipótesis Nula (**$H_0$): No existe una diferencia en las medias de los tiempos entre la dificultad baja, media y alta al formular una consulta de búsqueda en el área de economía
+-   **Hipótesis Alternativa (**$H_A$): Existe una diferencia significativa en las medias de los tiempo entre la dificultad baja, media y alta al formular una consulta de búsqueda en el área de economía
+
+Esto expresado de manera matemática correspondería de la siguiente manera:
+
+-   **Hipótesis Nula (**$H_0$): $\mu_{Baja}$ = $\mu_{Media}$ = $\mu_{Alta}$
+-   **Hipótesis Alternativa (**$H_A$): ∃i, j ∈ {baja, media, alta}, i != j \| $\mu_i$ != $\mu_j$
+
+Así, se presume usar una **Prueba ANOVA de una vía para muestras correlacionadas.** Donde para aplicar esta prueba, se deben cumplir las siguientes 4 condiciones:
+
+-   **Escala de variables independientes: En este caso el tiempo en que formula la consulta, sigue una escala de intervalos iguales, ya que todas están medidas en segundos, magnitud que nos permite comparar resultados ya que corresponde a la misma escala.**
+-   **Muestras independientes: Las muestras son independientes, pues no se menciona que se haya utilizado un criterio que altere la elección de las observaciones, por lo tanto se puede mencionar que estas fueron seleccionadas al azar.**
+-   **Las poblaciones siguen una distribución normal: Para esta condición, se hará análisis para un gráfico QQ, donde los gráficos resultantes son los siguientes:**
+
+```{r, echo = F}
+datosEconomiaAlta <- datosEconomia %>% 
+  filter(dificultad == "Alta")
+datosEconomiaMedia <- datosEconomia %>% 
+  filter(dificultad == "Media")
+datosEconomiaBaja <- datosEconomia %>% 
+  filter(dificultad == "Baja")
+
+g1 <- ggqqplot(datosEconomiaAlta,
+               x = "tiempo",
+               color = "blue")
+g2 <- ggqqplot(datosEconomiaMedia,
+               x = "tiempo",
+               color = "pink")
+g3 <- ggqqplot(datosEconomiaBaja,
+               x = "tiempo",
+               color = "red")
+grid.arrange(g1,g2,g3)
+```
+
+**Como se puede apreciar, en específico el gráfico correspondiente a la dificultad media tiene un par de observaciones atípicas, donde para poder trabajar de mejor manera los datos según esto, se utilizará un nivel de significancia de 0,025. A pesar de lo anterior se debe recordar que la prueba ANOVA es una prueba robusta, por lo que comúnmente resiste a estas desviaciones de normalidad, especialmente si la muestras son del mismo tamaño, aunque no se deben de ignorar.**
+
+-   **La matriz de co-varianzas es esférica: Esta condición en particular se comprobará a través de la función nativa de la librería *ez*, *ezANOVA*, que incluye la verificación de esta, así:**
+
+```{r, echo = F, message = F, warning = F }
+anova <- ezANOVA(data = datosEconomia,
+                 dv = tiempo,
+                 within = dificultad,
+                 wid = instancia,
+                 return_aov = T)
+anova
+```
+
+**Como se puede apreciar, se obtuvo un valor de p para la condición 4 mayor a nuestro nivel de significancia, es por esto que la condición se cumple. Por otro lado el valor de p obtenido para concluir respecto a nuestras hipótesis es nuevamente, mayor a nuestro nivel de significancia, así, se falla en rechazar la hipótesis nula.**
+
+Para pruebas del tipo ómnibus, que es el caso, solo cuando se rechaza la hipótesis nula se aplica una prueba post-hoc, pero en obra de la práctica, se realizará igualmente a pesar de que no se cumple la condición para aplicar esta prueba.
+
+Para poder aplicar una prueba de esta índole, se hará un modelo mixto de los datos, para aplicar el post-hoc HSD de Tukey. Una vez aplicada, se obtiene la siguiente tabla:
+
+```{r, echo = F}
+mixto <- lme(tiempo ~ dificultad, 
+             data = datosEconomia,
+             random = ~1|instancia)
+medias <- emmeans(mixto, "dificultad")
+tukey <- pairs(medias, adjust = "tukey")
+tukey
+```
+
+Donde se puede apreciar que para cada par de grupos que fueron estudiados, el p-value es mayor a nuestro nivel de significancia, es por esto que no existen diferencias significativas particulares entre cada grupo estudiado.

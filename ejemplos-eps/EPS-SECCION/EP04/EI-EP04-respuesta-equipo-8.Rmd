@@ -1,0 +1,363 @@
+---
+title: "Ejercicio 4"
+author: "Grupo 8"
+date: "2024-10-14"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+Antes de resolver este trabajo se importaran las librerías con las que
+se trabajaran
+
+```{r}
+if (!requireNamespace('RVAideMemoire', quietly = TRUE)){
+  install.packages('RVAideMemoire')
+}
+library(RVAideMemoire)
+
+if (!requireNamespace('tidyverse', quietly = TRUE)){
+  install.packages('tidyverse')
+}
+library (tidyverse)
+
+```
+
+**1. Una agencia de marketing desea determinar si hay una diferencia
+significativa en la efectividad de tres estrategias publicitarias
+utilizadas para promocionar un nuevo producto. Para ello, se ha
+recopilado información de personas que fueron expuestas a las tres
+estrategias publicitarias, registrando si mostraron una aceptación (A) o
+rechazo (R) a cada una de ellas. ¿Qué puede concluir la agencia de
+marketing sobre la efectividad de las estrategias publicitarias para
+promover el nuevo producto? Indicación: obtenga la muestra de 50
+personas a partir del archivo “EP04 Datos.csv” que se encuentra en el
+directorio compartido, usando la semilla 291. Considere un nivel de
+significación α=0,05.**
+
+Antes de comenzar con la resolución del problema se importarán los datos
+a utilizar:
+
+```{r}
+#Se leen los datos
+datos <- read.csv2("EP04 Datos.csv")
+#Se muestran algunos datos
+head(datos)
+```
+
+En base a lo planteado tenemos que la prueba que más se adapta a este
+problema corresponde a la "Prueba Q de cochran", antes de realizar el
+calculo relacionado se confirmaran el cumplimiento de sus respectivas
+condiciones:
+
+1.  La variable de respuesta es dicotómica, pues por estrategia
+    publicitaria se tienen como respuesta aceptación o rechazo.
+
+2.  La variable independiente es categórica ya que se habla de
+    estrategias publicitarias.
+
+3.  Las observaciones son independientes, pues se eligieron al azar.
+
+4.  Finalmente sabemos que la muestra que tenemos es lo suficientemente
+    grande, debido a que tenemos que, en base al enunciado, la cantidad
+    de bloques ($b$) es de 50 y la cantidad de tratamientos ($k$) es de
+    3, que al multiplicarlo se cumple que $150 > 24$
+
+Ya demostradas las condiciones procedemos a plantear las hipótesis del
+problema:
+
+$H_{O}$: La proporción entre las muestras son similares, por lo que no
+hay diferencia significativa en la efectividad de las estrategias
+utilizadas para promocionar el producto
+
+$H_{A}$: La proporción entre las muestras son diferentes, por lo que hay
+diferencia significativa en la efectividad de las estrategias utilizadas
+para promocionar el producto
+
+A continuación se muestra el *script* que resuelve la incógnita del
+problema:
+
+```{r}
+# Se aplica la semilla pedida
+set.seed(291)
+
+# Se obtine una muestra de 50 instancias de los datos obtenido
+muestra <- datos[sample(nrow(datos), size=50),]
+
+
+# Se muestran algunos datos de la muestra
+head(muestra)
+
+# Llevar matriz de datos a formato largo .
+muestra <- muestra %>% pivot_longer(c("estrategia_1", "estrategia_2", "estrategia_3"),
+                                    names_to = "estrategia", values_to = "respuesta")
+
+muestra[["id"]] <- factor(muestra[["id"]])
+muestra[["estrategia"]] <- factor(muestra[["estrategia"]])
+
+                        
+# Se realiza la prueba  Q de cochran      
+resultado <- cochran.qtest(respuesta ~ estrategia | id, data = muestra, alpha = 0.05)
+
+print(resultado)
+```
+
+En base a lo mostrado anteriormente tenemos que el p-value es de 0.9718,
+lo que es mayor al nivel de significancia, el cual se define en el
+enunciado como 0.05, por lo que se falla en rechazar la hipótesis nula a
+favor de la alternativa puesto que no hay evidencia suficiente para
+rechazarlo. Por lo anterior la agencia de marketing debe concluir que
+entre las tres estrategias presentadas no existe una diferencia
+significativa en la efectividad de estas.
+
+***2. Un estudio reciente reveló que muchos espectadores experimentan
+niveles elevados de estrés antes de ver películas de suspenso. Para
+abordar este problema, un estudio piloto implementó un nuevo programa de
+preestreno diseñado para reducir el estrés y mejorar la experiencia de
+visualización. Para evaluar la efectividad de este programa, se reclutó
+a un grupo de 25 espectadores a quienes se les midió el nivel de estrés
+(alto o bajo) antes y después de participar en el programa de
+preestreno. Los resultados se presentan a continuación: ¿Qué se puede
+concluir acerca de la efectividad del nuevo programa de preestreno para
+reducir el estrés en los espectadores de películas?***
+
+**Un estudio reciente reveló que muchos espectadores experimentan
+niveles elevados de estrés antes de ver películas de suspenso. Para
+abordar este problema, un estudio piloto implementó un nuevo programa de
+preestreno diseñado para reducir el estrés y mejorar la experiencia de
+visualización. Para evaluar la efectividad de este programa, se reclutó
+a un grupo de 25 espectadores a quienes se les midió el nivel de estrés
+(alto o bajo) antes y después de participar en el programa de
+preestreno. Los resultados se presentan a continuación:**
+
+-   **5 espectadores no mostraron estrés ni antes ni después.**
+-   **7 espectadores que inicialmente estaban estresados dejaron de
+    estarlo.**
+-   **9 espectadores mantuvieron un elevado nivel de estrés.**
+-   **4 espectadores desarrollaron síntomas de estrés tras participar en
+    el programa.**
+
+**¿Qué se puede concluir acerca de la efectividad del nuevo programa de
+preestreno para reducir el estrés en los espectadores de películas?**
+
+Lo primero que tenemos que hacer es determinar que tipo de prueba es la
+mas adecuada para la situación planteada. En este caso como nos explican
+que las personas expresan "cambios", los cuales se expresan como
+variables dicotómicas, podemos rápidamente determinar que la prueba que
+podemos aplicar es una prueba de McNemar.
+
+```{r}
+# Se crea la tabla para mostrar los datos
+espectadores <- seq(1:25)
+Antes <- c(rep ("no_estres", 5), rep("si_estres", 16), rep("no_estres", 4))
+Despues <- c(rep("no estres", 12), rep("si_estres", 13))
+datos <- data.frame(espectadores, Despues, Antes)
+tabla <- table(Despues, Antes)
+print(tabla)
+```
+
+Una vez construida la tabla, corroboramos que es una prueba de McNemar
+ya que es una matriz de 2x2, la cual es perfecta para la prueba de
+McNemar, además de que representa "cambios" que es justamente lo que se
+tiene que tener para esta prueba.
+
+Vamos a declarar las hipótesis:
+
+$H_o:$ **No** hay cambios significativos en el estrés de los
+espectadores
+
+$H_a:$ **Sí** hay cambios significativos en el estrés de los
+espectadores
+
+Aplicamos la prueba de McNemar en el siguiente *script*:
+
+```{r}
+# Se aplica la prueba
+prueba_1 = mcnemar.test(tabla)
+prueba_2 = mcnemar.test(Despues, Antes)
+
+# Se muestra por pantalla
+cat("\n")
+cat("Prueba de McNemar usando la tabla de contingencia")
+print(prueba_1)
+cat("Prueba de McNemar directamente con las muestras")
+print(prueba_2)
+```
+
+Considerando que estamos aplicando esta prueba con un valor de
+significancia del 0.05, entonces, se falla al rechazar la hipótesis nula
+y se concluye que no hay evidencia suficiente para creer que existe una
+diferencia en el estrés en los espectadores a través del programa.
+
+***3. Una organización de conservación de la fauna silvestre estudia
+manadas de tres tipos de animales herbívoros en reservas naturales
+africanas. Se seleccionó aleatoriamente una muestra de 30 observaciones
+de los animales que se acercaron a beber agua en el principal afluente
+de las reservas Etosha y Mahago durante tres días consecutivos del mes
+de febrero. Se registraron 12 elefantes, 10 antílopes y 8 cebras en la
+primera, y 11 elefantes, 8 antílopes y 11 cebras en la segunda. ¿Existe
+evidencia de que la proporción de especies es la misma en ambas
+reservas?***
+
+***Una organización de conservación de la fauna silvestre estudia
+manadas de tres tipos de animales herbívoros en reservas naturales
+africanas. Se seleccionó aleatoriamente una muestra de 30 observaciones
+de los animales que se acercaron a beber agua en el principal afluente
+de las reservas Etosha y Mahago durante tres días consecutivos del mes
+de febrero. Se registraron 12 elefantes, 10 antílopes y 8 cebras en la
+primera, y 11 elefantes, 8 antílopes y 11 cebras en la segunda***
+
+**¿Existe evidencia de que la proporción de especies es la misma en
+ambas reservas?**
+
+Vamos a verificar si es que podemos aplicar la prueba de chi-cuadrado de
+homogeneidad
+
+Primero tenemos que tener las condiciones para que sea una prueba de chi
+cuadrado de homogeneidad.
+
+1.  Las variables deben ser categóricas y una de ellas es categóricas,
+    esto se cumple pues, se tiene la variable grupo, que solo puede ser
+    "primera" o "segunda", asiendo alusión a las manadas, y la segunda
+    variable correspondería a los animales que van a beber de cada
+    manada.
+
+2.  Las observaciones son independientes, esto se cumple ya que las
+    muestras fueron elegidas al azar.
+
+3.  Finalmente se debe cumplir que la tabla de frecuencia esperada tenga
+    al menos 5 observaciones, a continuación se mostrara el *script*
+    para calcular esta tabla:
+
+```{r}
+primera = c(12, 10, 8)
+segunda = c(11, 8, 11)
+
+tabla <- as.table(rbind(primera, segunda))
+
+dimnames(tabla) <- list(grupo = c("primera", "segunda"), animales = c("Elefantes", "Antílopes", "Cebras"))
+
+print(tabla)
+```
+
+Con la tabla creada se calculara la frecuencia con sus correspondientes
+valores.
+
+```{r}
+primera_observada = c(((30*23)/60), ((30*18)/60), ((30*19)/60))
+segunda_observada = c(((30*23)/60), ((30*18)/60), ((30*19)/60))
+
+tabla_esperada <- as.table(rbind(primera_observada, segunda_observada))
+
+dimnames(tabla_esperada) <- list(grupo = c("primera", "segunda"), animales = c("Elefantes", "Antílopes", "Cebras"))
+
+print(tabla_esperada)
+```
+
+Finalmente podemos ver que todos los valores de la frecuencia esperados
+son mayores a 5, por lo tanto también se cumple esta solución. A
+continuación se definirán las hipótesis relacionadas a este problema\_
+
+$H_{O}$: Las proporciones de las especies es igual en ambas manadas.
+
+$H_{A}$: Las proporciones de las especies es diferente en ambas manadas.
+
+Aplicamos la prueba
+
+```{r}
+# Aplicamos la prueba
+prueba = chisq.test(tabla)
+# Se muestra por pantalla
+print(prueba)
+```
+
+Considerando que tenemos un $α$ = 0.05 y que el p-values obtenido es de
+0.6909, tenemos que p_value \> $α$, entonces podemos decir que se falla
+al rechazar la hipótesis nula en favor de la hipótesis alternativa por
+lo cual, no hay evidencia suficiente para decir que la proporción de las
+especies no es la misma en ambas manadas.
+
+**4.- Un grupo de amigos y amigas se reúne para jugar juegos de mesa y
+tienen dos opciones: jugar al Catan o jugar a los Gatos Explosivos. Cada
+persona pudo manifestar su juego preferido, observando que 4 de los 8
+chicos eligen jugar al Catan, y 7 de las 20 chicas prefieren jugar a los
+Gatos Explosivos. ¿Existe relación entre el sexo de la persona y elegir
+jugar al Catan o jugar a los Gatos Explosivos?**
+
+Antes de comenzar se debe considerar que las variables a trabajar son:
+juego de cartas y genero del jugador. Con esto entendido se muestra la
+matriz de contingencia de la situación planteada:
+
+```{r}
+nombres <- c("Catan", "Gatos Explosivos", "total")
+Hombres <- c(4, 4, 8)
+Mujeres <- c(13, 7, 20) 
+total <- c(17, 11, 28)
+tabla <- as.table(rbind (Hombres, Mujeres, total))
+dimnames (tabla) <- list (genero = c("Hombre" , "Mujere", "Total") ,
+ juego = c("Catan", "Gatos explosivos", "Total") )
+                             
+print(tabla)
+```
+
+Para elegir las prueba se calculara la frecuencia esperada en el
+siguiente *script*:
+
+```{r}
+# Se calcula y se guardan las frecuencias esperadas para cada genero
+Hombres_frecEsperada <- c((17*8)/28, (11*8)/28)
+Mujeres_frecEsperada <- c((17*20)/28, (11*20)/28)
+
+#Se crea la tabla
+tabla2 <- as.table(rbind (Hombres_frecEsperada, Mujeres_frecEsperada))
+dimnames (tabla2) <- list (genero = c("Hombre" , "Mujere") ,
+ juego = c("Catan", "Gatos explosivos"))
+
+#Se crea la matriz que contenga la frecuencia esperada
+print(tabla2)
+
+```
+
+En base a la tabla de frecuencias esperadas obtenida, se puede observar
+que hay frecuencias menores a 5, que sumado a que se busca demostrar la
+independencia entre proporciones, entonces es adecuado utilizar la
+prueba exacta de Fisher. Antes de realizar el cálculo relacionado se
+confirmaran el cumplimiento de sus respectivas condiciones:
+
+1.  Ambas variables son dicotómicas, esto ya que la variable "juego"
+    puede tomar los valores "Catan" y "Gatos explosivos", de la misma
+    manera "genero", solo tomaría las variables "Hombre" o "Mujer"
+
+2.  Las muestras son independientes ya que fueron elegidas al azar.
+
+Ya demostradas las condiciones procedemos a plantear las hipótesis del
+problema:
+
+$H_{O}$: Las proporciones son independientes, por lo que no existe
+relación entre el genero de la persona y el tipo de juego que elija.
+
+$H_{A}$: Las proporciones están relacionadas, por lo que existe relación
+entre el genero de la persona y el tipo de juego que elija.
+
+A continuación se muestra el *script* que resuelve la incógnita del
+problema:
+
+```{r}
+# Se construye la tabla de contingencia
+genero <- c(rep("Hombre", 8), rep("Mujer", 20))
+juego <- c(rep("Catan", 17), rep("Gatos Explosivos", 11))
+matriz <- data.frame(genero, juego)
+tab <- xtabs(~.,matriz)
+
+#Asumiendo un nivel de significancia del 0.05 se aplica la prueba exacta de Fisher
+alfa <- 0.05
+fisher <- fisher.test(tab, conf.level = 0.05)
+print(fisher)
+```
+
+En base a lo mostrado anteriormente, con un nivel de significancia del
+0.05, nos da un p-value de 0.00968, por lo tanto se rechaza $H_{O}$ a
+favor $H_{A}$ con un 95% de confianza. Con lo anterior podemos concluir
+que las proporciones están relacionadas, es decir, el genero del jugador
+y el juego que seleccione están relacionados.

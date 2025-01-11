@@ -1,0 +1,174 @@
+---
+title: "EP04-respuesta-equipo-4"
+author: "Equipo 4"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## PREGUNTA 1
+
+Un grupo de científicas y científicos está llevando a cabo un experimento para evaluar el crecimiento de plantas en condiciones de tierra sintética. Inicialmente, seleccionaron aleatoriamente 25 plantas de la misma parcela de tierra y registraron su crecimiento. Luego, estas plantas fueron trasladadas a la nueva tierra sintética durante un período de tiempo determinado, y posteriormente se registró nuevamente su crecimiento. Los resultados se presentan a continuación:
+
+7 plantas mostraron un crecimiento bajo tanto en la tierra original como en la tierra sintética.
+3 plantas que mostraron un crecimiento bajo en la tierra original experimentaron un aumento en su crecimiento al ser trasladadas a la tierra sintética.
+6 plantas mantuvieron un alto nivel de crecimiento en ambas condiciones de suelo.
+9 plantas mostraron un alto nivel de crecimiento en la tierra original, pero este disminuyó al ser trasladadas a la tierra sintética.
+
+¿Existe evidencia de que usando tierra sintética haya tenido un efecto significativo en el crecimiento de las plantas?
+
+Utilizaremos la prueba de mcnemar, ya que estamos analizando una misma caracteristica (crecimiento) con respuesta dicotómica (crecimiento alto y bajo)  en  un mismo grupo de datos (plantas) en dos ocasiones diferentes (tipos de tierra)
+
+Hipótesis
+
+Ho: No hay relación entre el crecimiento de las plantas con el tipo de la tierra
+Ha: Hay relación entre el crecimiento de las plantas y el tipo de la tierra
+
+```{r}
+planta = seq(1:25)
+original = c(rep("bajo", 10), rep("alto", 6), rep("alto", 9))
+sintetico = c(rep("bajo", 7), rep("alto", 9), rep("bajo", 9))
+datos = data.frame(planta, original, sintetico)
+tabla = table(original, sintetico)
+
+prueba_1 = mcnemar.test(tabla)
+cat("\n")
+cat("Resultado prueba mcnemar utilizando prueba de contigencia\n")
+print(prueba_1)
+
+```
+Asumiendo un nivel de significancia de 0.05, fallamos a favor de la hipótesis nula y se concluye que no ha evidencia suficiente para creer que existe una diferencia en el crecimiento de las plantas según la tierra utilizada.
+
+## PREGUNTA 2
+
+Un grupo de amigos y amigas se reúne para jugar juegos de mesa y tienen dos opciones: jugar ajedrez o jugar al Monopoly. Cada persona pudo manifestar su juego preferido, observando que de los 8 de los 17 chicos eligen jugar ajedrez, y 3 de las 10 chicas prefieren jugar Monopoly. ¿Existe relación entre el sexo de la persona y elegir jugar ajedrez o Monopoly?
+
+Para responder a esta pregunta, debemos notar que tenemos una población de personas, y dos variables categóricas, que son el sexo de las personas (hombre o mujer). Por lo que, para determinar si hay una relación entre ambas variables, utilizaremos la prueba exacta de fisher en vez de la prueba chi-cuadrado de independencia, esto es porque el valor esperado de las mujeres cuyo juego preferido es monopoly es inferior a 5 (12*10/27 = 4,444445). 
+
+Para esto, planteamos las siguientes hipótesis:
+
+Ho: Las variables sexo y juego favorito son independientes
+
+Ha: Las variables sexo y juego favorito están relacionadas entre sí
+
+```{r}
+
+t1 <- c(8, 7)
+t2 <- c(9, 3)
+
+t <- as.table(rbind(t1, t2))
+dimnames(t) <- list(sexos = c("Hombre", "Mujer"), juegos = c("Ajedrez", "Monopoly"))
+
+print(t)
+
+prueba <- fisher.test(x=t, y=NULL, 0.05)
+print(prueba)
+```
+
+# Pregunta 3
+
+Se realizó un estudio para determinar si la distribución de los métodos de ataque utilizados por luchadores en dos gimnasios de artes marciales diferentes (que por temas de privacidad, llamaremos gimnasio A y gimnasio B) es la misma. Se seleccionaron aleatoriamente 20 luchadores y luchadoras de cada gimnasio y se registró el método de ataque principal utilizado por cada persona. En el gimnacio A, 8 usan patadas, 5 los puños y 7 emplean agarres, mientras que en el gimnacio B, 8 usan patadas, 6 los punños y 5 emplean agarres.
+
+¿Es igual la distribución de métodos de ataque utilizados por luchadores y luchadoras en los gimnasios de artes marciales A y B?
+
+## Selección de la prueba
+Para este problema se decicidio utilizar la prueba Chi-cuadrado de homogenidad, esto es porque contamos con 2 poblaciones (gimnacio A y B) lo cual provoca que sea una variable dicotomica y que aparte estas presentan las mismas proporciones en los diferentes niveles de una variable categorica.
+
+Adicionalmente este problema cumple que son independientes al haber sido seleccionadas de manera aleatoria y podemos ver que la cantidad de observaciones esperadas es mayor a 5 para cada grupo por lo cual cumplimos con todos los requisitos para hacer uso de la prueba de Chi-cuadrado de homogenidad.
+
+Hipótesis
+
+H0: El gimnasio A y B comparten la misma distribución de ataques utilizados.
+
+Ha: El gimnasio A y B no comparten la misma distribución de ataques utilizados.
+
+```{r}
+#Crear tabla de contingencia.
+
+Gym_A <- c(8,5,7)
+Gym_B <- c(8,6,5)
+
+tabla_gyms <- as.table(rbind( Gym_A, Gym_B))
+
+#Asignar nombres
+
+dimnames(tabla_gyms) <- list(
+  Gimnasio = c("A", "B"),
+  Ataques = c("Patadas", "Puños", "Agarres"))
+
+print(tabla_gyms)
+
+#Hacer prueba chi-cuadrado de homogeneidad.
+Res_3 <- chisq.test(tabla_gyms)
+
+print(Res_3)
+
+#Valores esperados 
+Res_3$expected
+
+```
+
+Finalmente con un p-value de 0.8192 podemos decir con un 95% de confianza que la distribucion de ataques utilizados por los gimnacios es igual.
+
+# Pregunta 4
+
+Una agencia de marketing desea determinar si hay una diferencia significativa en la efectividad de tres estrategias publicitarias utilizadas para promocionar un nuevo producto. Para ello, se ha recopilado información de personas que fueron expuestas a las tres estrategias publicitarias, registrando si mostraron una aceptación (A) o rechazo (R) a cada una de ellas.
+
+¿Qué puede concluir la agencia de marketing sobre la efectividad de las estrategias publicitarias para promover el nuevo producto?
+Indicación: obtenga la muestra de 50 personas a partir del archivo “EP04 Datos.csv” que se encuentra en el directorio compartido, usando la semilla 222. Considere un nivel de significación α=0,05.
+
+Utilizaremos la prueba de cochran, ya que estamos analizando la misma caracteristica en un mismo grupo, pero en diferentes instancias, las cuales corresponden a las 3 estrategias publicitarias.
+
+Verificación de condiciones 
+1. La variable de respuesta es dicotómica (Aceptación y rechazo).
+2. La variable independiente es categórica (Estrategias publicitarias).
+3. Las observaciones son independientes, además de ser elegidas al azar.
+4. El tamaño de la muestra es mayor a 24. (50*3 = 150)
+
+Hipótesis
+
+Ho: La proporción de exitos es similar en todas las metaheuristicas
+
+Ha: La porporción de éxitos es distinta entre las metaheuristicas
+
+```{r}
+datos = read.csv("EP04 Datos.csv", sep = ";")
+
+# Establecer la semilla
+set.seed(222)  # Cambia el número según sea necesario
+
+# Número de filas a seleccionar
+n_filas = 50  # Cambia este valor según cuántas filas quieras
+
+# Seleccionar filas aleatorias
+filas_random = datos[sample(nrow(datos), n_filas), ]
+
+# Ver las filas seleccionadas
+print(filas_random)
+```
+
+```{r}
+# importación de librerías
+library(RVAideMemoire)
+library(tidyverse)
+
+instancia = filas_random$id
+est1 = filas_random$estrategia_1
+est2 = filas_random$estrategia_2
+est3 = filas_random$estrategia_3
+dataframe = data.frame(instancia, est1, est2, est3)
+
+dataframe = dataframe %>% pivot_longer(c("est1", "est2", "est3"), 
+                                      names_to = "metaheuristica",
+                                      values_to = "resultado")
+
+dataframe[["instancia"]] = factor(dataframe[["instancia"]])
+dataframe[["metaheuristica"]] = factor(dataframe[["metaheuristica"]])
+
+# prueba cochran
+prueba_4  = cochran.qtest(resultado ~ metaheuristica | instancia,
+                          data = dataframe, alpha = 0.05)
+
+print(prueba_4)
+```
+
+Ya que p-value es mayor a 0.05 aceptamos la hipótesis nula a favor de la alternativa, por lo cual la proporción de éxitos es similar en las 3 estrategias publicitarias.

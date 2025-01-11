@@ -1,0 +1,307 @@
+---
+title: "EP-11"
+author: "Grupo N°7"
+date: "2024-12-16"
+output: html_document
+---
+
+Antes de comenzar, se hará la importanción de las siguientes librerías para la correcta realización de la actividad, que vienen dadas por : *car*, *ggpubr*, *ggplot2*, *caret* , *dplyr* y *leaps*.
+
+```{r, echo = F, message = F}
+# Librerías a utilizar.
+library(car)
+library(dplyr)
+library(ggpubr)
+library(ggplot2)
+library(caret)
+library(leaps)
+library(pROC)
+```
+
+### 1.- Definir la semilla a utilizar, que corresponde a los primeros cinco dígitos del RUN del integrante de mayor edad del equipo.
+
+Solución:
+
+La semilla a utilizar corresponde a los primeros cinco dígitos del RUN del mayor integrante del equipo, el cual es: 
+
+```{r, echo = F, message = F}
+# Se define la semilla con los 5 primeros dígitos del RUN  
+# del mayor integrante del equipo.
+set.seed(20677)
+```
+
+### 2.-Seleccionar una muestra de 100 personas, asegurando que la mitad tenga estado nutricional “sobrepeso” y la otra mitad “no sobrepeso”.
+
+Solución: 
+
+```{r}
+set.seed(20677)
+
+datos <- read.csv2("EP09 Datos.csv")
+datos[["IMC"]] <- datos[["Weight"]] / (datos[["Height"]] / 100)^2
+datos <- datos %>%
+  mutate(EN = ifelse(IMC >= 23.2, 1, 0))
+
+# Determinar el género según la semilla
+genero <- ifelse(7670 %% 2 == 0, 0, 1)  # 0: Mujeres, 1: Hombres
+
+# Filtrar por género
+datos_filtrados <- datos %>% filter(Gender == genero)
+
+# Filtrar las personas con estado nutricional "sobrepeso"
+sobrepeso <- datos_filtrados[datos_filtrados$EN == 1, ]
+
+# Filtrar las personas con estado nutricional "no sobrepeso"
+no_sobrepeso <- datos_filtrados[datos_filtrados$EN == 0, ]
+
+# Comprobar que hay suficientes personas en cada grupo
+if (nrow(sobrepeso) < 50 || nrow(no_sobrepeso) < 50) {
+  stop("No hay suficientes personas en uno de los grupos para seleccionar una muestra de 50.")
+}
+
+# Seleccionar una muestra de 50 personas de cada grupo
+muestra_sobrepeso <- sobrepeso[sample(nrow(sobrepeso), 50), ]
+muestra_no_sobrepeso <- no_sobrepeso[sample(nrow(no_sobrepeso), 50), ]
+
+# Combinar las muestras en una sola data frame
+muestra <- rbind(muestra_sobrepeso, muestra_no_sobrepeso)
+
+# Imprimir la muestra
+print(muestra)
+```
+
+### 3.- Usando las herramientas del paquete leaps, realizar una búsqueda exhaustiva para seleccionar entre dos y ocho predictores que ayuden a estimar la variable Peso (Weight), obviamente sin considerar las nuevas variables IMC ni EN, y luego utilizar las funciones del paquete caret para construir un modelo de regresión lineal múltiple con los predictores escogidos y evaluarlo usando bootstrapping.
+
+## Selección de Predictores: 
+
+```{r}
+muestra_sin_imc_en <- subset(muestra, select = -c(IMC, EN))
+combinaciones <- regsubsets(Weight~., data=muestra_sin_imc_en, nbest=1, 
+                            nvmax=16, method="exhaustive")
+plot(combinaciones)
+
+resumen_comb <- summary(combinaciones)
+i_min_bic <- which.min(resumen_comb[["bic"]])
+i_max_r2a <- which.min(resumen_comb[["adjr2"]])
+
+plot(resumen_comb$bic, type="b", pch=19, xlab="Número de Predictores", ylab="BIC")
+abline(v=i_min_bic, col="red", lty=2)
+
+mejor_comb_bic <- resumen_comb[["which"]][i_min_bic, ]
+mejor_comb_r2a <- resumen_comb[["which"]][i_max_r2a, ]
+
+comb_mejor_bic <- names(mejor_comb_bic[mejor_comb_bic == TRUE])
+comb_mejor_r2a <- names(mejor_comb_r2a[mejor_comb_bic == TRUE])
+
+nombres_mejor_bic <- unique(gsub("^(.*)\\$d", "\\1", comb_mejor_bic))
+nombres_mejor_r2a <- unique(gsub("^(.*)\\$d", "\\1", comb_mejor_r2a))
+
+pred_mejor_bic <- paste(nombres_mejor_bic[-1], collapse = " + ")
+pred_mejor_r2a <- paste(nombres_mejor_r2a[-1], collapse = " + ")
+
+formula_mejor_bic <- as.formula(paste("Weight", pred_mejor_bic, sep = " ~ "))
+formula_mejor_r2a <- as.formula(paste("Weight", pred_mejor_bic, sep = " ~ "))
+
+modelo_mejor_bic <- lm(formula_mejor_bic, data=muestra)
+modelo_mejor_r2a <- lm
+
+print(modelo_mejor_bic)
+cat("\n")
+print(modelo_mejor_bic)
+```
+
+## Construcción de RLM: 
+
+```{r}
+set.seed(20677)
+
+formula <- formula_mejor_bic
+entrenamiento <- train(formula, data=muestra_sin_imc_en, method="lm",
+                       trControl=trainControl(method="boot", number=500))
+
+rlm_1 <- entrenamiento[["finalModel"]] 
+
+cat("\n")
+print(formula)
+cat("\n")
+
+cat("Error estimado para el modelo:\n")
+print(entrenamiento[["results"]])
+```
+
+
+### 4.- Haciendo un poco de investigación sobre el paquete caret, en particular cómo hacer Recursive Feature Elimination (RFE), construir un modelo de regresión lineal múltiple para predecir la variable IMC que incluya entre 10 y 20 predictores, seleccionando el conjunto de variables que maximice R2 y que use cinco repeticiones de validación cruzada de cinco pliegues para evitar el sobreajuste (obviamente no se debe considerar las variables Peso, Estatura ni estado nutricional –Weight, Height, EN respectivamente).
+
+## Selección de Predictores: 
+
+```{r}
+muestra_filtrada <- muestra[, -which(names(muestra) %in% c("Weight", "Height", 
+                                                           "EN", "IMC"))]
+muestra[["EN"]] <- as.factor(muestra[["EN"]])
+
+# Hacer que los niveles de EN sean nombres válidos en R
+levels(muestra$EN) <- make.names(levels(muestra$EN))
+
+rfeControl <- rfeControl(functions=lmFuncs, method="repeatedcv", 
+                         number=5, repeats=5)
+modelo_rfe <- rfe(x=muestra_filtrada,
+                      y=muestra[["IMC"]],
+                      sizes=10:20,
+                      rfeControl=rfeControl,
+                      metric="Rsquared")
+
+summary(modelo_rfe[["fit"]])
+```
+
+## Construcción de RLM: 
+
+```{r}
+# Obtener las variables seleccionadas por RFE
+variables_seleccionadas <- modelo_rfe$optVariables
+print(variables_seleccionadas)
+
+# Construcción del modelo de regresión lineal múltiple
+formula <- as.formula(paste("IMC ~", paste(variables_seleccionadas, collapse = " + ")))
+
+# Ajustar el modelo de regresión lineal
+modelo_rlm <- lm(formula, data = muestra)
+summary(modelo_rlm)
+```
+
+## Bondad de Ajuste: 
+
+```{r}
+# Calcular el R2 ajustado
+r2_ajustado <- summary(modelo_rlm)$adj.r.squared
+print(r2_ajustado)
+```
+
+## Calidad Predictiva: 
+
+```{r}
+set.seed(20677)
+
+# Se hace la validación cruzada de 5 pliegues
+control <- trainControl(method="cv", number=5)  
+
+# Ajustar el modelo con validación cruzada
+modelo_cv <- train(formula, data = muestra, method = "lm", trControl = control)
+
+# Imprimir resultados de la validación cruzada
+print(modelo_cv)
+```
+
+### 5.- Usando RFE, construir un modelo de regresión logística múltiple para la variable EN que incluya el conjunto de predictores, entre dos y seis, que entregue la mejor curva ROC y que utilice validación cruzada dejando uno fuera para evitar el sobreajuste (obviamente no se debe considerar las variables Peso, Estatura –Weight y Height respectivamente– ni IMC).
+
+## Selección de Predictores: 
+
+```{r}
+# Preprocesar los datos
+muestra_filtrada <- muestra[, -which(names(muestra) %in% c("Weight", "Height", "IMC"))]
+muestra[["EN"]] <- as.factor(muestra[["EN"]])
+
+# Hacer que los niveles de EN sean nombres válidos en R
+levels(muestra$EN) <- make.names(levels(muestra$EN))
+
+# Se coloca en method "LOOCV" para validación cruzada dejando uno fuera
+rfeControl <- rfeControl(functions=lrFuncs, method="LOOCV", number=1)
+
+
+# Filtrar solo las columnas numéricas
+numeric_columns <- sapply(muestra_filtrada, is.numeric)
+muestra_filtrada_num <- muestra_filtrada[, numeric_columns]
+
+# Verificar las columnas restantes
+print(dim(muestra_filtrada_num))
+print(colnames(muestra_filtrada_num))
+
+# Identificar predictores con varianza cero
+nzv <- nearZeroVar(muestra_filtrada_num)
+if(length(nzv) > 0) {
+  muestra_filtrada_num <- muestra_filtrada_num[, -nzv]
+}
+
+# Calcular la matriz de correlación y eliminar predictores altamente correlacionados
+correlationMatrix <- cor(muestra_filtrada_num)
+highCorrelation <- findCorrelation(correlationMatrix, cutoff = 0.9)
+if(length(highCorrelation) > 0) {
+  muestra_filtrada_num <- muestra_filtrada_num[, -highCorrelation]
+}
+
+
+# Generar variables dummy para `muestra_filtrada`
+dummies <- dummyVars(~ ., data = muestra_filtrada)
+muestra_filtrada_dummies <- predict(dummies, newdata = muestra_filtrada)
+
+# Prueba
+print(dim(muestra_filtrada_dummies))
+print(length(muestra[["EN"]]))
+
+
+rfeControl <- rfeControl(functions = lrFuncs, 
+                         method = "LOOCV", 
+                         number = 1,
+                         verbose = TRUE)
+
+# Comprobar dimensiones iniciales
+print(dim(muestra_filtrada_dummies))
+print(length(muestra[["EN"]]))
+
+# Modelo RFE
+modelo_rfe <- rfe(x = muestra_filtrada_dummies,
+                  y = muestra[["EN"]],
+                  sizes = 2:6, # Asegura un rango de 2 a 6 variables
+                  rfeControl = rfeControl,
+                  metric = "Accuracy")
+
+# Validar el número de predictores seleccionados
+selected_predictors <- predictors(modelo_rfe)
+if (length(selected_predictors) < 2 || length(selected_predictors) > 6) {
+  warning("El modelo seleccionó un número de variables fuera del rango permitido (2-6).")
+}
+
+# Mostrar resultados del modelo
+print(modelo_rfe)
+
+
+# Filtrar las filas en 'modelo_rfe$variables' para obtener solo las variables seleccionadas
+importance_df <- modelo_rfe$variables %>%
+  dplyr::filter(var %in% selected_predictors)
+
+ggplot(importance_df, aes(x = reorder(var, Overall), y = Overall)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+  xlab("Variable") +
+  ylab("Importancia") +
+  ggtitle("Importancia de las Variables Seleccionadas por RFE") +
+  theme_minimal()
+
+# Precisión en función del número de variables
+ggplot(modelo_rfe$results, aes(x = Variables, y = Accuracy)) +
+  geom_line(color = "blue") +
+  geom_point(size = 2) +
+  xlab("Número de Variables") +
+  ylab("Precisión") +
+  ggtitle("Precisión en función del Número de Variables") +
+  theme_minimal()
+
+
+
+```
+
+
+### 6.- Pronunciarse sobre la confiabilidad y el poder predictivo de los modelos obtenidos.
+
+```{r}
+# Validación cruzada adicional con k-fold
+control <- trainControl(method = "cv", number = 10)
+model_cv <- train(EN ~ ., data = muestra, method = "glm", trControl = control)
+
+# Resultados de la validación cruzada
+print(model_cv)
+```
+con el modelo generado en la pregunta 5 y los datos obtenidos los cuales fueron:
+0.91 de precisión, lo que significa que el modelo clasifica correctamente el 91% de las muestras.
+Y un coeficiente kappa de 0.82, lo que indica una buena concordancia. Estos datos muestran que el modelo tiene un poder predictivo bueno y confiable
+
+

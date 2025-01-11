@@ -1,0 +1,108 @@
+# EP-01
+
+## ¿Son similares los ingresos registrados en las diferentes provincias de la RM?
+
+Integrantes: 
+
+* Nicolás García
+* Gonzalo Moncada
+* Ignacio Lara
+
+### Carga de librerías
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+```
+
+### Ingreso de datos
+
+```{r message=FALSE, warning=FALSE}
+datos <- read.csv2("EP01 Datos Casen 2017.csv")
+```
+
+### Procesado de datos
+
+Ya con los datos leídos y cargados en el entorno de R, es necesario procesarlos y transformarlos en información que sea útil para responder la incógnita: ¿Son similares los ingresos registrados en las diferentes provincias de la RM?
+
+En primer lugar, ya que se busca información sobre las provincias, se debe escoger algún estadístico que sea representativo para poder comparar las provincias. Para este estudio, se consideró que la mejor opción corresponde al promedio de ingreso por provincia, pues permite obtener información del ingreso del ciudadano promedio y su calidad de vida, sin embargo, también sería válido evaluar el total de ingresos por comuna. De ambas formas, el proceso sería similar.
+
+```{r}
+promedio_provincia = datos %>%
+  group_by(provincia) %>%
+  summarise(promedio = mean(ytot, na.rm = TRUE), 
+            desvest = sd(ytot, na.rm = TRUE),
+            coefvariacion = (desvest / promedio) * 100)
+
+media <- mean(promedio_provincia$promedio)
+# Asumiendo que ya tienes los datos en promedio_provincia
+
+desviacion_estandar <- sd(promedio_provincia$promedio)
+
+coeficiente_de_variacion <- (desviacion_estandar / media) * 100
+
+print(coeficiente_de_variacion)
+
+
+# GRAFICO
+
+barplot_result <- barplot(promedio_provincia$promedio, 
+        names.arg = promedio_provincia$provincia,
+        main = "Gráfico de promedio de Ingresos de cada provincia",
+        xlab = "Provincias",
+        ylab = "Promedio de Ingresos",
+        col = "skyblue",
+        ylim = c(0, max(promedio_provincia$promedio) * 1.1))  # Ajustar el límite superior del eje y
+
+# Agregar la línea del promedio general
+abline(h = media, col = "red", lty = 2)
+
+# Agregar la leyenda
+legend("topright", legend = "Promedio general", 
+       col = "red", lty = 2, lwd = 2)
+```
+
+Tras analizar los coeficientes de variación de los promedios de cada comuna, se hizo notar que el coeficiente de Santiago es extremadamente alto. Por ello, se tomó la decisión de realizar otra evaluación sin la presencia de Santiago, para obtener otra perspectiva.
+
+```{r}
+promedio_provincia_sin_santiago <- filter(promedio_provincia, provincia != "Santiago")
+
+new_media <- mean(promedio_provincia_sin_santiago$promedio)
+# Asumiendo que ya tienes los datos en promedio_provincia
+
+new_desviacion_estandar <- sd(promedio_provincia_sin_santiago$promedio)
+
+new_coeficiente_de_variacion <- (new_desviacion_estandar / new_media) * 100
+
+print(new_coeficiente_de_variacion)
+
+
+# GRAFICO
+
+barplot_result <- barplot(promedio_provincia_sin_santiago$promedio, 
+        names.arg = promedio_provincia_sin_santiago$provincia,
+        main = "Gráfico de promedio de Ingresos de cada provincia",
+        xlab = "Provincias",
+        ylab = "Promedio de Ingresos",
+        col = "skyblue",
+        ylim = c(0, max(promedio_provincia$promedio) * 1.1))  # Ajustar el límite superior del eje y
+
+# Agregar la línea del promedio general
+abline(h = new_media, col = "red", lty = 2)
+
+# Agregar la leyenda
+legend("topright", legend = "Promedio general", 
+       col = "red", lty = 2, lwd = 2)
+```
+
+Ahora, sin la presencia de Santiago en los cálculos, se obtiene un coeficiente de variación mucho más aceptable.
+
+A partir de la información recolectada con ambos estudios, se pueden obtener dos conclusiones:
+
+1.- Si se ignora la provincia de Santiago, sí existe una similitud en los ingresos de las distintas provincias.
+
+2.- Al tomar en cuenta Santiago, no existe una similitud en los ingresos de las distintas provincias.
+
+Al juntar estas dos conclusiones, se puede responder la pregunta original diciendo que las provincias de la región metropolitana poseen ingresos similares en general, sin embargo, la provincia de Santiago es la excepción, al tener ingresos promedio mucho más altos en comparación al resto.
+
+Aunque este estudio responde la pregunta, es importante también mencionar que hay muchos factores que pueden contribuir a la gran diferencia que posee Santiago al resto de provincias, entre estos, el la cantidad de personas por provincia, la cantidad de habitantes de zonas rurales, y el costo de vida de los distintos lugares, entre otros.

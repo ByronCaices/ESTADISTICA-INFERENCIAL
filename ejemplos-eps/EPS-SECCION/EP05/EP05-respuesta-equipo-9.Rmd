@@ -1,0 +1,203 @@
+---
+title: "EP05-respuesta-equipo-9"
+author: "grupo 9"
+date: "2024-10-21"
+output: html_document
+---
+
+##### *Importante*
+
+Es clave destacar que para poder hacer uso de las diversas funciones necesarias para este análisis serán importadas las siguientes librerías: *dplyr*, *ggpubr*, *gridExtra*, *tidyr*, *ez* y *kableExtra*.
+
+```{r, echo = FALSE, message = F}
+if(!requireNamespace('dplyr', quietly = TRUE)){
+  install.packages('dplyr')
+}
+if(!requireNamespace('ggpubr', quietly = TRUE)){
+  install.packages('ggpubr')
+}
+if(!requireNamespace('kableExtra', quietly = TRUE)){
+  install.packages('kableExtra')
+}
+if(!requireNamespace('gridExtra', quietly = TRUE)){
+  install.packages('gridExtra')
+}
+if(!requireNamespace('tidyr', quietly = TRUE)){
+  install.packages('tidyr')
+}
+if(!requireNamespace('ez', quietly = TRUE)){
+  install.packages('ez')
+}
+library("dplyr")
+library("ggpubr")
+library("kableExtra")
+library("gridExtra")
+library("tidyr")
+library("ez")
+```
+
+#### Contexto
+
+En una emocionante competencia de cubos Rubik, participantes de Chile, Argentina, Colombia, Uruguay, Perú y Ecuador demostraron su destreza en resolver tres tipos de cubos: 2x2x2, 3x3x3 y Megaminx.
+
+Después del torneo, un grupo de investigadores de la Asociación Mundial del Cubo, interesado en los tiempos que hicieron las jugadoras y los jugadores en la competencia, decidieron estudiar si el país y el tipo de cubo usado en cada prueba tienen influencia en los segundos que se tardan en resolverlos. Para ello usaron una muestra aleatoria de los datos de la competencia, en la cual participaron más de 2.000 personas, con las siguientes variables:
+
+```{r, echo = F}
+data <- data.frame("Variable" = c("id", 
+                                  "pais", 
+                                  "tipo", 
+                                  "tiempo"),
+                   "Descripción" = c("Identificador único de cada participante.",
+                                     "País que representa cada participante (Argentina, Chile, Colombia, Ecuador, Perú, Uruguay).",
+                                     "Tipo de cubo usado en la prueba (2x2x2, 3x3x3, Megaminx).",
+                                     "Tiempo, en segundos, que toma al participante en resolver el cubo de la prueba."))
+
+tabla <- kable(data, 
+               caption = "Tabla 1.- Contexto") %>%
+              kable_styling(full_width = F) %>%
+              column_spec(1, bold = T, border_right = T)
+tabla
+```
+
+#### Preguntas
+
+#### 1.- ¿Existen diferencias en el tiempo de resolución de cubos Megaminx entre participantes de Chile, Argentina y Perú?
+
+R: En obra de re-afirmar la pregunta planteada, específicamente, se nos pide verificar si existe alguna diferencia sustancial en los tiempos de resolución para 3 países distintos. Donde, conocemos un método particular para situaciones de esta índole, el cual es ANOVA de una vía para muestras independientes. De esa forma, se presume hacer el trabajo con esta prueba, pero sin antes, enunciar las hipótesis a trabajar:
+
+-   **Hipótesis Nula (H0): No existe diferencia significativa entre los tiempos de resolución de algún país**
+-   **Hipótesis Alternativa (HA): Existe diferencia significativa en por lo menos un tiempo de resolución de algún país**
+
+- **Versión matemática :**
+$$
+Ho : \mu_{chile} = \mu_{argentina} = \mu_{peru}
+\\
+Ha : \exists{i, j} \ \epsilon \left\{ Chile, Argentina, Peru \right\}, i \neq j \ | \ \mu_i \neq \mu_j
+$$
+
+Así, a continuación, se hará una lectura de los datos a través de la función nativa de R, *read.csv2*.
+
+```{r, echo = FALSE}
+datos <- read.csv2("EP05 Datos.csv")
+```
+
+```{r, echo = FALSE}
+datosFiltrados <- datos %>% 
+  filter(tipo == "Megaminx")
+
+datosCh <- datosFiltrados %>%
+  filter(pais == "Chile")
+
+datosArg <- datosFiltrados %>%
+  filter(pais == "Argentina")
+
+datosPe <- datosFiltrados %>%
+  filter(pais == "Perú")
+```
+
+Para aplicar la prueba propuesta ANOVA anteriormente explicada, se deben cumplir las siguientes condiciones, asumiendo un **nivel de significancia de 0,05**:
+
+-   Escala de intervalos iguales: Para una instancia i la diferencia entre el tiempo que le toma resolver el Megaminx a un país con otro, ej: 75.98s(Chile) - 75.7s(Perú) = 0.28s, es equivalente a otra instancia donde la diferencia de tiempo entre países sea 75.81s(Argentina) - 75.53s(Chile) = 0.28s. Es decir, el tiempo es una escala de intervalos iguales.
+
+-   Muestras independientes: Como se está analizando muestras diferentes para la solución de un Megaminx, sujeto a personas diferentes y aún más, países diferentes. La selección de uno no depende de otro, es por esto que se puede decir que las muestras son independientes.
+
+-   Normalidad: Para poder verificar si los datos provienen de una distribución aproximadamente normal, tenemos 2 formas posibles para poder hacerlo, donde estás son:
+
+    -   Shapiro Test:
+
+```{r, echo = F}
+pruebaCh <- shapiro.test(datosCh$tiempo)
+pruebaArg <- shapiro.test(datosArg$tiempo)
+pruebaPe <- shapiro.test(datosPe$tiempo)
+```
+
+```         
+  Para poder aplicar este test, basta con aplicar la función nativa de R, *shapiro.test*. Donde al aplicarla a          las muestras se obtienen los siguientes resultados: 
+
+  - para chile se obtuvo un valor de `r pruebaCh$p` 
+  - para chile se obtuvo un valor de `r pruebaPe$p` 
+  - para chile se obtuvo un valor de `r pruebaArg$p` 
+  
+  
+   Donde, cada uno de estos resultados son mayores a nuestro nivel de significancia, es por esto que se falla en rechazar la hipótesis nula en favor de la alternativa. Pudiendo así, concluir que los datos siguen una distribución aproximadamente normal.
+```
+
+-   Gráfico QQ
+
+    Es una alternativa a shapiro, basta con que se realice un análisis gráfico de los datos a través del gráfico QQ. Obteniendo los siguientes gráficos para cada grupo:
+
+```{r, echo = F}
+
+graficoCh <- ggqqplot(datosCh, x = "tiempo", color = "pink",
+                      caption = "Gráfico QQ para los datos de Chile")
+graficoArg <- ggqqplot(datosArg, x = "tiempo", color = "red",
+                       caption = "Gráfico QQ para los datos de Argentina")
+graficoPe <- ggqqplot(datosPe, x = "tiempo", color = "orange",
+                      caption = "Gráfico QQ para los datos de Peru")
+
+grid.arrange(graficoCh, graficoArg, graficoPe)
+```
+
+Como se puede apreciar en cada gráfico respectivo a cada grupo, no existen valores atípicos fuera de la banda, es por esto que podemos concluir que los datos pertenecen a una distribución aproximadamente normal.
+
+-   Homogeneidad de varianzas: Para comprobar la condición de homocedasticidad se debe determinar la razón entre la varianza máxima y mínima de los grupos, tal que esta no sea superior a 1.5. Así, se obtienen los siguientes resultados para cada grupo:
+
+```{r, echo = F}
+varCh <- var(datosCh$tiempo)
+varPe <- var(datosPe$tiempo)
+varAr <- var(datosArg$tiempo)
+```
+
+```         
+- Para Chile se obtuvo un valor de `r varCh`
+- Para Argentina se obtuvo un valor de `r varAr`
+- Para Perú se obtuvo un valor de `r varPe`
+```
+
+```{r, echo = F}
+div <- varAr / varCh
+```
+
+```         
+Para así, dividir el valor más grande obtenido que corresponde a Argentina entre el más pequeño, correspondiente a Chile, obteniendo así un valor de : `r div`. Como este valor obteniedo es menor a 1.5, se concluye que existe una homogeneidad de varianzas.
+```
+
+Como las condiciones para aplicar la prueba se cumplieron sin excepción, se procederá a calcular esta, obteniendo así, el siguiente resultado:
+
+```{r, echo = F, warning = F, message = F}
+datosPaises <- datosFiltrados %>%
+filter(pais == "Chile" | pais == "Argentina" | pais == "Perú" )
+
+datosPaises <- select(datosPaises, -tipo, -id, -X)
+datosPaises$pais <- factor(datosPaises$pais)
+datosPaises$instancia <- factor(1:nrow(datosPaises))
+
+anova <- ezANOVA(data = datosPaises,
+                 dv = tiempo,
+                 between = pais,
+                 wid = instancia,
+                 return_aov = T,
+                 type = 3)    # <- tipo 3 corrige desvalance de tamaños de grupos, lo que aplica a este caso
+summary(anova$aov)
+```
+
+Donde se puede apreciar en la tabla, que el valor obtenido de p es significativamente menor a nuestro nivel de significancia. Así, podemos decir con un 95% de confianza que existe una diferencia entre al menos un país en los tiempos de resolución.
+
+Como la prueba ANOVA es de tipo ómnibus, no nos entrega mayor información respecto a cuál país efectivamente es distinto, así, para poder hacer un mayor análisis y obtener información relevante, se hará una prueba POST-HOC, en particular la prueba **HSD de Turkey** debido a que es más potente que Holm y Bonferroni.
+
+Así, al hacer la prueba, se obtiene la siguiente tabla de resultados:
+
+```{r, echo = F}
+alpha <- 0.05
+
+anovaAov <- aov(tiempo ~ pais, data = datosPaises)
+
+postHoc <- TukeyHSD(anovaAov,
+                    "pais",
+                    ordered = T,
+                    conf.level = 1 - alpha)
+
+postHoc
+```
+
+Donde, se puede apreciar que existe una diferencia significativa entre Perú-Chile y Argentina-Chile, debido a que el valor p obtenido es menor a nuestro nivel de significancia. Por otro lado, respecto de la última diferencia, Argentina-Perú, el valor de p obtenido bordea nuestro nivel de significancia, es por esto que se requiere un mayor análisis para obtener mayor información.

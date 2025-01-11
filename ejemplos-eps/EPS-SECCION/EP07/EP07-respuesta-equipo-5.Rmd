@@ -1,0 +1,344 @@
+---
+title: "EP07"
+author: "Grupo V"
+date: "2024-10-29"
+output: html_document
+---
+
+##### Importante
+
+Antes de comenzar con el análisis, se hará una importación de las siguientes librerías: *dplyr*, *ggpubr*, *gridExtra*, *DescTools*, *ez* y *tidyr*.
+
+```{r, echo = F, message = F, warning = F}
+library(dplyr)
+library(tidyr)
+library(ggpubr)
+library(gridExtra)
+library(DescTools)
+library(ez)
+```
+
+Una vez realizado, se procederá.
+
+##### Contexto
+
+En el trabajo de título de una estudiante del DIINF se reportan tiempos de ejecución (en milisegundos) y la cercanía con la solución óptima (en por ciento) de la mejor solución encontrada con tres versiones de un algoritmo genético para resolver instancias del problema del vendedor viajero disponibles en repositorios públicos. Ahora debe enfrentar el análisis de estos datos, porque está solicitando ayuda de las y los estudiantes de Estadística Inferencial.
+
+##### Desarrollo
+
+En primer lugar, se hará una lectura de los datos utilizando la función nativa de R, *read.csv*.
+
+Así, las preguntas son las siguientes.
+
+```{r, echo = F}
+data <- read.csv("EP07 Datos.csv")
+```
+
+##### Pregunta 1.- Observando los datos, la memorista sospecha que hay diferencias significativas en el tiempo de ejecución entre las versiones B y C del algoritmo cuando las instancias tienen 70 o más nodos. ¿Los datos respaldan la intuición de la memorista? Para responder, filtren los datos para tener las instancias con 70 o más nodos y seleccionen las columnas de los tiempos de ejecución de las versiones B y C en formato ancho. Usando como semilla el valor 13, obtenga muestras aleatorias independientes de 20 tiempos registrados por la versión B y 18 tiempos registrados por la versión C del algoritmo. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+R:
+
+Solo por obras de mantener un orden del ejercicio, se mostrará de manera única el código que se repetirá en la mayoría de las siguientes preguntas, donde este sigue los pasos entregados por la pregunta específica.
+
+```{r}
+above70Nodes <- data %>%filter(n.nodos >= 70)
+
+above70Nodes <- select(above70Nodes,    # Selección de columnas relativas al enunciado.
+                       tiempo.B,
+                       tiempo.C)
+
+vectorB <- above70Nodes$tiempo.B        # Selección de los tiempos tanto para B y C.
+vectorC <-above70Nodes$tiempo.C
+
+set.seed(13)                            # Seteo de la semilla para mantener los mismos valores en cada ejecución.
+
+sampleB <- sample(vectorB, size = 20)   # Generación de la muestra para los tiempos de B.
+sampleC <- sample(vectorC, size = 18)   # Generación de la muestra para los tiempos de C.
+```
+
+Una vez realizado todo el filtro necesario, se enunciarán las hipótesis, siendo estas las siguientes:
+
+-   **Hipótesis Nula (**$H_{0}$): No existen diferencias significativas entre los tiempos del algoritmo B y C.
+-   **Hipótesis Alternativa (**$H_{A}$): Existen diferencias significativas entre los tiempos del algoritmo B y C.
+
+Además, se fijará el nivel de significancia a 0,05.
+
+En particular, no se nos solicita una comparación en torno a una medida específica, además, como son muestras independientes de 2 algoritmos distintos, se presume aplicar una prueba no paramétrica para muestras independientes, llamada **prueba de suma de rangos de Wilcoxon**. Donde se deben cumplir las siguientes condiciones antes de realizar la prueba, las cuales son las siguientes:
+
+-   **Observaciones independientes:** Como se seleccionaron instancias aleatorias en base a 2 algoritmos distintos, la selección de uno no depende de otra, de esa forma se dice que las observaciones son independientes.
+-   **Escala de medición a lo menos ordinal:** Las variables en juego de ambos algoritmos son segundos, de esa forma se puede asegurar una escala donde se puede asegurar un mayor, un menor o un igual, siendo esta ordinal.
+
+Como las 2 condiciones se cumplen, se procederá con la prueba, obteniendo la siguiente:
+
+```{r, echo = F}
+test <- wilcox.test(sampleB,
+                    sampleC, 
+                    paired = F,
+                    alternative = "two.sided",
+                    mu = 0,
+                    conf.level = 1 - alpha)
+test
+```
+
+Así, una vez realizada la prueba, donde se obtuvo un valor de p igual a `r test$p.value`, este valor obtenido es menor a nuestro nivel de significancia, de esa forma la evidencia sugiere rechazar la hipótesis nula y afirmar con un 95% de confianza que existen diferencias significativas entre B y C.
+
+##### Pregunta 2.- La memorista también sospecha que, al comparar las mismas instancias de iguales características, las mejores soluciones encontradas por las versiones A y C tienen rendimientos distintos. ¿Estará en lo cierto? Para responder, filtren los datos para tener las instancias con 70 o más nodos y seleccionen las columnas con el mejor rendimiento de las versiones A y C en formato ancho. Usando como semilla el valor 13, obtengan una muestra aleatoria de 24 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+R: En primer lugar, se enunciarán las hipótesis, siendo estas las siguientes:
+
+-   **Hipótesis Nula (**$H_0$): No existen diferencias significativas entre los mejores tiempos del algoritmo A y C para una misma instancia.
+-   **Hipótesis Alternativa (**$H_A$): Existen diferencias significativas entre los mejores tiempos del algoritmo A y C para una misma instancia.
+
+En particular, se nos menciona analizar los mejores tiempos de A y C en una misma muestra, se presume aplicar una **prueba de rangos con signo de Wilcoxon**, que es para muestras apareadas. Para poder aplicar esta prueba, se deben cumplir las siguientes 2 condiciones:
+
+-   **Pares de muestras independientes:** Como se seleccionaron instancias aleatorias en base a 2 algoritmos distintos, la selección de uno no depende de otra, de esa forma se dice que los pares de observaciones son independientes.
+-   **Escala de medición a lo menos ordinal:** Las variables en juego de ambos algoritmos son segundos, de esa forma se puede asegurar una escala donde se puede asegurar un mayor, un menor o un igual, siendo esta ordinal.
+
+Como las condiciones para aplicar la prueba se cumplen, se procederá, obteniendo los siguientes resultados:
+
+```{r, echo = F, warning = F}
+alpha <- 0.05
+
+above70N <- data %>%
+  filter(n.nodos >= 70) %>%
+  select(mejor.A, mejor.C)
+
+set.seed(13)
+
+sample <- sample_n(above70N,
+                   size = 24)
+
+vectorA <- sample$mejor.A
+vectorC <- sample$mejor.C
+
+test <- wilcox.test(vectorA,
+                    vectorC,
+                    paired = T,
+                    alternative = "two.sided",
+                    conf.level = 1 - alpha)
+test
+```
+
+Así, una vez realizada la prueba, donde se obtuvo un valor de p igual a `r test$p.value`, este valor obtenido es menor a nuestro nivel de significancia, de esa forma la evidencia sugiere rechazar la hipótesis nula y afirmar con un 95% de confianza que existen diferencias significativas entre los mejores tiempos de A y C para una misma instancia.
+
+##### Pregunta 3.- La memorista sospecha que hay diferencias significativas en el tiempo de ejecución entre las versiones del algoritmo cuando las instancias de prueba tienen 50 o más nodos. ¿Los datos respaldan la intuición de la memorista? Para responder, filtren los datos para tener las instancias con 50 o más nodos y seleccionen las columnas con los tiempos de ejecución registrados (en formato ancho). Usando como semilla el valor 54, obtengan muestras aleatorias independientes de 12, 13 y 14 tiempos registrados por las versiones A, B y C, respectivamente. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+R: En primer lugar, se enunciarán las hipótesis, siendo estas las siguientes:
+
+-   **Hipótesis Nula (**$H_0$): No existen diferencias significativas entre los tiempos de ejecución para A, B y C en instancias de 50 o más nodos.
+-   **Hipótesis Alternativa (**$H_A$): Existen diferencias significativas entre los tiempos de ejecución para algún A, B y C en instancias de 50 o más nodos.
+
+En particular, como se solicitan muestras de 13, 14 y 15 que son muestras de tamaño pequeño, ajustaremos el nivel de significancia a 0.025 para resultados más exactos, continuando el enunciado, se menciona verificar las diferencias significativas para k = 3 grupos (A, B y C respectivamente), de esa forma, se presume aplicar una prueba ANOVA para muestras independientes, donde se deben cumplir las siguientes condiciones:.
+
+-   **Escala de intervalos iguales:** En particular, la variable medida para este estudio es el tiempo, así, sabemos que la diferencia entre tiempos A - B y C = A + 10 - D = B + 10, es la misma. De esa forma se cumple el requisito.
+-   **Muestras independientes:** La obtención de las diferentes muestras fueron aplicadas a distintos algoritmos, donde la elección de uno ó su tiempo particular no depende del otro, así, se concluye que las muestras son independientes entre sí.
+-   **Poblaciones de origen siguen una distribución normal:** Para verificar esta condición tenemos 2 posibles opciones, aplicar un test de Shapiro-Wilk o hacer análisis gráfico a un QQPlot, para este caso se analizará la primera opción, así, los resultados para cada algoritmo son los siguientes:
+
+```{r, echo = F}
+above50Nodes <- data %>%
+  filter(n.nodos >= 50) %>%
+  select(tiempo.A,
+         tiempo.B,
+         tiempo.C)
+
+vectorA_3 <- above50Nodes$tiempo.A
+vectorB_3 <- above50Nodes$tiempo.B
+vectorC_3 <- above50Nodes$tiempo.C
+
+testA_3 <- shapiro.test(vectorA_3)
+testB_3 <- shapiro.test(vectorB_3)
+testC_3 <- shapiro.test(vectorC_3)
+```
+
+-   *Test para A:* `r testA_3$p.value`
+-   *Test para B:* `r testB_3$p.value`
+-   *Test para C:* `r testC_3$p.value`
+
+Como se puede apreciar en los resultados, se obtuvieron para todos algoritmos un p-value mucho menor a nuestro nivel de significancia (0.025), es por esto que no podemos asumir una normalidad propia de las poblaciones, para solucionar este inconveniente se hará una transformación de los datos utilizando las **Transformaciones Box-Cox.**
+
+```{r, echo = F}
+set.seed(54)
+
+sampleA_3 <- sample(vectorA_3,
+                  size = 12)
+sampleB_3 <- sample(vectorB_3,
+                  size = 13)
+sampleC_3 <- sample(vectorC_3,
+                  size = 14)
+
+lambdaA_3 <- BoxCoxLambda(sampleA_3,
+                        lower = -4, 
+                        upper = 4)
+lambdaB_3 <- BoxCoxLambda(sampleB_3,
+                        lower = -4,
+                        upper = 4)
+lambdaC_3 <- BoxCoxLambda(sampleC_3, 
+                        lower = -4,
+                        upper = 4)
+
+transformedA_3 <- BoxCox(sampleA_3, lambdaA_3)
+transformedB_3 <- BoxCox(sampleB_3, lambdaB_3)
+transformedC_3 <- BoxCox(sampleC_3, lambdaC_3)
+
+testA_3 <- shapiro.test(transformedA_3)
+testB_3 <- shapiro.test(transformedB_3)
+testC_3 <- shapiro.test(transformedC_3)
+```
+
+Una vez realizada la transformación, nuevamente se aplicará un test Shapiro-Wilk para verificar normalidad, donde los resultados obtenidos son los siguientes:
+
+-   *Test para A:* `r testA_3$p.value`
+-   *Test para B:* `r testB_3$p.value`
+-   *Test para C:* `r testC_3$p.value`
+
+Donde se puede apreciar que todos los resultados obtenidos son mayores a nuestro nivel de significancia, por lo tanto se puede afirmar que los datos provienen de una distribución normal
+
+```{r, echo = F}
+varA <- var(transformedA_3)
+varB <- var(transformedB_3)
+varC <- var(transformedC_3)
+
+reason <- varA / varC
+```
+
+-   **Homogeneidad de varianzas:** En particular, para esta condición se debe verificar que la razón entre entre la mayor varianza y menor varianza no sea mayor a 1.5, así, la mayor viene dada por el grupo A con un valor de ``` r varA``, por otro lado, la menor viene dada por el grupo C con un valor de ```r varC`. Así la razón es de aproximadamente`r reason`. Como el valor obtenido supera por mucho a 1.5 no se cumple esta condición.
+
+En particular como tenemos condiciones que **no** se cumplen, se aplicará una alternativa no paramétrica para ANOVA de muestras independientes, que es la prueba de Krustal-Wallis, que nos plantea las siguientes condiciones:
+
+-   **Variable independiente de a lo menos dos niveles:** En particular se tienen k = 3 grupos, por lo tanto esta condición se verifica.
+-   **Escala de mediciones a lo menos ordinal:** Para el caso planteado sabemos que la variable en juego son los tiempos de cada algoritmo (A, B y C) es por esto que existe una clasificación del tipo *mayor o igual que, menor que, etc.* Así, se cumple la condición.
+-   **Observaciones independientes:** Como toda instancia fue realizada de manera tal que la selección de un algoritmo no influya en otro, las observaciones son independientes.
+
+Como se verificaron las condiciones necesarias para poder aplicar la prueba, se obtienen los siguientes resultados con un nivel de significancia del 0.025:
+
+```{r, echo = F, warning = F}
+times <- c(vectorA_3, vectorB_3, vectorC_3)
+
+criterion <- c(rep("A", length(vectorA_3)),
+               rep("B", length(vectorB_3)),
+               rep("C", length(vectorC_3)))
+
+data_3 <- data.frame(times, criterion)
+
+alpha <- 0.025
+
+test_3 <- kruskal.test(times ~ criterion, data_3)
+test_3
+```
+
+Así, se obtuvo un p-value de aproximadamente `r test_3$p.value` siendo este mucho menor a nuestro nivel de significancia, así, se rechaza la hipótesis nula en favor de la alternativa y se afirma con un 97.5% de confianza que existen diferencias significativas para algún par de algoritmos.
+
+Como la prueba realizada es del tipo *ómnibus*, se aplicará un estudio post-hoc de Benjamini & Hochberg, donde se obtuvieron los siguientes resultados:
+
+```{r, echo = F, warning = F}
+posthoc_3 <- pairwise.wilcox.test(data_3$times,
+                                  data_3$criterion,
+                                  p.adjust.method = "BH",
+                                  paired = F,
+                                  exact = F)
+posthoc_3
+```
+
+Donde, se puede concluir que existen diferencias significativas entre los pares de algoritmos A y B, B y C.
+
+##### Pregunta 4.- La memorista también sospecha que, al comparar las mismas instancias con iguales características, las mejores soluciones encontradas por las diferentes versiones del algoritmo tienen rendimientos distintos. ¿Estará en lo cierto? Para responder, filtren los datos para tener las instancias con 50 o más nodos y seleccionen las columnas con los mejores rendimientos registrados. Usando como semilla el valor 54, obtengan una muestra aleatoria de 22 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+R: En primer lugar, se enunciarán las hipótesis, siendo estas las siguientes:
+
+-   **Hipótesis Nula (**$H_0$): No existen diferencias significativas entre los tiempos de ejecución para A, B y C en una misma instancia de 50 o más nodos.
+-   **Hipótesis Alternativa (**$H_A$): Existen diferencias significativas entre los tiempos de ejecución para algún para de A, B y C en una misma instancia de 50 o más nodos.
+
+En particular, se menciona verificar las diferencias significativas para una misma instancia en k = 3 grupos (A, B y C respectivamente), de esa forma, se presume aplicar una prueba ANOVA para muestras correlacionadas, donde se deben cumplir las siguientes condiciones:
+
+-   **Escala de intervalos iguales:** En particular, la variable medida para este estudio es el tiempo, así, sabemos que la diferencia entre tiempos A - B y C = A + 10 - D = B + 10, es la misma. De esa forma se cumple el requisito.
+-   **Muestras independientes:** La obtención de las diferentes muestras fueron aplicadas a distintos algoritmos, donde la elección de uno ó su tiempo particular no depende del otro, así, se concluye que las muestras son independientes entre sí.
+-   **Poblaciones de origen siguen una distribución normal:** Para verificar esta condición se verificará aplicando la prueba Shapiro-Wilk, así, se obtuvieron los siguientes resultados:
+
+```{r, echo = F}
+set.seed(54)
+
+sample_4 <- sample_n(data, size = 24) %>%
+  select(mejor.A, mejor.B, mejor.C)
+
+vectorA_4 <- sample_4$mejor.A 
+vectorB_4 <- sample_4$mejor.B
+vectorC_4 <- sample_4$mejor.A 
+
+testA_4 <- shapiro.test(vectorA_4)
+testB_4 <- shapiro.test(vectorB_4)
+testC_4 <- shapiro.test(vectorC_4)
+```
+
+-   *Test para A:* `r testA_4$p.value`
+-   *Test para B:* `r testB_4$p.value`
+-   *Test para C:* `r testC_4$p.value`
+
+Como se puede apreciar en los resultados, se obtuvieron para todos algoritmos un p-value mucho menor a nuestro nivel de significancia (0.025), es por esto que no podemos asumir una normalidad propia de las poblaciones, para solucionar este inconveniente se hará una transformación de los datos utilizando las **Transformaciones Box-Cox.**
+
+```{r, echo = F}
+lambdaA_4 <- BoxCoxLambda(vectorA_4,
+                        lower = -4, 
+                        upper = 4)
+lambdaB_4 <- BoxCoxLambda(vectorB_4,
+                        lower = -4,
+                        upper = 4)
+lambdaC_4 <- BoxCoxLambda(vectorC_4, 
+                        lower = -4,
+                        upper = 4)
+
+transformedA_4 <- BoxCox(vectorA_4, lambdaA_4)
+transformedB_4 <- BoxCox(vectorB_4, lambdaB_4)
+transformedC_4 <- BoxCox(vectorC_4, lambdaC_4)
+
+transformedATest_4 <- shapiro.test(transformedA_4)
+transformedBTest_4 <- shapiro.test(transformedB_4)
+transformedCTest_4 <- shapiro.test(transformedC_4)
+```
+
+Una vez realizada la transformación, nuevamente se aplicará un test Shapiro-Wilk para verificar normalidad, donde los resultados obtenidos son los siguientes:
+
+-   *Test para A:* `r transformedATest_4$p.value`
+-   *Test para B:* `r transformedBTest_4$p.value`
+-   *Test para C:* `r transformedCTest_4$p.value`
+
+Donde se puede apreciar que los resultados obtenidos para A y C son menores a nuestro nivel de significancia, por lo que no se puede afirmar que los datos provienen de una distribución normal.
+
+-   **Matriz de co-varianzas esférica:** Se verifica al utilizar la función ezANOVA.
+
+En particular, como no se pudieron verificar las condiciones para la prueba ANOVA de muestras correlacionadas, se aplicará un reemplazo que en este caso es la prueba de Friedmann, donde sus condiciones son las siguientes:
+
+-   **Variable independiente categórica y de al menos tres niveles:** En particular se tienen k = 3 grupos, por lo tanto esta condición se verifica.
+-   **Escala de variable a lo menos ordinal:** Para el caso planteado sabemos que la variable en juego son los tiempos de cada algoritmo (A, B y C) es por esto que existe una clasificación del tipo *mayor o igual que, menor que, etc.* Así, se cumple la condición.
+-   **Observaciones independientes de la población y de una muestra aleatoria:** Como toda instancia fue realizada de manera tal que la selección de un algoritmo no influya en otro y además, la muestra fue obtenida a través de la función *sample*, se verifica esta condición.
+
+Así, como las condiciones para la prueba se cumplen, el resultado de esta es el siguiente:
+
+```{r, echo = F}
+times_4 <- c(vectorA_4, vectorB_4, vectorC_4)
+
+interface_4 <- c(rep("A", length(vectorA_4)),
+                 rep("B", length(vectorB_4)),
+                 rep("C", length(vectorC_4)))
+
+case <- rep(1:(length(vectorA_4)), 3)
+
+data_4 <- data.frame(case, times_4, interface_4)
+
+test_4 <- friedman.test(times_4 ~ interface_4 | case, data = data_4)
+test_4
+```
+
+Así, se obtuvo un p-value de aproximadamente `r test_4$p.value` siendo este mucho menor a nuestro nivel de significancia, así, se rechaza la hipótesis nula en favor de la alternativa y se afirma con un 97.5% de confianza que existen diferencias significativas para algún par de algoritmos.
+
+Como la prueba realizada es del tipo *ómnibus*, se aplicará un estudio post-hoc de Homl, donde se obtuvieron los siguientes resultados:
+
+```{r, echo = F}
+posthoc_4 <- pairwise.wilcox.test(data_4$times_4,
+                                  data_4$interface_4,
+                                  p.adjust.method = "holm",
+                                  paired = T,
+                                  exact = F)
+posthoc_4
+```
+
+Así, se puede concluir que existen diferencias significativas entre los algoritmos A y B, y también A y C.

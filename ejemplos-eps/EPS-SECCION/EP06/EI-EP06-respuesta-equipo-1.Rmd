@@ -1,0 +1,99 @@
+---
+title: "EI-EP06-respuesta-equipo-1"
+author: "Equipo 1"
+date: "2024-10-24"
+output: html_document
+---
+
+Un equipo de investigadores del área de interacción humano-información está estudiando si el área temática y el nivel de dificultad del problema de información influyen en el tiempo (en segundos) que toma un usuario en formular una consulta de búsqueda para resolver dicho problema. Para ello, han reclutado a un grupo de participantes voluntarios, asignados aleatoriamente a distintos grupos. Cada participante debe resolver tres problemas de información con diferentes niveles de dificultad: baja, media y alta. A su vez, cada grupo debe resolver problemas relacionados a una temática diferente. Los datos recolectados contemplan las siguientes variables:
+
+id - identificador único de cada participante.
+area -  	Área temática de los problemas que el participante debe responder. Variable categórica con los niveles Arquitectura, Biología, Computación,               Economía, Física, Leyes, Literatura, Matemáticas, Música, Pedagogía, Psicología, Química.
+dificultad -	Nivel de dificultad del problema resuelto. Variable categórica con los niveles Baja, Media y Alta.
+tiempo -	Tiempo, en segundos, que toma al participante formular la consulta.
+
+Equipo 1:
+En este momento, los investigadores buscan determinar si existen diferencias en el tiempo que tardan los usuarios en formular consultas para problemas con diferente nivel de dificultad en el área de física.
+
+$H_O$: El tiempo de resolución de los distintos niveles de dificultad de los problemas son iguales.(μ_Baja = μ_Media = μ_Alta)
+$H_A$: Existe al menos un nivel de dificultad que presenta un tiempo diferente al resto. (existe al menos un par (i, j) tal que μ_i ≠ μ_j, con i, j ∈ {Baja, Media, Alta} e i ≠ j)
+
+# Condiciones de ANOVA
+1. La escala de medida de la variable dependiente es de escala de intervalos iguales.
+2. Las k muestras obtenidas de manera aleatoria e independiente desde las poblaciones de origen.
+3. Se puede suponer razonablemente que las poblaciones de origen siguen una distribucion normal.
+4. Si las muestras provienen de mas de una poblacion, estas tienen las mismas varianza.
+
+La primera condición se cumple porque la variable dependiente es el tiempo, la  cual se mide en una escala de intervalos iguales, e incluso en una escala de razón, ya que posee un cero absoluto. La segunda condición se cumple pues los participantes se asignaron de forma aleatoria a los distintos grupos.
+
+```{r}
+library(tidyverse)
+library(ggpubr)
+
+datos = read.csv("EP06 Datos.csv", stringsAsFactors = TRUE)
+
+datosFisica_largos <- datos %>% filter( area == "Física") %>% select(id, dificultad,tiempo) %>% droplevels()
+
+datosFisica_largos[["id"]] = factor(datosFisica_largos[["id"]])
+
+
+g <- ggqqplot(datosFisica_largos,
+              x="tiempo",
+              y="dificultad",
+              color = "dificultad")
+
+g <- g + facet_wrap(~ dificultad)
+g <- g + rremove("x.ticks") + rremove("x.text")
+g <- g + rremove("y.ticks") + rremove("y.text")
+g <- g + rremove("axis.title")
+
+print(g)
+```
+Tambien se puede suponer razonablemente que la distribución de los grupos sigue una distribución normal la observación de los gráficos Q-Q.
+
+```{r}
+library(tidyverse)
+varianzas <- datosFisica_largos %>% group_by(dificultad) %>% summarise(varianza = var(tiempo))
+medias <- datosFisica_largos %>% group_by(dificultad) %>% summarise(media = mean(tiempo))
+
+razon <- max(varianzas$varianza)/min(varianzas$varianza)
+print(razon)
+```
+
+La cuarta condición tambien se cumple dado que la razón entre la varianza mínima y máxima es cercana a 1, se puede asumir que se cumple la condición de homogeneidad de varianzas. Es por ello, que al cumplirse con todas las condiciones para realizar la prueba ANOVA, se procede a realizar.
+
+
+```{r}
+# Se calcula ANOVA
+
+library(ez)
+eprueba <- ezANOVA(data = datosFisica_largos,
+                  dv = tiempo,
+                  within = dificultad,
+                  wid = id,
+                  return_aov = TRUE)
+print(summary(eprueba[["aov"]]))
+
+```
+
+Al analizar el valor de p obtenido en la prueba de ANOVA para muestras relacionadas, se observa que existe una diferencia significativa en el tiempo de resolución de los problemas de física con diferente nivel de dificultad. Dado que el valor de p es menor a 0.05, se rechaza la hipótesis nula.Por este motivo, es necesario realizar un análisis post-hoc para determinar cuáles son los niveles de dificultad que presentan diferencias significativas en el tiempo de resolución de los problemas. 
+
+```{r}
+library(nlme)
+library(emmeans)
+library(ez)
+
+mixto <- lme(tiempo ~dificultad, data = datosFisica_largos, random = ~1|id)
+medias <- emmeans(mixto, "dificultad")
+tukey <- pairs(medias, adjust = "tukey")
+print(tukey)
+e = ezPlot(data = datosFisica_largos, dv = tiempo, wid = id, within = dificultad, x = dificultad, y_lab = "Tiempo de resolución de problemas[s]")
+print(e)
+
+```
+
+Al observar los resultados de la prueba de Tukey, se puede concluir que existe una diferencia significativa en el tiempo de resolución de problemas de física de dificultad alta en comparación con los de dificultad baja y media. No obstante, no se encontró una diferencia significativa entre los problemas de dificultad baja y media.
+
+Además, el gráfico reafirma estos resultados: los problemas de dificultad alta tienden a requerir más tiempo de resolución que los de dificultad media y baja, mientras que no hay una diferencia notable entre los problemas de dificultad baja y media.
+
+Por lo tanto, se puede concluir que el nivel de dificultad de los problemas de física influye en el tiempo de resolución de los mismos. Específicamente, los problemas de alta dificultad toman más tiempo en ser resueltos en comparación con los problemas de baja y media dificultad.
